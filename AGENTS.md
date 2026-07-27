@@ -1,0 +1,52 @@
+# Repository instructions
+
+## Source of truth
+
+1. Read `docs/PROJECT_SPEC.md` before implementation.
+2. Read `docs/CURRENT_STATE.md`, `docs/HANDOFF.md`,
+   `docs/DECISIONS.md`, and `docs/SECURITY.md` before changing code.
+3. The project specification and explicit current user instruction take
+   precedence over assumptions.
+
+## Non-negotiable product boundaries
+
+- Support only `BTCUSDT` USDⓈ-M perpetual futures.
+- Keep leverage fixed at 10 and isolated margin as the default.
+- Never implement order create, modify, cancel, withdrawal, or transfer
+  requests.
+- Never call the OpenAI API.
+- Never invent a win rate or probability before validated statistics exist.
+- Block entry decisions when required data is stale.
+- Use only closed candles for new-entry triggers.
+- Do not allow averaging down a losing position.
+
+## Security
+
+- Keep Electron Main, Preload, and Renderer responsibilities separated.
+- Keep `nodeIntegration: false`, `contextIsolation: true`, and `sandbox: true`.
+- Expose named, typed IPC functions only. Never expose `ipcRenderer` directly.
+- Validate every IPC input at runtime.
+- Never log or return API secrets, signatures, full keys, account identifiers,
+  DB contents, or private raw responses.
+- Never commit `.env`, credentials, DBs, backups, logs, exports, or personal
+  data.
+- Do not add unapproved external origins to the allowlist.
+
+## Architecture
+
+- Keep shared types and schemas free of Electron and renderer dependencies.
+- Keep calculation modules as pure TypeScript functions.
+- Normalize external API responses in adapters before using them.
+- Do not pass raw Binance responses to the renderer.
+- Preserve DB interfaces when changing storage drivers.
+
+## Work sequence
+
+- Implement one Phase at a time.
+- Do not implement later-Phase features speculatively.
+- Run `npm run lint`, `npm run typecheck`, `npm test`, and the relevant build
+  command before declaring work complete.
+- Update `docs/CURRENT_STATE.md` and `docs/HANDOFF.md` at the end of every task.
+- Record material architecture or trading-rule changes in
+  `docs/DECISIONS.md`.
+- Keep `main` runnable and tested.
