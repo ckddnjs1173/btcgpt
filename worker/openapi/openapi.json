@@ -1,0 +1,25 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "BTCGpt Relay API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/v1/snapshot/latest": {
+      "get": {
+        "operationId": "getLatestSnapshot",
+        "responses": {"200": {"description": "Latest snapshot"}}
+      },
+      "put": {
+        "operationId": "uploadLatestSnapshot",
+        "responses": {"200": {"description": "Snapshot accepted"}}
+      }
+    },
+    "/v1/plan/validate": {
+      "post": {
+        "operationId": "validateTradePlan",
+        "responses": {"200": {"description": "Validation result"}}
+      }
+    }
+  }
+}

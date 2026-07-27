@@ -91,5 +91,23 @@ export function registerIpcHandlers({
 
   ipcMain.handle(IPC_CHANNELS.readDbCheck, () => database.readPhaseZeroCheck());
 
+  ipcMain.handle(IPC_CHANNELS.getMarketStatus, (): MarketStatus => ({
+    symbol: 'BTCUSDT',
+    lastSnapshotAt: null,
+    markPrice: null,
+    indexPrice: null,
+    timeframeCounts: {
+      '5m': 0,
+      '15m': 0,
+      '1h': 0,
+      '4h': 0,
+    },
+    dataStatus: 'INITIALIZING',
+  }));
+
+  ipcMain.handle(IPC_CHANNELS.getLatestSnapshot, async (): Promise<MarketSnapshot> => {
+    throw new Error('Snapshot generation is not yet available.');
+  });
+
   logger.info('Restricted Phase 0 IPC handlers registered');
 }

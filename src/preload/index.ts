@@ -15,6 +15,8 @@ const desktopApi: DesktopApi = {
   writeDbCheck: (input: WriteDatabaseCheckInput) =>
     ipcRenderer.invoke(IPC_CHANNELS.writeDbCheck, input),
   readDbCheck: () => ipcRenderer.invoke(IPC_CHANNELS.readDbCheck),
+  getMarketStatus: () => ipcRenderer.invoke(IPC_CHANNELS.getMarketStatus),
+  getLatestSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.getLatestSnapshot),
 };
 
 contextBridge.exposeInMainWorld('desktopApi', desktopApi);
