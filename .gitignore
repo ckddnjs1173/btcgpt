@@ -124,5 +124,7 @@ test-results/
 # Packaging and temporary files
 dist/
 release/
+.wrangler/
+.wrangler-dry-run/
 *.exe
 *.msi

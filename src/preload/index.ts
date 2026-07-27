@@ -3,6 +3,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   IPC_CHANNELS,
   type DesktopApi,
+  type AccountConfigurationInput,
+  type ManualPositionInput,
+  type PositionCalculationInput,
+  type UserSettings,
+  type RelayConfigurationInput,
   type WriteDatabaseCheckInput,
 } from '../shared/contracts';
 
@@ -17,6 +22,25 @@ const desktopApi: DesktopApi = {
   readDbCheck: () => ipcRenderer.invoke(IPC_CHANNELS.readDbCheck),
   getMarketStatus: () => ipcRenderer.invoke(IPC_CHANNELS.getMarketStatus),
   getLatestSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.getLatestSnapshot),
+  configureAccount: (input: AccountConfigurationInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.configureAccount, input),
+  disconnectAccount: () => ipcRenderer.invoke(IPC_CHANNELS.disconnectAccount),
+  getAccountStatus: () => ipcRenderer.invoke(IPC_CHANNELS.getAccountStatus),
+  saveManualPosition: (input: ManualPositionInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.saveManualPosition, input),
+  clearManualPosition: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.clearManualPosition),
+  getManualPosition: () => ipcRenderer.invoke(IPC_CHANNELS.getManualPosition),
+  getRelayStatus: () => ipcRenderer.invoke(IPC_CHANNELS.getRelayStatus),
+  getUserSettings: () => ipcRenderer.invoke(IPC_CHANNELS.getUserSettings),
+  saveUserSettings: (settings: UserSettings) =>
+    ipcRenderer.invoke(IPC_CHANNELS.saveUserSettings, settings),
+  calculatePositionPlan: (input: PositionCalculationInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.calculatePositionPlan, input),
+  configureRelay: (input: RelayConfigurationInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.configureRelay, input),
+  disconnectRelay: () => ipcRenderer.invoke(IPC_CHANNELS.disconnectRelay),
+  resetLocalData: () => ipcRenderer.invoke(IPC_CHANNELS.resetLocalData),
 };
 
 contextBridge.exposeInMainWorld('desktopApi', desktopApi);

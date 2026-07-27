@@ -2,340 +2,1033 @@ import { useCallback, useEffect, useState } from 'react';
 
 import type {
   ActionResult,
-  DatabaseCheck,
-  PhaseZeroStatus,
+  AccountStatus,
+  MarketSnapshot,
+  MarketStatus,
+  ManualPosition,
+  RelayStatus,
+  PositionCalculationResult,
+  UserSettings,
 } from '../shared/contracts';
+import { MarketChart } from './MarketChart';
 
-type ActionKey = 'clipboard' | 'database' | 'external' | 'notification';
+type Timeframe = keyof MarketSnapshot['timeframes'];
+const TIMEFRAMES: Timeframe[] = ['5m', '15m', '1h', '4h'];
+const DEFAULT_SETTINGS: UserSettings = {
+  gptUrl: 'https://chatgpt.com/',
+  makerFeeRate: null,
+  takerFeeRate: null,
+  entrySlippageBps: 1,
+  exitSlippageBps: 1,
+  maxLossUsdt: null,
+  riskPercent: null,
+  partialTakeProfitRatios: [0.3, 0.3, 0.4],
+  minimumNetMarginRoiPercent: 2,
+  autoStart: false,
+};
 
-interface ActionState {
-  key: ActionKey | null;
-  result: ActionResult | null;
+function formatNumber(value: string | number | null, digits = 2): string {
+  if (value === null || value === '') return '—';
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: digits,
+  }).format(Number(value));
 }
 
-const GPT_URL = 'https://chatgpt.com/';
-const PHASE_ZERO_CLIPBOARD_TEXT = [
-  '# BTC Futures Assistant',
-  '',
-  'Phase 0 클립보드 테스트가 정상적으로 실행되었습니다.',
-  '실제 시장 분석자료 생성기는 Phase 5에서 연결됩니다.',
-].join('\n');
-
-function formatTimestamp(timestamp: number | null): string {
-  if (timestamp === null) {
-    return '아직 저장된 값 없음';
-  }
-
-  return new Intl.DateTimeFormat('ko-KR', {
-    dateStyle: 'medium',
-    timeStyle: 'medium',
-  }).format(timestamp);
+function formatSnapshotText(snapshot: MarketSnapshot): string {
+  return [
+    '# BTC Futures Assistant · verified snapshot',
+    `snapshotId: ${snapshot.snapshotId}`,
+    `generatedAtKst: ${snapshot.generatedAtKst}`,
+    `analysisAllowed: ${snapshot.analysisGate.analysisAllowed}`,
+    `status: ${snapshot.analysisGate.overallStatus}`,
+    `reasons: ${snapshot.analysisGate.reasons.join(', ') || 'none'}`,
+    `last / mark / index: ${snapshot.marketState.lastPrice ?? 'null'} / ${snapshot.marketState.markPrice ?? 'null'} / ${snapshot.marketState.indexPrice ?? 'null'}`,
+    `fundingRate: ${snapshot.marketState.fundingRate ?? 'null'}`,
+    `openInterestBTC: ${snapshot.openInterest.current ?? 'null'}`,
+    `positionSource: ${snapshot.position.source}`,
+    '',
+    '이 자료는 객관 데이터와 계산값이며 거래 방향을 생성하지 않습니다.',
+    '실제 주문은 사용자가 Binance에서 직접 실행해야 합니다.',
+  ].join('\n');
 }
 
 export function App() {
-  const [status, setStatus] = useState<PhaseZeroStatus | null>(null);
-  const [databaseCheck, setDatabaseCheck] = useState<DatabaseCheck | null>(
+  const [status, setStatus] = useState<MarketStatus | null>(null);
+  const [snapshot, setSnapshot] = useState<MarketSnapshot | null>(null);
+  const [timeframe, setTimeframe] = useState<Timeframe>('5m');
+  const [result, setResult] = useState<ActionResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [account, setAccount] = useState<AccountStatus | null>(null);
+  const [apiKey, setApiKey] = useState('');
+  const [apiSecret, setApiSecret] = useState('');
+  const [manualPosition, setManualPosition] = useState<ManualPosition | null>(
     null,
   );
-  const [actionState, setActionState] = useState<ActionState>({
-    key: null,
-    result: null,
+  const [manualSide, setManualSide] = useState<'LONG' | 'SHORT'>('LONG');
+  const [manualQuantity, setManualQuantity] = useState('');
+  const [manualEntry, setManualEntry] = useState('');
+  const [manualStop, setManualStop] = useState('');
+  const [manualTargets, setManualTargets] = useState(['', '', '']);
+  const [relay, setRelay] = useState<RelayStatus | null>(null);
+  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const [calculator, setCalculator] = useState({
+    side: 'LONG' as 'LONG' | 'SHORT',
+    entry: '',
+    stop: '',
+    target: '',
+    entryOrderType: 'TAKER' as 'MAKER' | 'TAKER',
+    exitOrderType: 'TAKER' as 'MAKER' | 'TAKER',
   });
-  const [loadingError, setLoadingError] = useState<string | null>(null);
+  const [calculation, setCalculation] =
+    useState<PositionCalculationResult | null>(null);
+  const [relayUrl, setRelayUrl] = useState('');
+  const [relayUploadKey, setRelayUploadKey] = useState('');
+  const [renderedAt, setRenderedAt] = useState(() => Date.now());
 
-  const loadStatus = useCallback(async () => {
+  const refresh = useCallback(async () => {
     try {
-      const [nextStatus, nextDatabaseCheck] = await Promise.all([
-        window.desktopApi.getPhaseZeroStatus(),
-        window.desktopApi.readDbCheck(),
+      const [
+        nextStatus,
+        nextSnapshot,
+        nextAccount,
+        nextManualPosition,
+        nextRelay,
+        nextSettings,
+      ] = await Promise.all([
+        window.desktopApi.getMarketStatus(),
+        window.desktopApi.getLatestSnapshot(),
+        window.desktopApi.getAccountStatus(),
+        window.desktopApi.getManualPosition(),
+        window.desktopApi.getRelayStatus(),
+        window.desktopApi.getUserSettings(),
       ]);
-
       setStatus(nextStatus);
-      setDatabaseCheck(nextDatabaseCheck);
-      setLoadingError(null);
-    } catch (error) {
-      setLoadingError(
-        error instanceof Error ? error.message : '앱 상태를 읽지 못했습니다.',
-      );
+      setSnapshot(nextSnapshot);
+      setAccount(nextAccount);
+      setManualPosition(nextManualPosition);
+      setRelay(nextRelay);
+      setSettings(nextSettings);
+    } catch {
+      const nextStatus = await window.desktopApi.getMarketStatus();
+      setStatus(nextStatus);
     }
   }, []);
 
   useEffect(() => {
-    void loadStatus();
-  }, [loadStatus]);
+    void refresh();
+    const timer = window.setInterval(() => {
+      setRenderedAt(Date.now());
+      void refresh();
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [refresh]);
 
-  const runAction = useCallback(
-    async (key: ActionKey, action: () => Promise<ActionResult>) => {
-      setActionState({ key, result: null });
-
-      try {
-        const result = await action();
-        setActionState({ key: null, result });
-      } catch (error) {
-        setActionState({
-          key: null,
-          result: {
-            ok: false,
-            message:
-              error instanceof Error
-                ? error.message
-                : '요청을 처리하지 못했습니다.',
-          },
-        });
-      }
-    },
-    [],
-  );
-
-  const testDatabase = useCallback(async () => {
-    setActionState({ key: 'database', result: null });
-
+  const copySnapshot = useCallback(async (): Promise<boolean> => {
+    setBusy(true);
     try {
-      const result = await window.desktopApi.writeDbCheck({
-        value: `Phase 0 확인 · ${new Date().toISOString()}`,
-      });
-      setDatabaseCheck(result);
-      setActionState({
-        key: null,
-        result: {
-          ok: result.ok,
-          message: result.ok
-            ? 'SQLite 저장·조회가 완료됐습니다.'
-            : 'SQLite 확인에 실패했습니다.',
-        },
-      });
-      await loadStatus();
-    } catch (error) {
-      setActionState({
-        key: null,
-        result: {
+      const latest = await window.desktopApi.getLatestSnapshot();
+      setSnapshot(latest);
+      const payload = JSON.stringify(latest);
+      if (new Blob([payload]).size > 90_000) {
+        setResult({
           ok: false,
-          message:
-            error instanceof Error
-              ? error.message
-              : 'SQLite 확인에 실패했습니다.',
-        },
+          message: '스냅샷이 90,000바이트를 초과했습니다.',
+        });
+        return false;
+      }
+      const copyResult = await window.desktopApi.copyText(payload);
+      setResult(copyResult);
+      return copyResult.ok;
+    } catch (error) {
+      setResult({
+        ok: false,
+        message: error instanceof Error ? error.message : '스냅샷 복사 실패',
+      });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const copyAndOpen = useCallback(async () => {
+    if (await copySnapshot())
+      setResult(await window.desktopApi.openExternal(settings.gptUrl));
+  }, [copySnapshot, settings.gptUrl]);
+
+  const copyReadableText = useCallback(async () => {
+    const latest = await window.desktopApi.getLatestSnapshot();
+    setSnapshot(latest);
+    setResult(await window.desktopApi.copyText(formatSnapshotText(latest)));
+  }, []);
+
+  const connectAccount = useCallback(async () => {
+    setBusy(true);
+    try {
+      setResult(
+        await window.desktopApi.configureAccount({ apiKey, apiSecret }),
+      );
+      setApiKey('');
+      setApiSecret('');
+      setAccount(await window.desktopApi.getAccountStatus());
+    } catch (error) {
+      setResult({
+        ok: false,
+        message: error instanceof Error ? error.message : '계정 연결 실패',
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [apiKey, apiSecret]);
+
+  const disconnectAccount = useCallback(async () => {
+    setResult(await window.desktopApi.disconnectAccount());
+    setAccount(await window.desktopApi.getAccountStatus());
+  }, []);
+
+  const saveManualPosition = useCallback(async () => {
+    try {
+      const saved = await window.desktopApi.saveManualPosition({
+        side: manualSide,
+        quantity: Number(manualQuantity),
+        entryPrice: Number(manualEntry),
+        stopPrice: manualStop ? Number(manualStop) : null,
+        targetPrices: manualTargets
+          .filter((value) => Number(value) > 0)
+          .map(Number),
+      });
+      setManualPosition(saved);
+      setResult({ ok: true, message: '수동 포지션을 저장했습니다.' });
+    } catch (error) {
+      setResult({
+        ok: false,
+        message:
+          error instanceof Error ? error.message : '수동 포지션 저장 실패',
       });
     }
-  }, [loadStatus]);
+  }, [manualEntry, manualQuantity, manualSide, manualStop, manualTargets]);
 
-  const readinessItems = [
-    {
-      label: 'Main / Preload / Renderer',
-      detail: '보안 경계 적용',
-      ready: status !== null,
-    },
-    {
-      label: 'SQLite',
-      detail: databaseCheck?.ok ? '로컬 DB 연결됨' : '확인 중',
-      ready: databaseCheck?.ok ?? false,
-    },
-    {
-      label: 'Windows 알림',
-      detail: status?.notificationSupported ? '사용 가능' : '플랫폼 확인 필요',
-      ready: status?.notificationSupported ?? false,
-    },
-    {
-      label: '시스템 트레이',
-      detail: status?.trayReady ? '트레이 실행 중' : '확인 중',
-      ready: status?.trayReady ?? false,
-    },
-  ];
+  const saveSettings = useCallback(async () => {
+    try {
+      const saved = await window.desktopApi.saveUserSettings(settings);
+      setSettings(saved);
+      setResult({ ok: true, message: '계산·GPT 설정을 저장했습니다.' });
+    } catch (error) {
+      setResult({
+        ok: false,
+        message: error instanceof Error ? error.message : '설정 저장 실패',
+      });
+    }
+  }, [settings]);
+
+  const runCalculator = useCallback(async () => {
+    try {
+      setCalculation(
+        await window.desktopApi.calculatePositionPlan({
+          side: calculator.side,
+          entry: Number(calculator.entry),
+          stop: Number(calculator.stop),
+          target: Number(calculator.target),
+          entryOrderType: calculator.entryOrderType,
+          exitOrderType: calculator.exitOrderType,
+        }),
+      );
+    } catch (error) {
+      setResult({
+        ok: false,
+        message: error instanceof Error ? error.message : '계산 실패',
+      });
+    }
+  }, [calculator]);
+
+  const connectRelay = useCallback(async () => {
+    setBusy(true);
+    try {
+      setResult(
+        await window.desktopApi.configureRelay({
+          baseUrl: relayUrl,
+          uploadKey: relayUploadKey,
+        }),
+      );
+      setRelayUploadKey('');
+      setRelay(await window.desktopApi.getRelayStatus());
+    } catch (error) {
+      setResult({
+        ok: false,
+        message: error instanceof Error ? error.message : '중계 연결 실패',
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [relayUploadKey, relayUrl]);
+
+  const disconnectRelay = useCallback(async () => {
+    setResult(await window.desktopApi.disconnectRelay());
+    setRelay(await window.desktopApi.getRelayStatus());
+  }, []);
+
+  const resetLocalData = useCallback(async () => {
+    if (
+      !window.confirm(
+        '저장된 API 키·중계 키·캔들·설정·수동 포지션을 모두 초기화할까요?',
+      )
+    )
+      return;
+    setResult(await window.desktopApi.resetLocalData());
+    setSettings(DEFAULT_SETTINGS);
+    setManualPosition(null);
+    setSnapshot(null);
+    setAccount(await window.desktopApi.getAccountStatus());
+    setRelay(await window.desktopApi.getRelayStatus());
+  }, []);
+
+  const rows = snapshot?.timeframes[timeframe].closed ?? [];
+  const gate = snapshot?.analysisGate;
+  const current = rows.at(-1);
+  const previous = rows.at(-2);
+  const change =
+    current && previous
+      ? ((Number(current[4]) - Number(previous[4])) / Number(previous[4])) * 100
+      : null;
+  const selectedIndicators = snapshot?.timeframes[timeframe].indicators;
+  const sourceHealth = snapshot?.sourceHealth;
 
   return (
     <main className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            ₿
-          </span>
+          <span className="brand-mark">₿</span>
           <div>
-            <p className="eyebrow">LOCAL DESKTOP ASSISTANT</p>
+            <p className="eyebrow">LOCAL · READ ONLY · BTCUSDT</p>
             <h1>BTC Futures Assistant</h1>
           </div>
         </div>
-        <div className="phase-badge">
+        <div
+          className={`phase-badge ${status?.dataStatus === 'NORMAL' ? 'ok' : ''}`}
+        >
           <span className="phase-dot" />
-          Phase 0 · 기술검증
+          {status?.dataStatus ?? 'INITIALIZING'}
         </div>
       </header>
 
-      <section className="hero">
-        <div>
-          <p className="eyebrow accent">FOUNDATION READY</p>
-          <h2>시장 감시를 시작하기 전, 로컬 기반을 검증합니다.</h2>
-          <p className="hero-copy">
-            현재 버전에는 실시간 시세와 거래 신호가 없습니다. Windows 기능,
-            SQLite 저장소, 보안 IPC가 정상인지 먼저 확인합니다.
-          </p>
-        </div>
-        <div className="safety-card">
-          <span className="safety-icon">!</span>
-          <div>
-            <strong>수동주문 전용</strong>
-            <p>자동 진입·청산·주문 API는 구현하지 않습니다.</p>
-          </div>
-        </div>
+      <section className="market-summary">
+        <article>
+          <span>MARK</span>
+          <strong>${formatNumber(status?.markPrice ?? null)}</strong>
+        </article>
+        <article>
+          <span>INDEX</span>
+          <strong>${formatNumber(status?.indexPrice ?? null)}</strong>
+        </article>
+        <article>
+          <span>LAST CLOSE</span>
+          <strong>${formatNumber(current ? String(current[4]) : null)}</strong>
+        </article>
+        <article>
+          <span>{timeframe} CHANGE</span>
+          <strong className={(change ?? 0) >= 0 ? 'positive' : 'negative'}>
+            {change === null ? '—' : `${change.toFixed(2)}%`}
+          </strong>
+        </article>
       </section>
 
-      {loadingError !== null && (
+      <section className="connection-strip" aria-label="연결 상태">
+        <span>
+          REST <strong>{sourceHealth?.market?.status ?? 'INITIALIZING'}</strong>
+        </span>
+        <span>
+          WebSocket <strong>{status?.dataStatus ?? 'INITIALIZING'}</strong>
+        </span>
+        <span>
+          계정{' '}
+          <strong>
+            {account?.connected
+              ? 'NORMAL'
+              : account?.configured
+                ? 'DISCONNECTED'
+                : 'OFF'}
+          </strong>
+        </span>
+        <span>
+          중계{' '}
+          <strong>
+            {relay?.connected
+              ? 'NORMAL'
+              : relay?.configured
+                ? 'DISCONNECTED'
+                : 'OFF'}
+          </strong>
+        </span>
+        <span>
+          데이터 나이 <strong>{gate ? `${gate.ageMs}ms` : '—'}</strong>
+        </span>
+      </section>
+
+      {gate && !gate.analysisAllowed && (
         <div className="notice error" role="alert">
-          {loadingError}
+          분석 차단 ·{' '}
+          {gate.reasons.join(', ') || '필수 데이터가 준비되지 않았습니다.'}
         </div>
       )}
-
-      {actionState.result !== null && (
-        <div
-          className={`notice ${actionState.result.ok ? 'success' : 'error'}`}
-          role="status"
-        >
-          {actionState.result.message}
+      {result && (
+        <div className={`notice ${result.ok ? 'success' : 'error'}`}>
+          {result.message}
         </div>
       )}
-
-      <section className="readiness-grid" aria-label="Phase 0 준비 상태">
-        {readinessItems.map((item) => (
-          <article className="status-card" key={item.label}>
-            <div className="status-card-head">
-              <span className={`status-light ${item.ready ? 'ready' : ''}`} />
-              <span>{item.ready ? 'READY' : 'CHECK'}</span>
-            </div>
-            <strong>{item.label}</strong>
-            <p>{item.detail}</p>
-          </article>
-        ))}
-      </section>
 
       <section className="workspace-grid">
-        <article className="panel action-panel">
+        <article className="panel chart-panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">DESKTOP CHECKS</p>
-              <h3>로컬 기능 테스트</h3>
+              <p className="eyebrow">CLOSED CANDLES ONLY</p>
+              <h3>BTCUSDT USDⓈ-M Perpetual</h3>
             </div>
-            <button
-              className="text-button"
-              type="button"
-              onClick={() => void loadStatus()}
-            >
-              상태 새로고침
-            </button>
+            <div className="timeframes">
+              {TIMEFRAMES.map((item) => (
+                <button
+                  className={item === timeframe ? 'active' : ''}
+                  key={item}
+                  onClick={() => setTimeframe(item)}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
           </div>
-
-          <div className="action-list">
-            <div className="action-row">
-              <div>
-                <strong>Windows 알림</strong>
-                <p>운영체제 알림센터에 테스트 메시지를 보냅니다.</p>
-              </div>
-              <button
-                type="button"
-                disabled={actionState.key !== null}
-                onClick={() =>
-                  void runAction('notification', () =>
-                    window.desktopApi.testNotification(),
-                  )
-                }
-              >
-                {actionState.key === 'notification' ? '확인 중' : '알림 테스트'}
-              </button>
+          {snapshot ? (
+            <MarketChart timeframe={snapshot.timeframes[timeframe]} />
+          ) : (
+            <div className="market-chart chart-loading">
+              시장 데이터를 준비하고 있습니다.
             </div>
-
-            <div className="action-row">
-              <div>
-                <strong>클립보드</strong>
-                <p>Phase 5 GPT 전달 기능에 사용할 복사 경로를 확인합니다.</p>
-              </div>
-              <button
-                type="button"
-                disabled={actionState.key !== null}
-                onClick={() =>
-                  void runAction('clipboard', () =>
-                    window.desktopApi.copyText(PHASE_ZERO_CLIPBOARD_TEXT),
-                  )
-                }
-              >
-                {actionState.key === 'clipboard' ? '복사 중' : '테스트 복사'}
-              </button>
-            </div>
-
-            <div className="action-row">
-              <div>
-                <strong>외부 URL</strong>
-                <p>허용목록에 있는 ChatGPT 주소만 브라우저로 엽니다.</p>
-              </div>
-              <button
-                type="button"
-                disabled={actionState.key !== null}
-                onClick={() =>
-                  void runAction('external', () =>
-                    window.desktopApi.openExternal(GPT_URL),
-                  )
-                }
-              >
-                {actionState.key === 'external' ? '여는 중' : 'ChatGPT 열기'}
-              </button>
-            </div>
-
-            <div className="action-row">
-              <div>
-                <strong>SQLite 저장소</strong>
-                <p>테스트값을 저장한 뒤 다시 읽어 영속성을 확인합니다.</p>
-              </div>
-              <button
-                type="button"
-                disabled={actionState.key !== null}
-                onClick={() => void testDatabase()}
-              >
-                {actionState.key === 'database' ? '저장 중' : 'DB 저장·조회'}
-              </button>
-            </div>
+          )}
+          <div className="chart-meta">
+            <span>마감 {rows.length}개</span>
+            <span>
+              진행 {snapshot?.timeframes[timeframe].live ? 1 : 0}개 (신규 진입
+              판단 제외)
+            </span>
           </div>
         </article>
 
         <aside className="panel detail-panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">RUNTIME</p>
-              <h3>실행 정보</h3>
+              <p className="eyebrow">DATA HEALTH</p>
+              <h3>분석 게이트</h3>
             </div>
           </div>
-
           <dl className="runtime-list">
             <div>
-              <dt>앱 버전</dt>
-              <dd>{status?.appVersion ?? '확인 중'}</dd>
+              <dt>분석 허용</dt>
+              <dd>{gate?.analysisAllowed ? 'YES' : 'NO'}</dd>
             </div>
             <div>
-              <dt>플랫폼</dt>
-              <dd>{status?.platform ?? '확인 중'}</dd>
+              <dt>스냅샷</dt>
+              <dd>{snapshot?.snapshotId ?? '준비 중'}</dd>
             </div>
             <div>
-              <dt>DB 레코드</dt>
-              <dd>{databaseCheck?.recordCount ?? 0}</dd>
+              <dt>생성시각 KST</dt>
+              <dd>{snapshot?.generatedAtKst ?? '—'}</dd>
             </div>
-            <div>
-              <dt>마지막 DB 확인</dt>
-              <dd>{formatTimestamp(databaseCheck?.updatedAt ?? null)}</dd>
-            </div>
+            {TIMEFRAMES.map((item) => (
+              <div key={item}>
+                <dt>{item} 마감 캔들</dt>
+                <dd>{status?.timeframeCounts[item] ?? 0}</dd>
+              </div>
+            ))}
           </dl>
-
-          <div className="security-box">
-            <p className="eyebrow">SECURITY BOUNDARY</p>
-            <ul>
-              <li>Context isolation 활성</li>
-              <li>Node integration 비활성</li>
-              <li>Renderer sandbox 활성</li>
-              <li>동적 IPC 채널 미노출</li>
-            </ul>
-          </div>
         </aside>
       </section>
 
+      {snapshot && (
+        <section className="market-detail-grid">
+          <article className="panel metric-panel">
+            <p className="eyebrow">MARKET</p>
+            <dl>
+              <div>
+                <dt>Spread</dt>
+                <dd>
+                  {formatNumber(snapshot.marketState.spread, 2)} USDT ·{' '}
+                  {formatNumber(snapshot.marketState.spreadBps, 2)} bps
+                </dd>
+              </div>
+              <div>
+                <dt>Funding</dt>
+                <dd>
+                  {formatNumber(
+                    (snapshot.marketState.fundingRate ?? 0) * 100,
+                    4,
+                  )}
+                  %
+                </dd>
+              </div>
+              <div>
+                <dt>Next funding</dt>
+                <dd>
+                  {snapshot.marketState.nextFundingTime
+                    ? new Date(
+                        snapshot.marketState.nextFundingTime,
+                      ).toLocaleString('ko-KR')
+                    : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt>Open interest</dt>
+                <dd>{formatNumber(snapshot.openInterest.current, 3)} BTC</dd>
+              </div>
+              <div>
+                <dt>OI {timeframe}</dt>
+                <dd>
+                  {formatNumber(
+                    snapshot.openInterest.changes[timeframe] ?? null,
+                    2,
+                  )}
+                  %
+                </dd>
+              </div>
+            </dl>
+          </article>
+          <article className="panel metric-panel">
+            <p className="eyebrow">ORDER FLOW</p>
+            <dl>
+              <div>
+                <dt>Taker buy / sell</dt>
+                <dd>
+                  {formatNumber(snapshot.orderFlow['5m'].takerBuyVolume, 3)} /{' '}
+                  {formatNumber(snapshot.orderFlow['5m'].takerSellVolume, 3)}
+                </dd>
+              </div>
+              <div>
+                <dt>Delta 5m</dt>
+                <dd>{formatNumber(snapshot.orderFlow['5m'].delta, 3)} BTC</dd>
+              </div>
+              <div>
+                <dt>Book imbalance</dt>
+                <dd>
+                  {formatNumber(
+                    (snapshot.orderFlow.orderBookImbalance20 ?? 0) * 100,
+                    2,
+                  )}
+                  %
+                </dd>
+              </div>
+              <div>
+                <dt>Long / short</dt>
+                <dd>
+                  {formatNumber(
+                    snapshot.sentiment.globalLongShortAccountRatio,
+                    3,
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Liquidations 5m</dt>
+                <dd>
+                  L {formatNumber(snapshot.liquidations['5m'].longNotional, 0)}{' '}
+                  / S{' '}
+                  {formatNumber(snapshot.liquidations['5m'].shortNotional, 0)}{' '}
+                  USDT
+                </dd>
+              </div>
+            </dl>
+          </article>
+          <article className="panel metric-panel">
+            <p className="eyebrow">INDICATORS · {timeframe}</p>
+            <dl>
+              <div>
+                <dt>EMA 20 / 50 / 200</dt>
+                <dd>
+                  {formatNumber(selectedIndicators?.ema20 ?? null)} /{' '}
+                  {formatNumber(selectedIndicators?.ema50 ?? null)} /{' '}
+                  {formatNumber(selectedIndicators?.ema200 ?? null)}
+                </dd>
+              </div>
+              <div>
+                <dt>RSI 14</dt>
+                <dd>{formatNumber(selectedIndicators?.rsi14 ?? null, 2)}</dd>
+              </div>
+              <div>
+                <dt>ATR 14</dt>
+                <dd>
+                  {formatNumber(selectedIndicators?.atr14 ?? null, 2)} ·{' '}
+                  {formatNumber(selectedIndicators?.atrPercent ?? null, 2)}%
+                </dd>
+              </div>
+              <div>
+                <dt>Volume ratio</dt>
+                <dd>
+                  {formatNumber(selectedIndicators?.volumeRatio ?? null, 2)}x
+                </dd>
+              </div>
+              <div>
+                <dt>VWAP</dt>
+                <dd>{formatNumber(selectedIndicators?.vwap ?? null, 2)}</dd>
+              </div>
+            </dl>
+          </article>
+        </section>
+      )}
+
+      <section className="panel gpt-panel">
+        <div>
+          <p className="eyebrow">USER-INITIATED GPT HANDOFF</p>
+          <h3>검증된 최신 스냅샷</h3>
+          <p>자동 전송이나 OpenAI API 호출 없이 사용자가 직접 복사합니다.</p>
+        </div>
+        <pre>
+          {snapshot
+            ? JSON.stringify(snapshot, null, 2).slice(0, 1800)
+            : '시장 데이터를 준비하고 있습니다.'}
+        </pre>
+        {snapshot && (
+          <pre className="text-preview">{formatSnapshotText(snapshot)}</pre>
+        )}
+        <div className="gpt-actions">
+          <button disabled={busy} onClick={() => void copyReadableText()}>
+            사람이 읽는 텍스트 복사
+          </button>
+          <button
+            disabled={busy || !snapshot}
+            onClick={() => void copySnapshot()}
+          >
+            최신 분석자료 복사
+          </button>
+          <button
+            disabled={busy || !snapshot}
+            onClick={() => void copyAndOpen()}
+          >
+            복사 + GPT 열기
+          </button>
+        </div>
+      </section>
+
+      <section className="panel account-panel">
+        <div>
+          <p className="eyebrow">CLOUDFLARE RELAY</p>
+          <h3>GPT Actions 중계</h3>
+          <p>
+            업로드 키는 OS 암호화 저장소에 보관됩니다. Action 조회 키와 반드시
+            달라야 하며 Renderer로 다시 반환되지 않습니다.
+          </p>
+          <span className="endpoint">
+            {relay?.baseUrl
+              ? `${relay.baseUrl}/v1/snapshot/latest`
+              : 'Action endpoint 미설정'}
+          </span>
+        </div>
+        {relay?.configured ? (
+          <div className="account-status">
+            <strong>
+              {relay.connected ? '5초 heartbeat 정상' : '업로드 연결 끊김'}
+            </strong>
+            <span>
+              마지막 성공{' '}
+              {relay.lastSuccessAt
+                ? new Date(relay.lastSuccessAt).toLocaleString('ko-KR')
+                : '없음'}
+            </span>
+            <span>연속 실패 {relay.consecutiveFailures}회</span>
+            <button onClick={() => void disconnectRelay()}>
+              중계 연결 해제 및 키 삭제
+            </button>
+          </div>
+        ) : (
+          <div className="account-form">
+            <input
+              aria-label="Relay URL"
+              value={relayUrl}
+              onChange={(event) => setRelayUrl(event.target.value)}
+              placeholder="https://name.workers.dev"
+            />
+            <input
+              aria-label="Relay Upload Key"
+              type="password"
+              value={relayUploadKey}
+              onChange={(event) => setRelayUploadKey(event.target.value)}
+              placeholder="UPLOADER_WRITE_KEY"
+              autoComplete="off"
+            />
+            <button
+              disabled={busy || relayUploadKey.length < 32 || !relayUrl}
+              onClick={() => void connectRelay()}
+            >
+              연결 테스트 후 암호화 저장
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section className="panel account-panel">
+        <div>
+          <p className="eyebrow">OPTIONAL · READ ONLY</p>
+          <h3>Binance 계정</h3>
+          <p>
+            IP 제한과 Futures 읽기 권한만 부여한 별도 키를 사용하세요. 키는 OS
+            암호화 저장소로 보호되며 화면·로그·GPT에 반환되지 않습니다.
+          </p>
+        </div>
+        {account?.configured ? (
+          <div className="account-status">
+            <strong>{account.connected ? '연결됨' : '연결 끊김'}</strong>
+            <span>
+              {account.position
+                ? `${account.position.side} ${account.position.quantity} BTC · 10x ISOLATED`
+                : '현재 포지션 없음'}
+            </span>
+            <button onClick={() => void disconnectAccount()}>
+              연결 해제 및 키 삭제
+            </button>
+          </div>
+        ) : (
+          <div className="account-form">
+            <input
+              aria-label="Binance API Key"
+              type="password"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              placeholder="Read-only API Key"
+              autoComplete="off"
+            />
+            <input
+              aria-label="Binance API Secret"
+              type="password"
+              value={apiSecret}
+              onChange={(event) => setApiSecret(event.target.value)}
+              placeholder="API Secret"
+              autoComplete="off"
+            />
+            <button
+              disabled={busy || apiKey.length < 16 || apiSecret.length < 16}
+              onClick={() => void connectAccount()}
+            >
+              연결 테스트 후 저장
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section className="panel settings-layout">
+        <div>
+          <p className="eyebrow">DETERMINISTIC CALCULATOR</p>
+          <h3>최대손실 기반 수량·비용 검증</h3>
+          <div className="account-form">
+            <select
+              value={calculator.side}
+              onChange={(event) =>
+                setCalculator((current) => ({
+                  ...current,
+                  side: event.target.value as 'LONG' | 'SHORT',
+                }))
+              }
+            >
+              <option>LONG</option>
+              <option>SHORT</option>
+            </select>
+            <input
+              aria-label="계산 진입가"
+              value={calculator.entry}
+              onChange={(event) =>
+                setCalculator((current) => ({
+                  ...current,
+                  entry: event.target.value,
+                }))
+              }
+              placeholder="진입가"
+            />
+            <input
+              aria-label="계산 손절가"
+              value={calculator.stop}
+              onChange={(event) =>
+                setCalculator((current) => ({
+                  ...current,
+                  stop: event.target.value,
+                }))
+              }
+              placeholder="손절가"
+            />
+            <input
+              aria-label="계산 목표가"
+              value={calculator.target}
+              onChange={(event) =>
+                setCalculator((current) => ({
+                  ...current,
+                  target: event.target.value,
+                }))
+              }
+              placeholder="목표가"
+            />
+            <select
+              aria-label="진입 주문 유형"
+              value={calculator.entryOrderType}
+              onChange={(event) =>
+                setCalculator((current) => ({
+                  ...current,
+                  entryOrderType: event.target.value as 'MAKER' | 'TAKER',
+                }))
+              }
+            >
+              <option>TAKER</option>
+              <option>MAKER</option>
+            </select>
+            <select
+              aria-label="청산 주문 유형"
+              value={calculator.exitOrderType}
+              onChange={(event) =>
+                setCalculator((current) => ({
+                  ...current,
+                  exitOrderType: event.target.value as 'MAKER' | 'TAKER',
+                }))
+              }
+            >
+              <option>TAKER</option>
+              <option>MAKER</option>
+            </select>
+            <button onClick={() => void runCalculator()}>수량·비용 검증</button>
+          </div>
+          {calculation && (
+            <div
+              className={`calculation-result ${calculation.valid ? 'success' : 'error'}`}
+            >
+              <strong>
+                {calculation.valid
+                  ? `${calculation.quantity} BTC`
+                  : calculation.errors.join(', ')}
+              </strong>
+              {calculation.target && (
+                <span>
+                  순손익 {formatNumber(calculation.target.netPnl)} USDT · 증거금
+                  ROI {formatNumber(calculation.target.netMarginRoiPercent)}%
+                </span>
+              )}
+              {calculation.breakevenPrice && (
+                <span>
+                  비용 보정 본전가 {formatNumber(calculation.breakevenPrice)}
+                </span>
+              )}
+              {calculation.estimatedMaxLoss && (
+                <span>
+                  예상 최대손실 {formatNumber(calculation.estimatedMaxLoss)}{' '}
+                  USDT
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        <div>
+          <p className="eyebrow">SETTINGS</p>
+          <h3>개인 비용·위험 설정</h3>
+          <div className="account-form">
+            <input
+              aria-label="전용 GPT URL"
+              value={settings.gptUrl}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  gptUrl: event.target.value,
+                }))
+              }
+            />
+            <input
+              aria-label="Maker 수수료율"
+              inputMode="decimal"
+              value={settings.makerFeeRate ?? ''}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  makerFeeRate:
+                    event.target.value === ''
+                      ? null
+                      : Number(event.target.value),
+                }))
+              }
+              placeholder="Maker 수수료율 (예: 0.0002)"
+            />
+            <input
+              aria-label="Taker 수수료율"
+              inputMode="decimal"
+              value={settings.takerFeeRate ?? ''}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  takerFeeRate:
+                    event.target.value === ''
+                      ? null
+                      : Number(event.target.value),
+                }))
+              }
+              placeholder="Taker 수수료율 (예: 0.0005)"
+            />
+            <input
+              aria-label="진입 슬리피지 bps"
+              inputMode="decimal"
+              value={settings.entrySlippageBps}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  entrySlippageBps: Number(event.target.value),
+                }))
+              }
+            />
+            <input
+              aria-label="청산 슬리피지 bps"
+              inputMode="decimal"
+              value={settings.exitSlippageBps}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  exitSlippageBps: Number(event.target.value),
+                }))
+              }
+            />
+            <input
+              aria-label="최대 손실 USDT"
+              inputMode="decimal"
+              value={settings.maxLossUsdt ?? ''}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  maxLossUsdt:
+                    event.target.value === ''
+                      ? null
+                      : Number(event.target.value),
+                }))
+              }
+              placeholder="최대 손실 USDT (필수)"
+            />
+            <input
+              aria-label="계정 위험 비율"
+              inputMode="decimal"
+              value={settings.riskPercent ?? ''}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  riskPercent:
+                    event.target.value === ''
+                      ? null
+                      : Number(event.target.value),
+                }))
+              }
+              placeholder="계정 위험 비율 (예: 0.01)"
+            />
+            <label className="fixed-policy">
+              <input
+                type="checkbox"
+                checked={settings.autoStart}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    autoStart: event.target.checked,
+                  }))
+                }
+              />{' '}
+              Windows 로그인 시 자동실행
+            </label>
+            <label className="fixed-policy">
+              고정 정책: 10x · ISOLATED · 최소 비용차감 ROI 2%
+            </label>
+            <button onClick={() => void saveSettings()}>설정 저장</button>
+            <button className="danger" onClick={() => void resetLocalData()}>
+              로컬 데이터 초기화
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel account-panel">
+        <div>
+          <p className="eyebrow">MANUAL FALLBACK</p>
+          <h3>수동 포지션</h3>
+          <p>
+            계정 조회가 꺼져 있을 때만 사용하는 보조 입력입니다. 출처와
+            갱신시각이 스냅샷과 화면에 명시됩니다.
+          </p>
+        </div>
+        {manualPosition ? (
+          <div className="account-status">
+            <strong>
+              {manualPosition.side} {manualPosition.quantity} BTC
+            </strong>
+            <span>
+              진입가 ${formatNumber(manualPosition.entryPrice)} · MANUAL ·{' '}
+              {new Date(manualPosition.updatedAt).toLocaleString('ko-KR')}
+            </span>
+            {renderedAt - manualPosition.updatedAt > 15 * 60_000 && (
+              <span className="negative">
+                수동 입력이 15분 이상 경과했습니다.
+              </span>
+            )}
+            <button
+              onClick={() =>
+                void window.desktopApi
+                  .clearManualPosition()
+                  .then(() => setManualPosition(null))
+              }
+            >
+              수동 포지션 삭제
+            </button>
+          </div>
+        ) : (
+          <div className="account-form">
+            <select
+              value={manualSide}
+              onChange={(event) =>
+                setManualSide(event.target.value as 'LONG' | 'SHORT')
+              }
+            >
+              <option>LONG</option>
+              <option>SHORT</option>
+            </select>
+            <input
+              aria-label="수량 BTC"
+              inputMode="decimal"
+              value={manualQuantity}
+              onChange={(event) => setManualQuantity(event.target.value)}
+              placeholder="수량 BTC"
+            />
+            <input
+              aria-label="진입가 USDT"
+              inputMode="decimal"
+              value={manualEntry}
+              onChange={(event) => setManualEntry(event.target.value)}
+              placeholder="진입가 USDT"
+            />
+            <input
+              aria-label="손절가 USDT"
+              inputMode="decimal"
+              value={manualStop}
+              onChange={(event) => setManualStop(event.target.value)}
+              placeholder="손절가 (선택)"
+            />
+            {manualTargets.map((target, index) => (
+              <input
+                key={index}
+                aria-label={`목표가 ${index + 1}`}
+                inputMode="decimal"
+                value={target}
+                onChange={(event) =>
+                  setManualTargets((current) =>
+                    current.map((value, itemIndex) =>
+                      itemIndex === index ? event.target.value : value,
+                    ),
+                  )
+                }
+                placeholder={`TP${index + 1} (선택)`}
+              />
+            ))}
+            <button
+              disabled={Number(manualQuantity) <= 0 || Number(manualEntry) <= 0}
+              onClick={() => void saveManualPosition()}
+            >
+              수동 포지션 저장
+            </button>
+          </div>
+        )}
+      </section>
+
       <footer>
-        <span>다음 단계</span>
-        <strong>Phase 1 · Binance 공개 시장 데이터</strong>
-        <p>Phase 0 검증과 Windows 패키징이 완료된 후 진행합니다.</p>
+        <span>안전 경계</span>
+        <strong>10x · Isolated · 수동 주문 전용</strong>
+        <p>주문 생성·수정·취소 API 없음</p>
       </footer>
     </main>
   );

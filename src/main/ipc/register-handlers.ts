@@ -9,19 +9,46 @@ import {
 import {
   IPC_CHANNELS,
   type ActionResult,
+  type AccountStatus,
+  type MarketSnapshot,
+  type MarketStatus,
+  type ManualPosition,
   type PhaseZeroStatus,
+  type RelayStatus,
+  type PositionCalculationResult,
+  type RelayConfigurationInput,
+  type UserSettings,
 } from '../../shared/contracts';
 import {
   allowedExternalUrlSchema,
+  accountConfigurationSchema,
   clipboardTextSchema,
   databaseCheckInputSchema,
+  manualPositionInputSchema,
+  positionCalculationInputSchema,
+  relayConfigurationSchema,
+  userSettingsSchema,
 } from '../../shared/schemas';
 import type { AppDatabase } from '../db/database';
 import { logger } from '../logging/logger';
+import type { MarketDataService } from '../market/service';
+import { generateSnapshot } from '../market/snapshot';
+import type { AccountService } from '../binance/account/service';
+import {
+  breakevenExitPrice,
+  calculatePositionPlan as calculatePlan,
+  signedFundingPayment,
+  validateRiskQuantity,
+} from '../../shared/calculations/costs';
 
 interface RegisterIpcHandlersOptions {
   database: AppDatabase;
   isTrayReady: () => boolean;
+  marketData: MarketDataService;
+  accountService: AccountService;
+  getRelayStatus: () => RelayStatus;
+  configureRelay: (input: RelayConfigurationInput) => Promise<void>;
+  disconnectRelay: () => void;
 }
 
 function resetHandler(channel: string): void {
@@ -31,6 +58,11 @@ function resetHandler(channel: string): void {
 export function registerIpcHandlers({
   database,
   isTrayReady,
+  marketData,
+  accountService,
+  getRelayStatus,
+  configureRelay,
+  disconnectRelay,
 }: RegisterIpcHandlersOptions): void {
   Object.values(IPC_CHANNELS).forEach(resetHandler);
 
@@ -75,6 +107,181 @@ export function registerIpcHandlers({
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.configureAccount,
+    async (_event, rawInput: unknown): Promise<ActionResult> => {
+      const input = accountConfigurationSchema.parse(rawInput);
+      await accountService.configure(input);
+      return { ok: true, message: '읽기 전용 Binance 계정을 연결했습니다.' };
+    },
+  );
+  ipcMain.handle(IPC_CHANNELS.disconnectAccount, (): ActionResult => {
+    accountService.disconnect();
+    return { ok: true, message: '계정 연결과 저장된 인증정보를 삭제했습니다.' };
+  });
+  ipcMain.handle(IPC_CHANNELS.getAccountStatus, (): AccountStatus =>
+    accountService.getStatus(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.saveManualPosition,
+    (_event, rawInput: unknown): ManualPosition =>
+      database.saveManualPosition(manualPositionInputSchema.parse(rawInput)),
+  );
+  ipcMain.handle(IPC_CHANNELS.clearManualPosition, (): ActionResult => {
+    database.clearManualPosition();
+    return { ok: true, message: '수동 포지션을 삭제했습니다.' };
+  });
+  ipcMain.handle(IPC_CHANNELS.getManualPosition, (): ManualPosition | null =>
+    database.readManualPosition(),
+  );
+  ipcMain.handle(IPC_CHANNELS.getRelayStatus, (): RelayStatus =>
+    getRelayStatus(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.configureRelay,
+    async (_event, rawInput: unknown): Promise<ActionResult> => {
+      await configureRelay(relayConfigurationSchema.parse(rawInput));
+      return {
+        ok: true,
+        message: '중계소 설정을 암호화 저장하고 업로드를 시작했습니다.',
+      };
+    },
+  );
+  ipcMain.handle(IPC_CHANNELS.disconnectRelay, (): ActionResult => {
+    disconnectRelay();
+    return {
+      ok: true,
+      message: '중계소 연결과 저장된 업로드 키를 삭제했습니다.',
+    };
+  });
+  ipcMain.handle(IPC_CHANNELS.getUserSettings, (): UserSettings =>
+    database.readUserSettings(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.saveUserSettings,
+    (_event, rawInput: unknown): UserSettings => {
+      const saved = database.saveUserSettings(
+        userSettingsSchema.parse(rawInput),
+      );
+      app.setLoginItemSettings({ openAtLogin: saved.autoStart });
+      return saved;
+    },
+  );
+  ipcMain.handle(IPC_CHANNELS.resetLocalData, (): ActionResult => {
+    accountService.disconnect();
+    disconnectRelay();
+    database.clearLocalData();
+    app.setLoginItemSettings({ openAtLogin: false });
+    return {
+      ok: true,
+      message:
+        '로컬 캔들·설정·수동 포지션·저장된 인증정보를 초기화했습니다. 앱을 다시 시작하면 메모리 데이터도 초기화됩니다.',
+    };
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.calculatePositionPlan,
+    (_event, rawInput: unknown): PositionCalculationResult => {
+      const input = positionCalculationInputSchema.parse(rawInput);
+      const settings = database.readUserSettings();
+      const filters = marketData.cache.productFilters;
+      const errors: string[] = [];
+      if (settings.makerFeeRate === null || settings.takerFeeRate === null)
+        errors.push('FEE_RATE_REQUIRED');
+      if (!filters) errors.push('PRODUCT_FILTERS_REQUIRED');
+      if (
+        (input.side === 'LONG' &&
+          (input.stop >= input.entry || input.target <= input.entry)) ||
+        (input.side === 'SHORT' &&
+          (input.stop <= input.entry || input.target >= input.entry))
+      )
+        errors.push('INVALID_STOP_OR_TARGET_DIRECTION');
+      if (errors.length || !filters)
+        return {
+          valid: false,
+          errors,
+          warnings: [],
+          quantity: null,
+          breakevenPrice: null,
+          estimatedMaxLoss: null,
+          target: null,
+        };
+      const entryFeeRate =
+        (input.entryOrderType ?? 'TAKER') === 'MAKER'
+          ? (settings.makerFeeRate ?? 0)
+          : (settings.takerFeeRate ?? 0);
+      const exitFeeRate =
+        (input.exitOrderType ?? 'TAKER') === 'MAKER'
+          ? (settings.makerFeeRate ?? 0)
+          : (settings.takerFeeRate ?? 0);
+      const slippageRate =
+        Math.max(settings.entrySlippageBps, settings.exitSlippageBps) / 10_000;
+      const quantity = validateRiskQuantity({
+        entry: input.entry,
+        stop: input.stop,
+        maxLossUsdt: input.maxLossUsdt ?? settings.maxLossUsdt,
+        accountEquity: input.accountEquity,
+        riskPercent: input.riskPercent ?? settings.riskPercent,
+        availableMargin: accountService.getStatus().balance?.availableBalance,
+        entryFeeRate,
+        exitFeeRate,
+        slippageRate,
+        stepSize: filters.stepSize,
+        minQuantity: filters.minQuantity,
+        minNotional: filters.minNotional,
+        tickSize: filters.tickSize,
+      });
+      if (!quantity.valid)
+        return {
+          valid: false,
+          errors: quantity.reasons,
+          warnings: quantity.warnings,
+          quantity: null,
+          breakevenPrice: null,
+          estimatedMaxLoss: quantity.estimatedMaxLoss,
+          target: null,
+        };
+      const fundingPayment = signedFundingPayment(
+        input.side,
+        input.entry * quantity.quantity,
+        marketData.cache.state.fundingRate ?? 0,
+      );
+      const plan = calculatePlan({
+        side: input.side,
+        entry: input.entry,
+        exit: input.target,
+        quantity: quantity.quantity,
+        entryFeeRate,
+        exitFeeRate,
+        slippageRate,
+        fundingRate: fundingPayment / (input.entry * quantity.quantity),
+      });
+      return {
+        valid: true,
+        errors: [],
+        warnings: quantity.warnings,
+        quantity: quantity.quantity,
+        breakevenPrice: breakevenExitPrice(
+          input.side,
+          input.entry,
+          entryFeeRate,
+          exitFeeRate,
+          slippageRate,
+          marketData.cache.state.fundingRate ?? 0,
+        ),
+        estimatedMaxLoss: quantity.estimatedMaxLoss,
+        target: {
+          grossPnl: plan.grossPnl,
+          netPnl: plan.netPnl,
+          initialMargin: plan.initialMargin,
+          netMarginRoiPercent: (plan.netPnl / plan.initialMargin) * 100,
+          entryFee: plan.entryFee,
+          exitFee: plan.exitFee,
+          slippage: plan.slippage,
+        },
+      };
+    },
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.openExternal,
     async (_event, rawUrl: unknown): Promise<ActionResult> => {
       const url = allowedExternalUrlSchema.parse(rawUrl);
@@ -91,22 +298,28 @@ export function registerIpcHandlers({
 
   ipcMain.handle(IPC_CHANNELS.readDbCheck, () => database.readPhaseZeroCheck());
 
-  ipcMain.handle(IPC_CHANNELS.getMarketStatus, (): MarketStatus => ({
-    symbol: 'BTCUSDT',
-    lastSnapshotAt: null,
-    markPrice: null,
-    indexPrice: null,
-    timeframeCounts: {
-      '5m': 0,
-      '15m': 0,
-      '1h': 0,
-      '4h': 0,
-    },
-    dataStatus: 'INITIALIZING',
-  }));
+  ipcMain.handle(IPC_CHANNELS.getMarketStatus, (): MarketStatus =>
+    marketData.cache.status(),
+  );
 
-  ipcMain.handle(IPC_CHANNELS.getLatestSnapshot, async (): Promise<MarketSnapshot> => {
-    throw new Error('Snapshot generation is not yet available.');
+  ipcMain.handle(IPC_CHANNELS.getLatestSnapshot, (): MarketSnapshot => {
+    const accountStatus = accountService.getStatus();
+    const settings = database.readUserSettings();
+    return generateSnapshot(marketData.cache, {
+      serverTime: Date.now() + marketData.getServerOffsetMs(),
+      position: accountStatus.connected
+        ? accountStatus.position
+        : database.readManualPosition(),
+      accountStatus,
+      makerFeeRate:
+        accountStatus.commission?.makerRate ?? settings.makerFeeRate,
+      takerFeeRate:
+        accountStatus.commission?.takerRate ?? settings.takerFeeRate,
+      entrySlippageBps: settings.entrySlippageBps,
+      exitSlippageBps: settings.exitSlippageBps,
+      maxLossUsdt: settings.maxLossUsdt,
+      riskPercent: settings.riskPercent,
+    });
   });
 
   logger.info('Restricted Phase 0 IPC handlers registered');

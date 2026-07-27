@@ -1,0 +1,9 @@
+name = "btc-futures-assistant-relay"
+main = "worker/src/index.ts"
+compatibility_date = "2026-07-27"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "btc-futures-assistant"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "worker/migrations"

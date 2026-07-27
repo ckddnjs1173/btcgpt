@@ -1,64 +1,97 @@
-import { depthEntrySchema, klineTuple, klinesSchema, markPriceSchema, openInterestSchema, premiumIndexSchema, serverTimeSchema, ticker24hSchema } from '../schemas';
+import {
+  aggregateTradesSchema,
+  exchangeInfoSchema,
+  klinesSchema,
+  markPriceSchema,
+  openInterestHistorySchema,
+  openInterestSchema,
+  orderBookDepthSchema,
+  ratioHistorySchema,
+  serverTimeSchema,
+  ticker24hSchema,
+} from '../schemas';
 import type { KlineTuple } from '../schemas';
+import type { Timeframe } from '../../market/types';
 
 const BASE = 'https://fapi.binance.com';
+const SYMBOL = 'BTCUSDT';
 
-function parseJson<T>(res: Response, schema: { parse(input: unknown): T }): T {
-  const json = (await res.json()) as unknown;
-  return schema.parse(json);
+async function parseJson<T>(
+  response: Response,
+  schema: { parse(input: unknown): T },
+): Promise<T> {
+  if (!response.ok)
+    throw new Error(`Binance public API returned HTTP ${response.status}`);
+  return schema.parse((await response.json()) as unknown);
 }
 
-export async function fetchServerTime(): Promise<{ serverTime: number }> {
-  const res = await fetch(`${BASE}/fapi/v1/time`);
-  return parseJson(res, serverTimeSchema);
+async function get<T>(
+  path: string,
+  schema: { parse(input: unknown): T },
+  parameters: Record<string, string> = {},
+): Promise<T> {
+  const url = new URL(path, BASE);
+  for (const [key, value] of Object.entries(parameters))
+    url.searchParams.set(key, value);
+  return parseJson(
+    await fetch(url, { signal: AbortSignal.timeout(8_000) }),
+    schema,
+  );
 }
 
-export async function fetchKlines(
-  symbol = 'BTCUSDT',
-  interval = '5m',
+export const fetchServerTime = () => get('/fapi/v1/time', serverTimeSchema);
+export const fetchExchangeInfo = () =>
+  get('/fapi/v1/exchangeInfo', exchangeInfoSchema);
+
+export function fetchKlines(
+  symbol: typeof SYMBOL = SYMBOL,
+  interval: Timeframe = '5m',
   limit = 500,
 ): Promise<KlineTuple[]> {
-  const url = new URL(`${BASE}/fapi/v1/klines`);
-  url.searchParams.set('symbol', symbol);
-  url.searchParams.set('interval', interval);
-  url.searchParams.set('limit', String(limit));
-
-  const res = await fetch(url.toString());
-  return parseJson(res, klinesSchema);
+  return get('/fapi/v1/klines', klinesSchema, {
+    symbol,
+    interval,
+    limit: String(Math.min(1500, Math.max(1, limit))),
+  });
 }
 
-export async function fetchMarkPrice(symbol = 'BTCUSDT') {
-  const url = `${BASE}/fapi/v1/premiumIndex?symbol=${symbol}`;
-  return parseJson(await fetch(url), markPriceSchema);
-}
+export const fetchMarkPrice = () =>
+  get('/fapi/v1/premiumIndex', markPriceSchema, { symbol: SYMBOL });
+export const fetchTicker24h = () =>
+  get('/fapi/v1/ticker/24hr', ticker24hSchema, { symbol: SYMBOL });
+export const fetchOpenInterest = () =>
+  get('/fapi/v1/openInterest', openInterestSchema, { symbol: SYMBOL });
+export const fetchOrderBook = (limit = 20) =>
+  get('/fapi/v1/depth', orderBookDepthSchema, {
+    symbol: SYMBOL,
+    limit: String(limit),
+  });
+export const fetchAggregateTrades = (limit = 100) =>
+  get('/fapi/v1/aggTrades', aggregateTradesSchema, {
+    symbol: SYMBOL,
+    limit: String(Math.min(1000, Math.max(1, limit))),
+  });
 
-export async function fetchTicker24h(symbol = 'BTCUSDT') {
-  const url = `${BASE}/fapi/v1/ticker/24hr?symbol=${symbol}`;
-  return parseJson(await fetch(url), ticker24hSchema);
-}
+export const fetchOpenInterestHistory = (period: Timeframe, limit = 30) =>
+  get('/futures/data/openInterestHist', openInterestHistorySchema, {
+    symbol: SYMBOL,
+    period,
+    limit: String(limit),
+  });
 
-export async function fetchOrderBook(symbol = 'BTCUSDT', limit = 20) {
-  const url = new URL(`${BASE}/fapi/v1/depth`);
-  url.searchParams.set('symbol', symbol);
-  url.searchParams.set('limit', String(limit));
-  const res = await fetch(url.toString());
-  const json = (await res.json()) as unknown;
-  return z.object({
-    lastUpdateId: z.number(),
-    E: z.number(),
-    T: z.number(),
-    symbol: z.string(),
-    bids: z.array(depthEntrySchema),
-    asks: z.array(depthEntrySchema),
-  }).parse(json);
-}
+type RatioPath =
+  | '/futures/data/globalLongShortAccountRatio'
+  | '/futures/data/topLongShortAccountRatio'
+  | '/futures/data/topLongShortPositionRatio'
+  | '/futures/data/takerlongshortRatio';
 
-export async function fetchPremiumIndex(symbol = 'BTCUSDT') {
-  const url = `${BASE}/fapi/v1/premiumIndex?symbol=${symbol}`;
-  return parseJson(await fetch(url), premiumIndexSchema);
-}
-
-export async function fetchOpenInterest(symbol = 'BTCUSDT') {
-  const url = `${BASE}/fapi/v1/openInterest?symbol=${symbol}`;
-  return parseJson(await fetch(url), openInterestSchema);
-}
+export const fetchRatioHistory = (
+  path: RatioPath,
+  period: Timeframe = '5m',
+  limit = 2,
+) =>
+  get(path, ratioHistorySchema, {
+    symbol: SYMBOL,
+    period,
+    limit: String(limit),
+  });

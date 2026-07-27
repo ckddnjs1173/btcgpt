@@ -3,8 +3,7 @@
 ## Source of truth
 
 1. Read `docs/PROJECT_SPEC.md` before implementation.
-2. Read `docs/CURRENT_STATE.md`, `docs/HANDOFF.md`,
-   `docs/DECISIONS.md`, and `docs/SECURITY.md` before changing code.
+2. `docs/PROJECT_SPEC.md` is the only repository source of truth.
 3. The project specification and explicit current user instruction take
    precedence over assumptions.
 
@@ -46,7 +45,4 @@
 - Do not implement later-Phase features speculatively.
 - Run `npm run lint`, `npm run typecheck`, `npm test`, and the relevant build
   command before declaring work complete.
-- Update `docs/CURRENT_STATE.md` and `docs/HANDOFF.md` at the end of every task.
-- Record material architecture or trading-rule changes in
-  `docs/DECISIONS.md`.
 - Keep `main` runnable and tested.

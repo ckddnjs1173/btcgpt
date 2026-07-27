@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { notionalEntry, grossPnlLong, fee, netPnl } from '../../src/shared/calculations/costs';
+import {
+  notionalEntry,
+  grossPnlLong,
+  fee,
+  netPnl,
+} from '../../src/shared/calculations/costs';
 
 describe('cost calculations', () => {
   it('computes notional and fees', () => {

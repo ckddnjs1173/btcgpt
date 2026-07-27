@@ -1,12 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/renderer/App';
 import type { DesktopApi } from '../../src/shared/contracts';
 
-const testNotificationMock = vi
-  .fn()
-  .mockResolvedValue({ ok: true, message: '테스트 알림을 보냈습니다.' });
 const desktopApiMock: DesktopApi = {
   getPhaseZeroStatus: vi.fn().mockResolvedValue({
     appVersion: '0.1.0',
@@ -20,7 +17,7 @@ const desktopApiMock: DesktopApi = {
       sandbox: true,
     },
   }),
-  testNotification: testNotificationMock,
+  testNotification: vi.fn(),
   copyText: vi
     .fn()
     .mockResolvedValue({ ok: true, message: '클립보드에 복사했습니다.' }),
@@ -39,6 +36,56 @@ const desktopApiMock: DesktopApi = {
     updatedAt: null,
     recordCount: 0,
   }),
+  getMarketStatus: vi.fn().mockResolvedValue({
+    symbol: 'BTCUSDT',
+    lastSnapshotAt: null,
+    markPrice: null,
+    indexPrice: null,
+    timeframeCounts: { '5m': 0, '15m': 0, '1h': 0, '4h': 0 },
+    dataStatus: 'INITIALIZING',
+  }),
+  getLatestSnapshot: vi.fn().mockRejectedValue(new Error('not ready')),
+  configureAccount: vi.fn(),
+  disconnectAccount: vi.fn(),
+  getAccountStatus: vi.fn().mockResolvedValue({
+    configured: false,
+    connected: false,
+    lastUpdatedAt: null,
+    error: null,
+    position: null,
+    commission: null,
+    balance: null,
+    openOrders: [],
+  }),
+  saveManualPosition: vi.fn(),
+  clearManualPosition: vi.fn(),
+  getManualPosition: vi.fn().mockResolvedValue(null),
+  getRelayStatus: vi.fn().mockResolvedValue({
+    configured: false,
+    baseUrl: null,
+    connected: false,
+    lastAttemptAt: null,
+    lastSuccessAt: null,
+    consecutiveFailures: 0,
+    error: null,
+  }),
+  getUserSettings: vi.fn().mockResolvedValue({
+    gptUrl: 'https://chatgpt.com/',
+    makerFeeRate: null,
+    takerFeeRate: null,
+    entrySlippageBps: 1,
+    exitSlippageBps: 1,
+    maxLossUsdt: null,
+    riskPercent: null,
+    partialTakeProfitRatios: [0.3, 0.3, 0.4],
+    minimumNetMarginRoiPercent: 2,
+    autoStart: false,
+  }),
+  saveUserSettings: vi.fn(),
+  calculatePositionPlan: vi.fn(),
+  configureRelay: vi.fn(),
+  disconnectRelay: vi.fn(),
+  resetLocalData: vi.fn(),
 };
 
 describe('Phase 0 dashboard', () => {
@@ -49,29 +96,24 @@ describe('Phase 0 dashboard', () => {
     });
   });
 
-  it('loads runtime readiness without exposing trading actions', async () => {
+  it('loads the read-only market dashboard without trading actions', async () => {
     render(<App />);
 
     expect(
       screen.getByRole('heading', { name: 'BTC Futures Assistant' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('수동주문 전용')).toBeInTheDocument();
+    expect(screen.getByText(/10x · Isolated/)).toBeInTheDocument();
     expect(screen.queryByText('자동매매 시작')).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getAllByText('READY')).toHaveLength(4);
+      expect(screen.getAllByText('INITIALIZING').length).toBeGreaterThan(0);
     });
   });
 
-  it('calls the restricted notification bridge', async () => {
+  it('keeps snapshot actions disabled before data is available', async () => {
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '알림 테스트' }));
-
-    await waitFor(() => {
-      expect(testNotificationMock).toHaveBeenCalledOnce();
-    });
     expect(
-      await screen.findByText('테스트 알림을 보냈습니다.'),
-    ).toBeInTheDocument();
+      await screen.findByRole('button', { name: '최신 분석자료 복사' }),
+    ).toBeDisabled();
   });
 });
