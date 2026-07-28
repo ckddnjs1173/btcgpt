@@ -128,3 +128,6 @@ release/
 .wrangler-dry-run/
 *.exe
 *.msi
+
+# Generated Cloudflare types
+worker/worker-configuration.d.ts

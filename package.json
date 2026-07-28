@@ -1,7 +1,7 @@
 {
   "name": "btc-futures-assistant",
   "productName": "BTC Futures Assistant",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local, manual-order BTCUSDT futures monitoring assistant",
   "author": "BTC Futures Assistant",
   "main": ".vite/build/main.js",
@@ -21,9 +21,6 @@
     "test:security": "vitest run tests/security",
     "test:soak": "vitest run tests/soak",
     "test:binance-smoke": "node scripts/binance-public-smoke.mjs",
-    "test:relay-production": "node scripts/relay-production-smoke.mjs",
-    "test:relay-uploader-production": "vitest run tests/e2e/relay-production-uploader.test.ts",
-    "test:relay-soak": "node scripts/relay-production-soak.mjs",
     "test:relay-app-soak": "node scripts/relay-app-soak-monitor.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

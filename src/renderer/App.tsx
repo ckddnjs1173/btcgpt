@@ -27,6 +27,34 @@ const DEFAULT_SETTINGS: UserSettings = {
   autoStart: false,
 };
 
+interface NumericSettingsDraft {
+  makerFeeRate: string;
+  takerFeeRate: string;
+  entrySlippageBps: string;
+  exitSlippageBps: string;
+  maxLossUsdt: string;
+  riskPercent: string;
+}
+
+function toNumericSettingsDraft(settings: UserSettings): NumericSettingsDraft {
+  return {
+    makerFeeRate: settings.makerFeeRate?.toString() ?? '',
+    takerFeeRate: settings.takerFeeRate?.toString() ?? '',
+    entrySlippageBps: settings.entrySlippageBps?.toString() ?? '',
+    exitSlippageBps: settings.exitSlippageBps?.toString() ?? '',
+    maxLossUsdt: settings.maxLossUsdt?.toString() ?? '',
+    riskPercent: settings.riskPercent?.toString() ?? '',
+  };
+}
+
+function parseOptionalDecimal(value: string, label: string): number | null {
+  const normalized = value.trim().replace(',', '.');
+  if (normalized === '') return null;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) throw new Error(`${label} 값이 올바르지 않습니다.`);
+  return parsed;
+}
+
 function formatNumber(value: string | number | null, digits = 2): string {
   if (value === null || value === '') return '—';
   return new Intl.NumberFormat('en-US', {
@@ -71,6 +99,9 @@ export function App() {
   const [manualTargets, setManualTargets] = useState(['', '', '']);
   const [relay, setRelay] = useState<RelayStatus | null>(null);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const [settingsDraft, setSettingsDraft] = useState<NumericSettingsDraft>(() =>
+    toNumericSettingsDraft(DEFAULT_SETTINGS),
+  );
   const [calculator, setCalculator] = useState({
     side: 'LONG' as 'LONG' | 'SHORT',
     entry: '',
@@ -112,7 +143,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    void window.desktopApi.getUserSettings().then(setSettings);
+    void window.desktopApi.getUserSettings().then((saved) => {
+      setSettings(saved);
+      setSettingsDraft(toNumericSettingsDraft(saved));
+    });
   }, []);
 
   useEffect(() => {
@@ -210,8 +244,36 @@ export function App() {
 
   const saveSettings = useCallback(async () => {
     try {
-      const saved = await window.desktopApi.saveUserSettings(settings);
+      const nextSettings: UserSettings = {
+        ...settings,
+        makerFeeRate: parseOptionalDecimal(
+          settingsDraft.makerFeeRate,
+          'Maker 수수료율',
+        ),
+        takerFeeRate: parseOptionalDecimal(
+          settingsDraft.takerFeeRate,
+          'Taker 수수료율',
+        ),
+        entrySlippageBps: parseOptionalDecimal(
+          settingsDraft.entrySlippageBps,
+          '진입 슬리피지',
+        ),
+        exitSlippageBps: parseOptionalDecimal(
+          settingsDraft.exitSlippageBps,
+          '청산 슬리피지',
+        ),
+        maxLossUsdt: parseOptionalDecimal(
+          settingsDraft.maxLossUsdt,
+          '최대 손실',
+        ),
+        riskPercent: parseOptionalDecimal(
+          settingsDraft.riskPercent,
+          '계정 위험 비율',
+        ),
+      };
+      const saved = await window.desktopApi.saveUserSettings(nextSettings);
       setSettings(saved);
+      setSettingsDraft(toNumericSettingsDraft(saved));
       setResult({ ok: true, message: '계산·GPT 설정을 저장했습니다.' });
     } catch (error) {
       setResult({
@@ -219,7 +281,7 @@ export function App() {
         message: error instanceof Error ? error.message : '설정 저장 실패',
       });
     }
-  }, [settings]);
+  }, [settings, settingsDraft]);
 
   const runCalculator = useCallback(async () => {
     setCalculation(null);
@@ -277,6 +339,7 @@ export function App() {
       return;
     setResult(await window.desktopApi.resetLocalData());
     setSettings(DEFAULT_SETTINGS);
+    setSettingsDraft(toNumericSettingsDraft(DEFAULT_SETTINGS));
     setManualPosition(null);
     setSnapshot(null);
     setAccount(await window.desktopApi.getAccountStatus());
@@ -841,73 +904,60 @@ export function App() {
               aria-label="Maker 수수료율"
               inputMode="decimal"
               disabled={Boolean(account?.connected && account.commission)}
-              value={settings.makerFeeRate ?? ''}
+              value={settingsDraft.makerFeeRate}
               onChange={(event) =>
-                setSettings((current) => ({
+                setSettingsDraft((current) => ({
                   ...current,
-                  makerFeeRate:
-                    event.target.value === ''
-                      ? null
-                      : Number(event.target.value),
+                  makerFeeRate: event.target.value,
                 }))
               }
-              placeholder="Maker 수수료율 (예: 0.0002)"
+              placeholder="Maker 수수료율 (Binance 실제 요율)"
             />
             <input
               aria-label="Taker 수수료율"
               inputMode="decimal"
               disabled={Boolean(account?.connected && account.commission)}
-              value={settings.takerFeeRate ?? ''}
+              value={settingsDraft.takerFeeRate}
               onChange={(event) =>
-                setSettings((current) => ({
+                setSettingsDraft((current) => ({
                   ...current,
-                  takerFeeRate:
-                    event.target.value === ''
-                      ? null
-                      : Number(event.target.value),
+                  takerFeeRate: event.target.value,
                 }))
               }
-              placeholder="Taker 수수료율 (예: 0.0005)"
+              placeholder="Taker 수수료율 (Binance 실제 요율)"
             />
             <input
               aria-label="진입 슬리피지 bps"
               inputMode="decimal"
-              value={settings.entrySlippageBps ?? ''}
+              placeholder="진입 슬리피지 bps (초기 참고값: 1)"
+              value={settingsDraft.entrySlippageBps}
               onChange={(event) =>
-                setSettings((current) => ({
+                setSettingsDraft((current) => ({
                   ...current,
-                  entrySlippageBps:
-                    event.target.value === ''
-                      ? null
-                      : Number(event.target.value),
+                  entrySlippageBps: event.target.value,
                 }))
               }
             />
             <input
               aria-label="청산 슬리피지 bps"
               inputMode="decimal"
-              value={settings.exitSlippageBps ?? ''}
+              placeholder="청산 슬리피지 bps (초기 참고값: 1)"
+              value={settingsDraft.exitSlippageBps}
               onChange={(event) =>
-                setSettings((current) => ({
+                setSettingsDraft((current) => ({
                   ...current,
-                  exitSlippageBps:
-                    event.target.value === ''
-                      ? null
-                      : Number(event.target.value),
+                  exitSlippageBps: event.target.value,
                 }))
               }
             />
             <input
               aria-label="최대 손실 USDT"
               inputMode="decimal"
-              value={settings.maxLossUsdt ?? ''}
+              value={settingsDraft.maxLossUsdt}
               onChange={(event) =>
-                setSettings((current) => ({
+                setSettingsDraft((current) => ({
                   ...current,
-                  maxLossUsdt:
-                    event.target.value === ''
-                      ? null
-                      : Number(event.target.value),
+                  maxLossUsdt: event.target.value,
                 }))
               }
               placeholder="최대 손실 USDT (필수)"
@@ -915,14 +965,11 @@ export function App() {
             <input
               aria-label="계정 위험 비율"
               inputMode="decimal"
-              value={settings.riskPercent ?? ''}
+              value={settingsDraft.riskPercent}
               onChange={(event) =>
-                setSettings((current) => ({
+                setSettingsDraft((current) => ({
                   ...current,
-                  riskPercent:
-                    event.target.value === ''
-                      ? null
-                      : Number(event.target.value),
+                  riskPercent: event.target.value,
                 }))
               }
               placeholder="계정 위험 비율 (예: 0.01)"

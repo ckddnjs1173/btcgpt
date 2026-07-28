@@ -4,26 +4,33 @@ import { numericStringSchema } from '../schemas';
 
 const BASE_URL = 'https://fapi.binance.com';
 const ALLOWED_PATHS = new Set([
-  '/fapi/v2/positionRisk',
+  '/fapi/v3/positionRisk',
+  '/fapi/v3/balance',
+  '/fapi/v1/symbolConfig',
   '/fapi/v1/commissionRate',
   '/fapi/v1/openOrders',
-  '/fapi/v1/userTrades',
-  '/fapi/v2/balance',
 ]);
 
 const positionSchema = z.array(
   z.object({
     symbol: z.literal('BTCUSDT'),
+    positionSide: z.enum(['BOTH', 'LONG', 'SHORT']),
     positionAmt: numericStringSchema,
     entryPrice: numericStringSchema,
     breakEvenPrice: numericStringSchema.optional(),
     markPrice: numericStringSchema,
     unRealizedProfit: numericStringSchema,
     liquidationPrice: numericStringSchema,
-    leverage: numericStringSchema,
-    marginType: z.string(),
     isolatedMargin: numericStringSchema,
     updateTime: z.number(),
+  }),
+);
+
+const symbolConfigurationSchema = z.array(
+  z.object({
+    symbol: z.literal('BTCUSDT'),
+    marginType: z.string(),
+    leverage: z.number().int().positive(),
   }),
 );
 
@@ -108,20 +115,39 @@ export class BinanceAccountClient {
   }
 
   async fetchPosition(): Promise<AccountPosition | null> {
-    const raw = positionSchema.parse(
-      await this.signedGet('/fapi/v2/positionRisk', { symbol: 'BTCUSDT' }),
-    );
-    const item = raw.find((position) => position.symbol === 'BTCUSDT');
-    if (!item || Number(item.positionAmt) === 0) return null;
+    const [positions, configurations] = await Promise.all([
+      this.signedGet('/fapi/v3/positionRisk', { symbol: 'BTCUSDT' }),
+      this.signedGet('/fapi/v1/symbolConfig', { symbol: 'BTCUSDT' }),
+    ]);
+    const raw = positionSchema.parse(positions);
+    const configuration = symbolConfigurationSchema
+      .parse(configurations)
+      .find((item) => item.symbol === 'BTCUSDT');
+    if (!configuration)
+      throw new Error('BTCUSDT account configuration was not returned');
     if (
-      Number(item.leverage) !== 10 ||
-      item.marginType.toLowerCase() !== 'isolated'
+      configuration.leverage !== 10 ||
+      configuration.marginType.toLowerCase() !== 'isolated'
     )
-      throw new Error('Account position violates fixed 10x isolated policy');
+      throw new Error('BTCUSDT must be configured as 10x isolated');
+    const activePositions = raw.filter(
+      (position) =>
+        position.symbol === 'BTCUSDT' && Number(position.positionAmt) !== 0,
+    );
+    if (activePositions.length === 0) return null;
+    if (activePositions.length > 1)
+      throw new Error('Multiple active BTCUSDT position legs are not supported');
+    const item = activePositions[0]!;
     const amount = Number(item.positionAmt);
+    const side =
+      item.positionSide === 'LONG' || item.positionSide === 'SHORT'
+        ? item.positionSide
+        : amount > 0
+          ? 'LONG'
+          : 'SHORT';
     return {
       source: 'BINANCE_READ_ONLY',
-      side: amount > 0 ? 'LONG' : 'SHORT',
+      side,
       quantity: Math.abs(amount),
       entryPrice: Number(item.entryPrice),
       breakEvenPrice: item.breakEvenPrice ? Number(item.breakEvenPrice) : null,
@@ -151,7 +177,7 @@ export class BinanceAccountClient {
 
   async fetchAvailableBalance() {
     const balances = balanceSchema.parse(
-      await this.signedGet('/fapi/v2/balance'),
+      await this.signedGet('/fapi/v3/balance'),
     );
     const usdt = balances.find((item) => item.asset === 'USDT');
     return {

@@ -68,16 +68,16 @@ app.on('before-quit', () => {
 });
 
 app.on('will-quit', () => {
-  database?.close();
-  database = null;
-  marketData?.stop();
-  marketData = null;
-  relayUploader?.stop();
-  relayUploader = null;
-  accountService?.stop();
-  accountService = null;
   notificationMonitor?.stop();
   notificationMonitor = null;
+  accountService?.stop();
+  accountService = null;
+  relayUploader?.stop();
+  relayUploader = null;
+  marketData?.stop();
+  marketData = null;
+  database?.close();
+  database = null;
 });
 
 app.on('activate', showMainWindow);

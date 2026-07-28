@@ -169,18 +169,21 @@ export class MarketDataService {
         logger.warn({ error }, 'Candle REST refresh failed');
       });
     }, 15_000);
-    this.statisticsTimer = setInterval(
-      () => void this.refreshStatistics(),
-      5 * 60_000,
-    );
-    this.serverTimeTimer = setInterval(
-      () => void this.refreshServerTime(),
-      30 * 60_000,
-    );
-    this.exchangeInfoTimer = setInterval(
-      () => void this.refreshExchangeInfo(),
-      24 * 60 * 60_000,
-    );
+    this.statisticsTimer = setInterval(() => {
+      void this.refreshStatistics().catch((error: unknown) => {
+        logger.warn({ error }, 'Market statistics refresh failed');
+      });
+    }, 5 * 60_000);
+    this.serverTimeTimer = setInterval(() => {
+      void this.refreshServerTime().catch((error: unknown) => {
+        logger.warn({ error }, 'Binance server-time refresh failed');
+      });
+    }, 5 * 60_000);
+    this.exchangeInfoTimer = setInterval(() => {
+      void this.refreshExchangeInfo().catch((error: unknown) => {
+        logger.warn({ error }, 'Binance exchange-info refresh failed');
+      });
+    }, 5 * 60_000);
   }
 
   stop(): void {
@@ -212,12 +215,46 @@ export class MarketDataService {
   }
 
   private async bootstrap(): Promise<void> {
-    await Promise.all([this.refreshServerTime(), this.refreshExchangeInfo()]);
-    await Promise.all([
-      ...TIMEFRAMES.map((timeframe) => this.recoverTimeframe(timeframe)),
-      this.refreshFast(),
-      this.refreshStatistics(),
-    ]);
+    const operations: Array<{
+      name: string;
+      run: () => Promise<void>;
+      validationError?: string;
+    }> = [
+      {
+        name: 'Binance server time',
+        run: () => this.refreshServerTime(),
+      },
+      {
+        name: 'Binance exchange info',
+        run: () => this.refreshExchangeInfo(),
+        validationError: 'EXCHANGE_INFO_BOOTSTRAP_FAILED',
+      },
+      ...TIMEFRAMES.map((timeframe) => ({
+        name: `${timeframe} candle recovery`,
+        run: () => this.recoverTimeframe(timeframe),
+        validationError: `CANDLE_BOOTSTRAP_FAILED_${timeframe}`,
+      })),
+      {
+        name: 'public market state',
+        run: () => this.refreshFast(),
+        validationError: 'MARKET_BOOTSTRAP_FAILED',
+      },
+      {
+        name: 'market statistics',
+        run: () => this.refreshStatistics(),
+      },
+    ];
+    await Promise.all(
+      operations.map(async ({ name, run, validationError }) => {
+        try {
+          await run();
+        } catch (error) {
+          if (validationError)
+            this.cache.recordValidationError(validationError);
+          logger.warn({ error, operation: name }, 'Market bootstrap operation failed');
+        }
+      }),
+    );
   }
 
   private async refreshServerTime(): Promise<void> {
