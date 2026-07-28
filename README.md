@@ -1,117 +1,123 @@
 # BTC Futures Assistant
 
-BTCUSDT USDⓈ-M 무기한 선물을 Windows 11에서 감시하기 위한 로컬
-데스크톱 보조 프로그램입니다. 주문은 사용자가 바이낸스에서 직접 실행하며,
-이 프로그램은 자동 주문을 생성·수정·취소하지 않습니다.
+BTCUSDT USDⓈ-M 무기한 선물의 실시간 시장 데이터를 로컬에서 수집하고,
+Cloudflare Worker/D1을 통해 비공개 GPT Action에 최신 스냅샷을 제공하는
+Windows 11 데스크톱 보조 프로그램입니다.
 
-Phase 0~5의 로컬 구현과 Phase 6 자동 검증 경로가 포함되어 있습니다. 실제
-Cloudflare 배포, Custom GPT Action 등록, 8시간 실망 soak, clean Windows
-수동 QA는 각 서비스/환경에서 실행해야 합니다.
+프로그램과 GPT는 주문을 생성·수정·취소하지 않습니다. 실제 진입, 손절,
+익절 주문은 사용자가 Binance에서 직접 실행하고 체결 상태를 확인합니다.
 
-## 주요 기능
+## 운영 구성
 
-- Electron Main / Preload / React Renderer 분리
-- `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`
-- 허용된 IPC 함수만 노출하는 `contextBridge`
-- Node 24 내장 `node:sqlite` 로컬 저장·조회
-- Windows 데스크톱 알림
-- 시스템 트레이와 창 숨기기·복원
-- 클립보드 복사
-- 허용목록 기반 ChatGPT 외부 브라우저 열기
-- ESLint, TypeScript, Vitest, Prettier, Electron Forge 패키징
-- Binance 공개 REST/WebSocket 4개 시간봉과 자동 gap recovery
-- closed/live 캔들 분리, SQLite candle cache, stale 분석 차단
-- 객관 지표·비용·본전가·위험 수량 계산
-- 사용자 주도 스냅샷 복사와 GPT 열기
-- Cloudflare Worker/D1 중계, 분리 인증, OpenAPI Actions
+- Electron Main에서 Binance 공개 REST/WebSocket 수집
+- 5m, 15m, 1h, 4h 마감 캔들과 진행 캔들 분리
+- SQLite 로컬 캐시와 자동 gap recovery
+- 객관 지표, 수수료, 슬리피지, 본전가, 위험 수량 계산
 - 선택적 Binance signed GET 읽기 전용 계정 연결
-
-## 개발 환경
-
-- Windows 11
-- Node.js 24 이상
-- npm 11 이상
-- Git
-
-Node와 npm 버전 확인:
-
-```powershell
-node --version
-npm --version
-git --version
-```
+- Windows safeStorage에 Binance 및 Relay 인증정보 암호화 저장
+- 5초마다 실제 로컬 스냅샷을 Worker/D1에 업로드
+- GPT Action의 최신 스냅샷 조회와 거래 계획 계산 검증
+- stale 또는 불완전 데이터의 분석 차단
+- 10배 격리, BTCUSDT 전용, 사용자 수동 주문 정책 고정
 
 ## 설치 및 실행
 
-프로젝트 폴더에서:
+요구사항은 Windows 11, Node.js 24 이상, npm 11 이상입니다.
 
 ```powershell
+cd C:\Code\btcgpt
 npm ci
 npm start
 ```
 
-처음 실행한 뒤 화면의 네 가지 테스트를 직접 확인합니다.
+창의 닫기 버튼은 앱을 시스템 트레이로 숨깁니다. 완전히 종료하려면
+트레이 메뉴에서 `앱 종료`를 선택합니다.
 
-1. Windows 알림
-2. 클립보드 복사
-3. ChatGPT 외부 브라우저 열기
-4. SQLite 저장·조회
+## 최초 운영 설정
 
-창의 닫기 버튼을 누르면 앱은 종료되지 않고 시스템 트레이로 숨겨집니다.
-완전히 종료하려면 트레이 메뉴에서 `앱 종료`를 선택합니다.
+### Relay
 
-## 검증 명령
+운영 Worker URL:
 
-```powershell
-npm run lint
-npm run typecheck
-npm test
-npm run test:sqlite
-npm run format:check
-npm run build
-npm run e2e
-npm run test:security
+```text
+https://btc-futures-assistant-relay.btcgpt-ck1173.workers.dev
 ```
 
-한 번에 핵심 검사를 실행하려면:
+`secrets/cloudflare-production.json`의 `UPLOADER_WRITE_KEY`를 출력하지
+않고 클립보드로 복사합니다.
 
 ```powershell
-npm run check
+$relaySecrets = Get-Content -Raw -Encoding utf8 secrets/cloudflare-production.json | ConvertFrom-Json
+$relaySecrets.UPLOADER_WRITE_KEY | Set-Clipboard
+Remove-Variable relaySecrets
 ```
 
-## Windows 설치파일 만들기
+앱의 Relay URL과 업로드 키 입력란에 붙여 넣어 연결합니다. 설정은
+Windows safeStorage에 저장되므로 이후 일반 실행에서도 유지됩니다. 완료 후:
+
+```powershell
+Set-Clipboard -Value ''
+```
+
+### 수수료와 슬리피지
+
+가장 정확한 계산은 거래 권한과 출금 권한을 모두 끈 Binance Futures 읽기
+전용 API 키를 앱에 연결하는 방식입니다. 앱은 현재 Binance 계정의 실제
+Maker/Taker 수수료율을 우선 사용합니다.
+
+계정을 연결하지 않으면 Binance에서 직접 확인한 본인의 Maker/Taker 요율을
+소수로 입력합니다. 예를 들어 0.02%는 `0.0002`입니다. 슬리피지는 거래소가
+고정 제공하는 값이 아니므로 본인의 체결 기록에 맞춰 bps 단위로 입력합니다.
+초기 참고값으로 1 bps를 사용할 수 있지만 실제 체결비용으로 보장되는 값은
+아닙니다.
+
+최대 손실 USDT 또는 계정 위험 비율도 입력한 뒤 `설정 저장`을 누릅니다.
+필수 비용값이 비어 있으면 앱과 Worker는 수량·손익 결과를 만들지 않습니다.
+
+### 비공개 GPT Action
+
+GPT Action에는 `worker/openapi/openapi.json`을 등록하고 인증을 API Key /
+Bearer로 설정합니다. 인증값에는 `ACTION_READ_KEY`만 사용합니다.
+`UPLOADER_WRITE_KEY`를 GPT에 입력하면 안 됩니다.
+
+## Worker 재배포
+
+D1과 두 Secret은 이미 생성되어 있습니다. Worker 코드 변경 후 기존
+Cloudflare 계정에서 다음 명령만 실행합니다.
+
+```powershell
+cd C:\Code\btcgpt
+npm exec wrangler -- login
+npm exec wrangler -- whoami
+npm exec wrangler -- d1 migrations apply btc-futures-assistant --remote
+npm exec wrangler -- deploy --secrets-file secrets/cloudflare-production.json --strict
+```
+
+Secret 파일을 화면, 로그, 채팅 또는 Git에 노출하지 않습니다.
+
+## Windows 설치파일
 
 ```powershell
 npm run make
 ```
 
-결과물은 `out\make` 아래에 생성됩니다. MVP는 코드서명 인증서를 사용하지
-않으므로 Windows SmartScreen 경고가 나타날 수 있습니다.
+설치파일은 `out\make\squirrel.windows\x64` 아래 생성됩니다. 코드서명
+인증서가 없으므로 Windows SmartScreen 경고가 나타날 수 있습니다.
 
-## 데이터 위치
+## 데이터와 문서
 
-SQLite DB는 Electron의 `app.getPath('userData')` 아래 `database` 폴더에
-저장됩니다. DB, 로그, 백업, `.env`와 인증정보는 Git 커밋 대상이 아닙니다.
+SQLite DB는 Electron의 `app.getPath('userData')` 아래에 저장됩니다.
+DB, 로그, 백업, `.env`, Binance 키, Relay Secret은 Git 커밋 대상이
+아닙니다.
 
-## 개발 문서
-
-- 유일한 기준 문서: `docs/PROJECT_SPEC.md`
-
-Phase를 시작하기 전에 기획서를 읽고 단계별 완료조건을 기준으로 구현과 검증을
-진행합니다.
+프로젝트의 유일한 기준 문서는 `docs/PROJECT_SPEC.md`입니다.
 
 ## 절대 원칙
 
 - BTCUSDT 이외 심볼을 추가하지 않습니다.
-- 레버리지는 10배 고정입니다.
-- 자동주문과 주문 API를 구현하지 않습니다.
+- 레버리지는 10배 격리로 고정합니다.
+- 주문 API와 자동 주문 기능을 구현하지 않습니다.
 - OpenAI API를 호출하지 않습니다.
-- API Key와 Secret을 코드, 로그, Renderer, GPT 자료, Git에 노출하지
-  않습니다.
-
-## Cloudflare와 GPT Actions
-
-자세한 절차는 `docs/DEPLOYMENT.md`를 따릅니다. 업로드 키와 Action 조회 키는
-반드시 서로 다른 무작위 값이어야 합니다.
-
-- 앱 알람은 거래소에 등록한 보호 손절을 대체하지 않습니다.
+- 가짜 스냅샷을 운영 Worker/D1에 업로드하지 않습니다.
+- API Key와 Secret을 코드, 로그, Renderer, GPT 자료, Git에 노출하지 않습니다.
+- 앱 알림은 Binance에 직접 등록한 보호 손절을 대체하지 않습니다.
