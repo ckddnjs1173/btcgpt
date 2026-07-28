@@ -4,28 +4,10 @@ import {
   createChart,
   type CandlestickData,
   type HistogramData,
-  type LineData,
   type Time,
 } from 'lightweight-charts';
 
 import type { TimeframeSnapshot } from '../shared/contracts';
-
-function rollingEma(values: number[], period: number): Array<number | null> {
-  if (values.length < period) return values.map(() => null);
-  const output: Array<number | null> = Array.from(
-    { length: period - 1 },
-    () => null,
-  );
-  let current =
-    values.slice(0, period).reduce((sum, value) => sum + value, 0) / period;
-  output.push(current);
-  const multiplier = 2 / (period + 1);
-  for (const value of values.slice(period)) {
-    current = value * multiplier + current * (1 - multiplier);
-    output.push(current);
-  }
-  return output;
-}
 
 function toTime(milliseconds: number): Time {
   return Math.floor(milliseconds / 1_000) as Time;
@@ -98,58 +80,6 @@ export function MarketChart({ timeframe }: { timeframe: TimeframeSnapshot }) {
       })),
     );
 
-    const closes = rows.map((row) => Number(row[4]));
-    const times = rows.map((row) => toTime(Number(row[0])));
-    for (const [period, color] of [
-      [20, '#f7b955'],
-      [50, '#6aa9ff'],
-      [200, '#b68cff'],
-    ] as const) {
-      const values = rollingEma(closes, period);
-      const series = chart.addLineSeries({
-        color,
-        lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      });
-      series.setData(
-        values.flatMap((value, index): LineData[] =>
-          value === null ? [] : [{ time: times[index]!, value }],
-        ),
-      );
-    }
-
-    let cumulativeTypicalVolume = 0;
-    let cumulativeVolume = 0;
-    let sessionDay = '';
-    const vwapData = rows.flatMap((row): LineData[] => {
-      const nextDay = new Date(Number(row[0])).toISOString().slice(0, 10);
-      if (nextDay !== sessionDay) {
-        sessionDay = nextDay;
-        cumulativeTypicalVolume = 0;
-        cumulativeVolume = 0;
-      }
-      const volume = Number(row[5]);
-      const typical = (Number(row[2]) + Number(row[3]) + Number(row[4])) / 3;
-      cumulativeTypicalVolume += typical * volume;
-      cumulativeVolume += volume;
-      return cumulativeVolume > 0
-        ? [
-            {
-              time: toTime(Number(row[0])),
-              value: cumulativeTypicalVolume / cumulativeVolume,
-            },
-          ]
-        : [];
-    });
-    const vwapSeries = chart.addLineSeries({
-      color: '#2dd4bf',
-      lineWidth: 1,
-      lineStyle: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    });
-    vwapSeries.setData(vwapData);
     for (const [price, color, title] of [
       [timeframe.indicators.pivotHigh, '#f0646b', 'Pivot H'],
       [timeframe.indicators.pivotLow, '#44d18b', 'Pivot L'],
