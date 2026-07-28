@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/renderer/App';
@@ -115,5 +115,13 @@ describe('Phase 0 dashboard', () => {
     expect(
       await screen.findByRole('button', { name: '최신 분석자료 복사' }),
     ).toBeDisabled();
+  });
+
+  it('does not reset an in-progress numeric setting on status refresh', async () => {
+    render(<App />);
+    const makerInput = await screen.findByLabelText('Maker 수수료율');
+    fireEvent.change(makerInput, { target: { value: '0.00017' } });
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    expect(makerInput).toHaveValue('0.00017');
   });
 });

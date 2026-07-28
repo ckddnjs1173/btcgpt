@@ -2,6 +2,8 @@ import { safeStorage } from 'electron';
 
 import type { AccountCredentials } from '../binance/account/rest';
 import type { AppDatabase } from '../db/database';
+import { logger } from '../logging/logger';
+import { accountConfigurationSchema } from '../../shared/schemas';
 
 const STORAGE_KEY = 'binance_read_only_credentials';
 
@@ -18,11 +20,19 @@ export class CredentialStore {
   load(): AccountCredentials | null {
     const encoded = this.database.readSetting(STORAGE_KEY);
     if (!encoded) return null;
-    if (!safeStorage.isEncryptionAvailable())
-      throw new Error('OS credential encryption is unavailable');
-    return JSON.parse(
-      safeStorage.decryptString(Buffer.from(encoded, 'base64')),
-    ) as AccountCredentials;
+    try {
+      if (!safeStorage.isEncryptionAvailable())
+        throw new Error('OS credential encryption is unavailable');
+      return accountConfigurationSchema.parse(
+        JSON.parse(safeStorage.decryptString(Buffer.from(encoded, 'base64'))),
+      );
+    } catch {
+      this.clear();
+      logger.warn(
+        'Stored Binance credentials could not be recovered and were removed',
+      );
+      return null;
+    }
   }
 
   clear(): void {
@@ -30,6 +40,6 @@ export class CredentialStore {
   }
 
   hasCredentials(): boolean {
-    return this.database.readSetting(STORAGE_KEY) !== null;
+    return this.load() !== null;
   }
 }

@@ -89,7 +89,7 @@ export function registerIpcHandlers({
 
     new ElectronNotification({
       title: 'BTC Futures Assistant',
-      body: 'Phase 0 Windows 알림이 정상 작동합니다.',
+      body: 'Windows 운영 알림이 정상 작동합니다.',
       silent: false,
     }).show();
 
@@ -191,6 +191,11 @@ export function registerIpcHandlers({
       const errors: string[] = [];
       if (makerFeeRate === null || takerFeeRate === null)
         errors.push('FEE_RATE_REQUIRED');
+      if (
+        settings.entrySlippageBps === null ||
+        settings.exitSlippageBps === null
+      )
+        errors.push('SLIPPAGE_INPUT_REQUIRED');
       if (!filters) errors.push('PRODUCT_FILTERS_REQUIRED');
       if (
         (input.side === 'LONG' &&
@@ -218,7 +223,12 @@ export function registerIpcHandlers({
           ? (makerFeeRate ?? 0)
           : (takerFeeRate ?? 0);
       const slippageRate =
-        Math.max(settings.entrySlippageBps, settings.exitSlippageBps) / 10_000;
+        Math.max(
+          settings.entrySlippageBps ?? 0,
+          settings.exitSlippageBps ?? 0,
+        ) / 10_000;
+      const entrySlippageRate = (settings.entrySlippageBps ?? 0) / 10_000;
+      const exitSlippageRate = (settings.exitSlippageBps ?? 0) / 10_000;
       const quantity = validateRiskQuantity({
         entry: input.entry,
         stop: input.stop,
@@ -256,7 +266,8 @@ export function registerIpcHandlers({
         quantity: quantity.quantity,
         entryFeeRate,
         exitFeeRate,
-        slippageRate,
+        entrySlippageRate,
+        exitSlippageRate,
         fundingRate: fundingPayment / (input.entry * quantity.quantity),
       });
       return {
@@ -269,8 +280,9 @@ export function registerIpcHandlers({
           input.entry,
           entryFeeRate,
           exitFeeRate,
-          slippageRate,
+          entrySlippageRate,
           marketData.cache.state.fundingRate ?? 0,
+          exitSlippageRate,
         ),
         estimatedMaxLoss: quantity.estimatedMaxLoss,
         target: {
@@ -327,5 +339,5 @@ export function registerIpcHandlers({
     });
   });
 
-  logger.info('Restricted Phase 0 IPC handlers registered');
+  logger.info('Restricted IPC handlers registered');
 }

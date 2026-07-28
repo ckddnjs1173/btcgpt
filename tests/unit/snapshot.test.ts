@@ -64,6 +64,7 @@ describe('snapshot generator', () => {
     expect(snap.marketState.markPrice).toBe(30_050);
     expect(snap.analysisGate.analysisAllowed).toBe(true);
     expect(snap.timeframes['5m'].indicators.ema200).not.toBeNull();
+    expect(snap.account).not.toHaveProperty('walletBalance');
     expect(JSON.stringify(snap).length).toBeLessThan(90_000);
   });
 });

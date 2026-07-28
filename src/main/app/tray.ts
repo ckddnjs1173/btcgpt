@@ -17,7 +17,7 @@ export function createAppTray({
     .resize({ width: 16, height: 16 });
   const tray = new Tray(icon);
 
-  tray.setToolTip('BTC Futures Assistant · Phase 0 준비');
+  tray.setToolTip('BTC Futures Assistant · 시장 감시');
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
@@ -26,7 +26,7 @@ export function createAppTray({
       },
       { type: 'separator' },
       {
-        label: 'Phase 0 · 시장 감시 비활성',
+        label: 'BTCUSDT 시장 감시',
         enabled: false,
       },
       { type: 'separator' },

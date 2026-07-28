@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   calculatePositionPlan,
+  isStepAligned,
   signedFundingPayment,
   validateRiskQuantity,
 } from '../../src/shared/calculations/costs';
@@ -103,6 +104,14 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+function validationFailure(
+  errors: string[],
+  status = 400,
+  warnings: string[] = [],
+): Response {
+  return json({ ok: false, errors, warnings }, status);
+}
+
 function bearer(request: Request): string | null {
   const value = request.headers.get('authorization');
   return value?.startsWith('Bearer ') ? value.slice(7) : null;
@@ -136,18 +145,21 @@ function rateLimited(request: Request): boolean {
 async function save(env: Env, raw: string, generatedAt: number): Promise<void> {
   const receivedAt = Date.now();
   if (env.DB) {
-    await env.DB.prepare(
+    const result = await env.DB.prepare(
       `
       INSERT INTO latest_snapshot (id, payload, generated_at, received_at)
       VALUES (1, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,
         generated_at=excluded.generated_at, received_at=excluded.received_at
+      WHERE excluded.generated_at >= latest_snapshot.generated_at
     `,
     )
       .bind(raw, generatedAt, receivedAt)
       .run();
+    if (!result.success) throw new Error('D1_WRITE_FAILED');
     return;
   }
+  if (memorySnapshot && generatedAt < memorySnapshot.generatedAt) return;
   memorySnapshot = { raw, generatedAt, receivedAt };
 }
 
@@ -218,6 +230,15 @@ export async function handler(request: Request, env: Env): Promise<Response> {
           'RELAY_SNAPSHOT_STALE',
         ],
       };
+    } else if (ageMs > 8_000 && originalGate.overallStatus === 'NORMAL') {
+      payload.analysisGate = {
+        ...(payload.analysisGate as Record<string, unknown>),
+        overallStatus: 'DELAYED',
+        reasons: [
+          ...((originalGate.reasons as string[] | undefined) ?? []),
+          'RELAY_SNAPSHOT_DELAYED',
+        ],
+      };
     }
     const responseBody = { ...payload, relayReceivedAt: stored.receivedAt };
     if (
@@ -261,11 +282,11 @@ export async function handler(request: Request, env: Env): Promise<Response> {
       )
     )
       errors.push('TARGET_MUST_BE_PROFITABLE_BEFORE_COSTS');
+    if (errors.length > 0) return validationFailure(errors);
     const stored = await load(env);
-    if (!stored)
-      return json({ ok: false, errors: ['SNAPSHOT_NOT_FOUND'] }, 409);
+    if (!stored) return validationFailure(['SNAPSHOT_NOT_FOUND'], 409);
     if (Date.now() - stored.generatedAt > MAX_SNAPSHOT_AGE_MS)
-      return json({ ok: false, errors: ['SNAPSHOT_STALE'] }, 409);
+      return validationFailure(['SNAPSHOT_STALE'], 409);
     const snapshot = JSON.parse(stored.raw) as {
       analysisGate?: { analysisAllowed?: boolean };
       marketState?: { fundingRate?: number | null };
@@ -284,7 +305,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
       account?: { availableBalance?: number | null };
     };
     if (snapshot.analysisGate?.analysisAllowed !== true)
-      return json({ ok: false, errors: ['ANALYSIS_NOT_ALLOWED'] }, 409);
+      return validationFailure(['ANALYSIS_NOT_ALLOWED'], 409);
     const filters = snapshot.productFilters;
     if (
       !filters?.tickSize ||
@@ -292,7 +313,10 @@ export async function handler(request: Request, env: Env): Promise<Response> {
       !filters.minQuantity ||
       !filters.minNotional
     )
-      return json({ ok: false, errors: ['PRODUCT_FILTERS_MISSING'] }, 409);
+      return validationFailure(['PRODUCT_FILTERS_MISSING'], 409);
+    const tickSize = filters.tickSize;
+    if (plan.targets.some((target) => !isStepAligned(target, tickSize)))
+      return validationFailure(['TARGET_NOT_ALIGNED_TO_TICK_SIZE']);
     const maker = snapshot.costSettings?.makerFeeRate;
     const taker = snapshot.costSettings?.takerFeeRate;
     const entryFeeRate = plan.entryOrderType === 'MAKER' ? maker : taker;
@@ -301,10 +325,20 @@ export async function handler(request: Request, env: Env): Promise<Response> {
       errors.push('ENTRY_FEE_RATE_REQUIRED');
     if (exitFeeRate === null || exitFeeRate === undefined)
       errors.push('EXIT_FEE_RATE_REQUIRED');
-    const entrySlippageRate =
-      (snapshot.costSettings?.entrySlippageBps ?? 0) / 10_000;
-    const exitSlippageRate =
-      (snapshot.costSettings?.exitSlippageBps ?? 0) / 10_000;
+    const entrySlippageBps = snapshot.costSettings?.entrySlippageBps;
+    const exitSlippageBps = snapshot.costSettings?.exitSlippageBps;
+    if (entrySlippageBps === null || entrySlippageBps === undefined)
+      errors.push('ENTRY_SLIPPAGE_REQUIRED');
+    if (exitSlippageBps === null || exitSlippageBps === undefined)
+      errors.push('EXIT_SLIPPAGE_REQUIRED');
+    if (errors.length > 0) return validationFailure(errors);
+    if (
+      typeof entrySlippageBps !== 'number' ||
+      typeof exitSlippageBps !== 'number'
+    )
+      return validationFailure(['SLIPPAGE_INPUT_REQUIRED']);
+    const entrySlippageRate = entrySlippageBps / 10_000;
+    const exitSlippageRate = exitSlippageBps / 10_000;
     const quantityResult = validateRiskQuantity({
       entry: plan.entry,
       stop: plan.stop,
@@ -320,22 +354,28 @@ export async function handler(request: Request, env: Env): Promise<Response> {
       minNotional: filters.minNotional,
       tickSize: filters.tickSize,
     });
-    errors.push(...quantityResult.reasons);
+    if (!quantityResult.valid)
+      return validationFailure(
+        quantityResult.reasons,
+        400,
+        quantityResult.warnings,
+      );
     const quantity = quantityResult.quantity;
     const fundingRate =
       (snapshot.marketState?.fundingRate ?? 0) * plan.expectedFundingPeriods;
+    const minimumNetMarginRoiPercent = 2;
     const targets =
       quantity > 0
-        ? plan.targets.map((target) => ({
-            target,
-            ...calculatePositionPlan({
+        ? plan.targets.map((target) => {
+            const calculation = calculatePositionPlan({
               side: plan.side,
               entry: plan.entry,
               exit: target,
               quantity,
               entryFeeRate: entryFeeRate ?? 0,
               exitFeeRate: exitFeeRate ?? 0,
-              slippageRate: (entrySlippageRate + exitSlippageRate) / 2,
+              entrySlippageRate,
+              exitSlippageRate,
               fundingRate:
                 quantity > 0
                   ? signedFundingPayment(
@@ -345,14 +385,26 @@ export async function handler(request: Request, env: Env): Promise<Response> {
                     ) /
                     (plan.entry * quantity)
                   : 0,
-            }),
-          }))
+            });
+            const netMarginRoiPercent =
+              (calculation.netPnl / calculation.initialMargin) * 100;
+            return {
+              target,
+              ...calculation,
+              netMarginRoiPercent,
+              meetsMinimumNetMarginRoi:
+                netMarginRoiPercent >= minimumNetMarginRoiPercent,
+            };
+          })
         : [];
+    const warnings = [...quantityResult.warnings];
+    if (targets.some((target) => !target.meetsMinimumNetMarginRoi))
+      warnings.push('TARGET_NET_MARGIN_ROI_BELOW_MINIMUM');
     return json(
       {
-        ok: errors.length === 0 && quantityResult.valid,
-        errors,
-        warnings: quantityResult.warnings,
+        ok: true,
+        errors: [],
+        warnings,
         quantity: quantity > 0 ? quantity : null,
         maxLoss: quantityResult.maxLoss,
         estimatedMaxLoss: quantityResult.estimatedMaxLoss,
@@ -369,7 +421,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
           fundingRate,
         },
       },
-      errors.length === 0 && quantityResult.valid ? 200 : 400,
+      200,
     );
   }
   return json({ error: 'NOT_FOUND' }, 404);

@@ -151,11 +151,101 @@ describe('worker handler', () => {
     );
     const result = (await response.json()) as {
       errors: string[];
-      quantity: number | null;
+      quantity?: number;
     };
     expect(response.status).toBe(400);
     expect(result.errors).toContain('RISK_INPUT_REQUIRED');
-    expect(result.quantity).toBeNull();
+    expect(result.quantity).toBeUndefined();
+  });
+
+  it('returns no calculation values when required cost settings are missing', async () => {
+    const now = Date.now();
+    await handler(
+      new Request('https://example.com/v1/snapshot/latest', {
+        method: 'PUT',
+        headers: { authorization: 'Bearer upload-secret' },
+        body: JSON.stringify({
+          schemaVersion: 1,
+          snapshotId: 'missing-costs',
+          symbol: 'BTCUSDT',
+          market: 'BINANCE_USDM_PERPETUAL',
+          generatedAt: now,
+          analysisGate: { analysisAllowed: true, overallStatus: 'NORMAL' },
+          productFilters: {
+            tickSize: 0.1,
+            stepSize: 0.001,
+            minQuantity: 0.001,
+            minNotional: 5,
+          },
+          costSettings: {
+            makerFeeRate: null,
+            takerFeeRate: null,
+            entrySlippageBps: null,
+            exitSlippageBps: null,
+          },
+        }),
+      }),
+      env,
+    );
+    const response = await handler(
+      new Request('https://example.com/v1/plan/validate', {
+        method: 'POST',
+        headers: { authorization: 'Bearer read-secret' },
+        body: JSON.stringify({
+          side: 'LONG',
+          entry: 60_000,
+          stop: 59_500,
+          targets: [61_000],
+          maxLossUsdt: 50,
+          leverage: 10,
+          marginMode: 'ISOLATED',
+        }),
+      }),
+      env,
+    );
+    const result = (await response.json()) as Record<string, unknown>;
+    expect(response.status).toBe(400);
+    expect(result.errors).toEqual([
+      'ENTRY_FEE_RATE_REQUIRED',
+      'EXIT_FEE_RATE_REQUIRED',
+      'ENTRY_SLIPPAGE_REQUIRED',
+      'EXIT_SLIPPAGE_REQUIRED',
+    ]);
+    expect(Object.keys(result).sort()).toEqual(['errors', 'ok', 'warnings']);
+  });
+
+  it('does not replace a newer snapshot with an older upload', async () => {
+    const now = Date.now();
+    const upload = (snapshotId: string, generatedAt: number) =>
+      handler(
+        new Request('https://example.com/v1/snapshot/latest', {
+          method: 'PUT',
+          headers: { authorization: 'Bearer upload-secret' },
+          body: JSON.stringify({
+            schemaVersion: 1,
+            snapshotId,
+            symbol: 'BTCUSDT',
+            market: 'BINANCE_USDM_PERPETUAL',
+            generatedAt,
+            analysisGate: {
+              analysisAllowed: true,
+              overallStatus: 'NORMAL',
+            },
+          }),
+        }),
+        env,
+      );
+    await upload('newer', now);
+    await upload('older', now - 1_000);
+    const response = await handler(
+      new Request('https://example.com/v1/snapshot/latest', {
+        headers: { authorization: 'Bearer read-secret' },
+      }),
+      env,
+    );
+    expect(((await response.json()) as { snapshotId: string }).snapshotId).toBe(
+      'newer',
+    );
   });
 
   it('upserts and reads the single latest row through the D1 binding', async () => {

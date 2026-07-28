@@ -76,8 +76,8 @@ export const userSettingsSchema = z.object({
   gptUrl: allowedExternalUrlSchema,
   makerFeeRate: z.number().min(0).max(0.01).nullable(),
   takerFeeRate: z.number().min(0).max(0.01).nullable(),
-  entrySlippageBps: z.number().min(0).max(1_000),
-  exitSlippageBps: z.number().min(0).max(1_000),
+  entrySlippageBps: z.number().min(0).max(1_000).nullable(),
+  exitSlippageBps: z.number().min(0).max(1_000).nullable(),
   maxLossUsdt: z.number().positive().max(10_000_000).nullable(),
   riskPercent: z.number().positive().max(1).nullable(),
   partialTakeProfitRatios: z

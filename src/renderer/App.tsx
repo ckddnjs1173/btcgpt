@@ -18,8 +18,8 @@ const DEFAULT_SETTINGS: UserSettings = {
   gptUrl: 'https://chatgpt.com/',
   makerFeeRate: null,
   takerFeeRate: null,
-  entrySlippageBps: 1,
-  exitSlippageBps: 1,
+  entrySlippageBps: null,
+  exitSlippageBps: null,
   maxLossUsdt: null,
   riskPercent: null,
   partialTakeProfitRatios: [0.3, 0.3, 0.4],
@@ -93,25 +93,26 @@ export function App() {
         nextAccount,
         nextManualPosition,
         nextRelay,
-        nextSettings,
       ] = await Promise.all([
         window.desktopApi.getMarketStatus(),
         window.desktopApi.getLatestSnapshot(),
         window.desktopApi.getAccountStatus(),
         window.desktopApi.getManualPosition(),
         window.desktopApi.getRelayStatus(),
-        window.desktopApi.getUserSettings(),
       ]);
       setStatus(nextStatus);
       setSnapshot(nextSnapshot);
       setAccount(nextAccount);
       setManualPosition(nextManualPosition);
       setRelay(nextRelay);
-      setSettings(nextSettings);
     } catch {
       const nextStatus = await window.desktopApi.getMarketStatus();
       setStatus(nextStatus);
     }
+  }, []);
+
+  useEffect(() => {
+    void window.desktopApi.getUserSettings().then(setSettings);
   }, []);
 
   useEffect(() => {
@@ -221,6 +222,7 @@ export function App() {
   }, [settings]);
 
   const runCalculator = useCallback(async () => {
+    setCalculation(null);
     try {
       setCalculation(
         await window.desktopApi.calculatePositionPlan({
@@ -817,6 +819,13 @@ export function App() {
         <div>
           <p className="eyebrow">SETTINGS</p>
           <h3>개인 비용·위험 설정</h3>
+          {account?.connected && account.commission && (
+            <p>
+              계정 연결 중에는 Binance 실제 수수료율(Maker{' '}
+              {account.commission.makerRate}, Taker{' '}
+              {account.commission.takerRate})을 우선 사용합니다.
+            </p>
+          )}
           <div className="account-form">
             <input
               aria-label="전용 GPT URL"
@@ -831,6 +840,7 @@ export function App() {
             <input
               aria-label="Maker 수수료율"
               inputMode="decimal"
+              disabled={Boolean(account?.connected && account.commission)}
               value={settings.makerFeeRate ?? ''}
               onChange={(event) =>
                 setSettings((current) => ({
@@ -846,6 +856,7 @@ export function App() {
             <input
               aria-label="Taker 수수료율"
               inputMode="decimal"
+              disabled={Boolean(account?.connected && account.commission)}
               value={settings.takerFeeRate ?? ''}
               onChange={(event) =>
                 setSettings((current) => ({
@@ -861,22 +872,28 @@ export function App() {
             <input
               aria-label="진입 슬리피지 bps"
               inputMode="decimal"
-              value={settings.entrySlippageBps}
+              value={settings.entrySlippageBps ?? ''}
               onChange={(event) =>
                 setSettings((current) => ({
                   ...current,
-                  entrySlippageBps: Number(event.target.value),
+                  entrySlippageBps:
+                    event.target.value === ''
+                      ? null
+                      : Number(event.target.value),
                 }))
               }
             />
             <input
               aria-label="청산 슬리피지 bps"
               inputMode="decimal"
-              value={settings.exitSlippageBps}
+              value={settings.exitSlippageBps ?? ''}
               onChange={(event) =>
                 setSettings((current) => ({
                   ...current,
-                  exitSlippageBps: Number(event.target.value),
+                  exitSlippageBps:
+                    event.target.value === ''
+                      ? null
+                      : Number(event.target.value),
                 }))
               }
             />

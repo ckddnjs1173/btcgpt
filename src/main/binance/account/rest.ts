@@ -156,7 +156,6 @@ export class BinanceAccountClient {
     const usdt = balances.find((item) => item.asset === 'USDT');
     return {
       availableBalance: usdt ? Number(usdt.availableBalance) : null,
-      walletBalance: usdt ? Number(usdt.balance) : null,
       updatedAt: usdt?.updateTime ?? Date.now(),
     };
   }

@@ -11,6 +11,8 @@ export interface RelayConfiguration {
 export class RelayUploader {
   private timer: NodeJS.Timeout | null = null;
   private stopping = false;
+  private uploading = false;
+  private pendingUpload = false;
   private status: RelayStatus;
 
   constructor(
@@ -32,14 +34,15 @@ export class RelayUploader {
   start(): void {
     if (this.timer) return;
     this.stopping = false;
-    void this.upload();
-    this.timer = setInterval(() => void this.upload(), 5_000);
+    this.requestUpload();
+    this.timer = setInterval(() => this.requestUpload(), 5_000);
   }
 
   stop(): void {
     this.stopping = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.pendingUpload = false;
   }
 
   getStatus(): RelayStatus {
@@ -55,7 +58,25 @@ export class RelayUploader {
       throw new Error(`Relay health returned HTTP ${response.status}`);
   }
 
-  private async upload(attempt = 0): Promise<void> {
+  private requestUpload(): void {
+    if (this.stopping) return;
+    if (this.uploading) {
+      this.pendingUpload = true;
+      return;
+    }
+    void this.runUploadQueue();
+  }
+
+  private async runUploadQueue(): Promise<void> {
+    this.uploading = true;
+    do {
+      this.pendingUpload = false;
+      await this.uploadSnapshot();
+    } while (this.pendingUpload && !this.stopping);
+    this.uploading = false;
+  }
+
+  private async uploadSnapshot(): Promise<void> {
     if (this.stopping) return;
     this.status.lastAttemptAt = Date.now();
     let snapshotId: string | null = null;
@@ -65,20 +86,36 @@ export class RelayUploader {
       const payload = JSON.stringify(snapshot);
       if (new TextEncoder().encode(payload).byteLength > 90_000)
         throw new Error('Relay payload exceeds 90,000 bytes');
-      const response = await fetch(
-        new URL('/v1/snapshot/latest', this.configuration.baseUrl),
-        {
-          method: 'PUT',
-          headers: {
-            authorization: `Bearer ${this.configuration.uploadKey}`,
-            'content-type': 'application/json',
-          },
-          body: payload,
-          signal: AbortSignal.timeout(4_000),
-        },
-      );
-      if (!response.ok)
-        throw new Error(`Relay returned HTTP ${response.status}`);
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 3 && !this.stopping; attempt += 1) {
+        try {
+          const response = await fetch(
+            new URL('/v1/snapshot/latest', this.configuration.baseUrl),
+            {
+              method: 'PUT',
+              headers: {
+                authorization: `Bearer ${this.configuration.uploadKey}`,
+                'content-type': 'application/json',
+              },
+              body: payload,
+              signal: AbortSignal.timeout(4_000),
+            },
+          );
+          if (!response.ok)
+            throw new Error(`Relay returned HTTP ${response.status}`);
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt < 2 && !this.stopping)
+            await new Promise((resolve) =>
+              setTimeout(resolve, 500 * 2 ** attempt),
+            );
+        }
+      }
+      if (lastError instanceof Error) throw lastError;
+      if (lastError) throw new Error('Relay upload failed');
+      if (this.stopping) return;
       this.status = {
         ...this.status,
         connected: true,
@@ -93,11 +130,7 @@ export class RelayUploader {
         consecutiveFailures: this.status.consecutiveFailures + 1,
         error: error instanceof Error ? error.message : 'Relay upload failed',
       };
-      if (attempt < 2 && !this.stopping) {
-        setTimeout(() => void this.upload(attempt + 1), 500 * 2 ** attempt);
-      } else {
-        logger.warn({ error, snapshotId }, 'Relay upload failed');
-      }
+      logger.warn({ error, snapshotId }, 'Relay upload failed');
     }
   }
 }

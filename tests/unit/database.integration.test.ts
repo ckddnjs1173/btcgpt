@@ -12,6 +12,19 @@ afterEach(() => {
 });
 
 describe('SQLite migrations and restart recovery', () => {
+  it('does not invent fee or slippage defaults', () => {
+    const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'btcgpt-db-'));
+    temporaryPaths.push(userData);
+    const database = new AppDatabase(userData);
+    expect(database.readUserSettings()).toMatchObject({
+      makerFeeRate: null,
+      takerFeeRate: null,
+      entrySlippageBps: null,
+      exitSlippageBps: null,
+    });
+    database.close();
+  });
+
   it('persists closed candles and validated settings across reopen', () => {
     const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'btcgpt-db-'));
     temporaryPaths.push(userData);

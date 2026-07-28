@@ -175,17 +175,17 @@ export class MarketCache {
 
   sourceHealth(now = Date.now()): Record<string, SourceHealth> {
     const thresholds: Record<string, [number, number]> = {
-      market: [6_000, 15_000],
+      market: [2_000, 5_000],
       depth: [1_000, 3_000],
       bookTicker: [1_000, 3_000],
-      trades: [6_000, 15_000],
+      trades: [3_000, 10_000],
       openInterest: [30_000, 90_000],
       liquidations: [60_000, 300_000],
       statistics: [300_000, 900_000],
-      'candle:5m': [20_000, 45_000],
-      'candle:15m': [20_000, 45_000],
-      'candle:1h': [20_000, 45_000],
-      'candle:4h': [20_000, 45_000],
+      'candle:5m': [5_000, 15_000],
+      'candle:15m': [5_000, 15_000],
+      'candle:1h': [5_000, 15_000],
+      'candle:4h': [5_000, 15_000],
     };
     return Object.fromEntries(
       Object.entries(thresholds).map(([source, [delayed, stale]]) => {

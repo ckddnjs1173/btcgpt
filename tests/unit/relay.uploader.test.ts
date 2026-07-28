@@ -49,4 +49,30 @@ describe('RelayUploader snapshot settings', () => {
       uploader.stop();
     }
   });
+
+  it('serializes heartbeat uploads so an older request cannot finish last', async () => {
+    vi.useFakeTimers();
+    const resolvers: Array<() => void> = [];
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolvers.push(() => resolve(new Response(null, { status: 204 })));
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const uploader = new RelayUploader(new MarketCache(), {
+      baseUrl: 'https://relay.example.workers.dev',
+      uploadKey: 'x'.repeat(32),
+    });
+
+    uploader.start();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    resolvers.shift()?.();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    resolvers.shift()?.();
+    uploader.stop();
+    vi.useRealTimers();
+  });
 });

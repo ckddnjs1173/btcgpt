@@ -159,7 +159,6 @@ export interface MarketSnapshot {
     connected: boolean;
     lastUpdatedAt: number | null;
     availableBalance: number | null;
-    walletBalance: number | null;
     commission: AccountStatus['commission'];
     openOrders: AccountStatus['openOrders'];
   };
@@ -266,7 +265,6 @@ export interface AccountStatus {
   } | null;
   balance: {
     availableBalance: number | null;
-    walletBalance: number | null;
     updatedAt: number;
   } | null;
   openOrders: Array<{
@@ -329,8 +327,8 @@ export interface UserSettings {
   gptUrl: string;
   makerFeeRate: number | null;
   takerFeeRate: number | null;
-  entrySlippageBps: number;
-  exitSlippageBps: number;
+  entrySlippageBps: number | null;
+  exitSlippageBps: number | null;
   maxLossUsdt: number | null;
   riskPercent: number | null;
   partialTakeProfitRatios: [number, number, number];

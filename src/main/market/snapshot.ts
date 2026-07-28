@@ -383,7 +383,6 @@ export function generateSnapshot(
       lastUpdatedAt: options.accountStatus?.lastUpdatedAt ?? null,
       availableBalance:
         options.accountStatus?.balance?.availableBalance ?? null,
-      walletBalance: options.accountStatus?.balance?.walletBalance ?? null,
       commission: options.accountStatus?.commission ?? null,
       openOrders: options.accountStatus?.openOrders ?? [],
     },

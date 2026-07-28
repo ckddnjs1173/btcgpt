@@ -38,6 +38,13 @@ describe('security boundaries', () => {
     expect(files).not.toContain('/fapi/v1/order');
   });
 
+  it('does not expose total wallet balance in the snapshot contract', () => {
+    const snapshot = read('src/main/market/snapshot.ts');
+    const contracts = read('src/shared/contracts.ts');
+    expect(snapshot).not.toContain('walletBalance');
+    expect(contracts.match(/walletBalance/g)).toBeNull();
+  });
+
   it('redacts all mandated secret field names', () => {
     const logger = read('src/main/logging/logger.ts');
     for (const field of [

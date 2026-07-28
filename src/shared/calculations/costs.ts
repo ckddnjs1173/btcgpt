@@ -40,6 +40,8 @@ export interface PositionPlanInput {
   entryFeeRate: number;
   exitFeeRate: number;
   slippageRate?: number;
+  entrySlippageRate?: number;
+  exitSlippageRate?: number;
   fundingRate?: number;
 }
 
@@ -53,8 +55,17 @@ export function calculatePositionPlan(input: PositionPlanInput) {
       : grossPnlShort(quantity, input.entry, input.exit);
   const entryFee = fee(entryNotional, input.entryFeeRate);
   const exitFee = fee(exitNotional, input.exitFeeRate);
-  const slippage =
-    (entryNotional + exitNotional) * Math.max(0, input.slippageRate ?? 0);
+  const entrySlippageRate = Math.max(
+    0,
+    input.entrySlippageRate ?? input.slippageRate ?? 0,
+  );
+  const exitSlippageRate = Math.max(
+    0,
+    input.exitSlippageRate ?? input.slippageRate ?? 0,
+  );
+  const entrySlippage = entryNotional * entrySlippageRate;
+  const exitSlippage = exitNotional * exitSlippageRate;
+  const slippage = entrySlippage + exitSlippage;
   const funding = entryNotional * (input.fundingRate ?? 0);
   return {
     entryNotional,
@@ -63,6 +74,8 @@ export function calculatePositionPlan(input: PositionPlanInput) {
     grossPnl: gross,
     entryFee,
     exitFee,
+    entrySlippage,
+    exitSlippage,
     slippage,
     funding,
     netPnl: netPnl(gross, entryFee, exitFee, slippage, funding),
@@ -192,12 +205,13 @@ export function breakevenExitPrice(
   entry: number,
   entryFeeRate: number,
   exitFeeRate: number,
-  slippageRate = 0,
+  entrySlippageRate = 0,
   fundingRate = 0,
+  exitSlippageRate = entrySlippageRate,
 ): number {
-  const fixed = entry * (entryFeeRate + slippageRate + fundingRate);
+  const fixed = entry * (entryFeeRate + entrySlippageRate + fundingRate);
   if (side === 'LONG') {
-    return (entry + fixed) / (1 - exitFeeRate - slippageRate);
+    return (entry + fixed) / (1 - exitFeeRate - exitSlippageRate);
   }
-  return (entry - fixed) / (1 + exitFeeRate + slippageRate);
+  return (entry - fixed) / (1 + exitFeeRate + exitSlippageRate);
 }

@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import type { BrowserWindow, Tray } from 'electron';
 import started from 'electron-squirrel-startup';
+import path from 'node:path';
 
 import { createAppTray } from './app/tray';
 import { createMainWindow } from './app/create-window';
@@ -18,6 +19,14 @@ import { RelayConfigurationStore } from './security/relay-configuration-store';
 if (started) {
   app.quit();
 }
+
+const e2eUserDataPath = process.env.BTC_E2E_USER_DATA_DIR;
+if (
+  process.env.NODE_ENV === 'test' &&
+  e2eUserDataPath &&
+  path.isAbsolute(e2eUserDataPath)
+)
+  app.setPath('userData', e2eUserDataPath);
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -160,9 +169,10 @@ void app.whenReady().then(() => {
     },
     isTrayReady: () => tray !== null && !tray.isDestroyed(),
   });
-  void marketData.start().catch((error: unknown) => {
-    logger.error({ error }, 'Market data service failed to start');
-  });
+  if (process.env.BTC_E2E_DISABLE_MARKET !== '1')
+    void marketData.start().catch((error: unknown) => {
+      logger.error({ error }, 'Market data service failed to start');
+    });
   const environmentRelay =
     process.env.BTC_RELAY_URL && process.env.BTC_RELAY_UPLOAD_KEY
       ? {
@@ -171,7 +181,14 @@ void app.whenReady().then(() => {
         }
       : null;
   const storedRelay = relayStore.load();
-  if (environmentRelay) relayStore.save(environmentRelay);
+  if (environmentRelay)
+    try {
+      relayStore.save(environmentRelay);
+    } catch {
+      logger.warn(
+        'Relay environment configuration could not be persisted securely',
+      );
+    }
   const relayConfiguration = environmentRelay ?? storedRelay;
   if (relayConfiguration)
     startRelay(relayConfiguration.baseUrl, relayConfiguration.uploadKey);
@@ -197,6 +214,6 @@ void app.whenReady().then(() => {
       platform: process.platform,
       databaseReady: database.isReady(),
     },
-    'BTC Futures Assistant Phase 0 started',
+    'BTC Futures Assistant started',
   );
 });
