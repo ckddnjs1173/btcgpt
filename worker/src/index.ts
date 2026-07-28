@@ -66,11 +66,6 @@ const planSchema = z.object({
   marginMode: z.literal('ISOLATED'),
 });
 
-let memorySnapshot: {
-  raw: string;
-  generatedAt: number;
-  receivedAt: number;
-} | null = null;
 const rateBuckets = new Map<string, { startedAt: number; count: number }>();
 const FORBIDDEN_SNAPSHOT_KEYS = new Set([
   'apikey',
@@ -88,8 +83,9 @@ function containsForbiddenSnapshotKey(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   return Object.entries(value).some(
     ([key, nested]) =>
-      FORBIDDEN_SNAPSHOT_KEYS.has(key.toLowerCase()) ||
-      containsForbiddenSnapshotKey(nested),
+      FORBIDDEN_SNAPSHOT_KEYS.has(
+        key.toLowerCase().replace(/[^a-z0-9]/g, ''),
+      ) || containsForbiddenSnapshotKey(nested),
   );
 }
 
@@ -142,10 +138,15 @@ function rateLimited(request: Request): boolean {
   return bucket.count > 120;
 }
 
+function requireDatabase(env: Env): D1Database {
+  if (!env.DB) throw new Error('D1_UNAVAILABLE');
+  return env.DB;
+}
+
 async function save(env: Env, raw: string, generatedAt: number): Promise<void> {
   const receivedAt = Date.now();
-  if (env.DB) {
-    const result = await env.DB.prepare(
+  const result = await requireDatabase(env)
+    .prepare(
       `
       INSERT INTO latest_snapshot (id, payload, generated_at, received_at)
       VALUES (1, ?, ?, ?)
@@ -154,29 +155,43 @@ async function save(env: Env, raw: string, generatedAt: number): Promise<void> {
       WHERE excluded.generated_at >= latest_snapshot.generated_at
     `,
     )
-      .bind(raw, generatedAt, receivedAt)
-      .run();
-    if (!result.success) throw new Error('D1_WRITE_FAILED');
-    return;
-  }
-  if (memorySnapshot && generatedAt < memorySnapshot.generatedAt) return;
-  memorySnapshot = { raw, generatedAt, receivedAt };
+    .bind(raw, generatedAt, receivedAt)
+    .run();
+  if (!result.success) throw new Error('D1_WRITE_FAILED');
 }
 
 async function load(env: Env) {
-  if (env.DB) {
-    return env.DB.prepare(
+  return requireDatabase(env)
+    .prepare(
       'SELECT payload AS raw, generated_at AS generatedAt, received_at AS receivedAt FROM latest_snapshot WHERE id = 1',
-    ).first<{ raw: string; generatedAt: number; receivedAt: number }>();
-  }
-  return memorySnapshot;
+    )
+    .first<{ raw: string; generatedAt: number; receivedAt: number }>();
 }
 
 export async function handler(request: Request, env: Env): Promise<Response> {
   if (rateLimited(request)) return json({ error: 'RATE_LIMITED' }, 429);
   const url = new URL(request.url);
   if (request.method === 'GET' && url.pathname === '/health') {
-    return json({ ok: true });
+    try {
+      await requireDatabase(env).prepare('SELECT 1 AS ok').first();
+      return json({ ok: true, storage: 'D1' });
+    } catch {
+      return json({ ok: false, error: 'STORAGE_UNAVAILABLE' }, 503);
+    }
+  }
+
+  if (
+    request.method === 'GET' &&
+    url.pathname === '/v1/uploader/status'
+  ) {
+    if (!authorized(request, env.UPLOADER_WRITE_KEY))
+      return json({ error: 'UNAUTHORIZED' }, 401);
+    try {
+      await requireDatabase(env).prepare('SELECT 1 AS ok').first();
+      return json({ ok: true, storage: 'D1' });
+    } catch {
+      return json({ ok: false, error: 'STORAGE_UNAVAILABLE' }, 503);
+    }
   }
 
   if (url.pathname === '/v1/snapshot/latest' && request.method === 'PUT') {
@@ -202,14 +217,23 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     const now = Date.now();
     if (parsed.generatedAt > now + FUTURE_TOLERANCE_MS)
       return json({ error: 'FUTURE_SNAPSHOT' }, 400);
-    await save(env, raw, parsed.generatedAt);
-    return json({ ok: true, receivedAt: now });
+    try {
+      await save(env, raw, parsed.generatedAt);
+      return json({ ok: true, receivedAt: now });
+    } catch {
+      return json({ error: 'STORAGE_UNAVAILABLE' }, 503);
+    }
   }
 
   if (url.pathname === '/v1/snapshot/latest' && request.method === 'GET') {
     if (!authorized(request, env.ACTION_READ_KEY))
       return json({ error: 'UNAUTHORIZED' }, 401);
-    const stored = await load(env);
+    let stored;
+    try {
+      stored = await load(env);
+    } catch {
+      return json({ error: 'STORAGE_UNAVAILABLE' }, 503);
+    }
     if (!stored) return json({ error: 'NOT_FOUND' }, 404);
     const ageMs = Date.now() - stored.generatedAt;
     const payload = JSON.parse(stored.raw) as Record<string, unknown>;
@@ -283,7 +307,12 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     )
       errors.push('TARGET_MUST_BE_PROFITABLE_BEFORE_COSTS');
     if (errors.length > 0) return validationFailure(errors);
-    const stored = await load(env);
+    let stored;
+    try {
+      stored = await load(env);
+    } catch {
+      return validationFailure(['STORAGE_UNAVAILABLE'], 503);
+    }
     if (!stored) return validationFailure(['SNAPSHOT_NOT_FOUND'], 409);
     if (Date.now() - stored.generatedAt > MAX_SNAPSHOT_AGE_MS)
       return validationFailure(['SNAPSHOT_STALE'], 409);
