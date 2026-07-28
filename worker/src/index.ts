@@ -57,14 +57,13 @@ const planSchema = z.object({
   stop: z.number().positive(),
   targets: z.array(z.number().positive()).min(1).max(3),
   maxLossUsdt: z.number().positive().optional(),
-  accountEquity: z.number().positive().optional(),
   riskPercent: z.number().positive().max(1).optional(),
   entryOrderType: z.enum(['MAKER', 'TAKER']).default('TAKER'),
   exitOrderType: z.enum(['MAKER', 'TAKER']).default('TAKER'),
   expectedFundingPeriods: z.number().int().min(0).max(12).default(0),
   leverage: z.literal(10),
   marginMode: z.literal('ISOLATED'),
-});
+}).strict();
 
 const rateBuckets = new Map<string, { startedAt: number; count: number }>();
 const FORBIDDEN_SNAPSHOT_KEYS = new Set([
@@ -332,6 +331,10 @@ export async function handler(request: Request, env: Env): Promise<Response> {
         exitSlippageBps?: number | null;
       };
       account?: { availableBalance?: number | null };
+      strategy?: {
+        maxLossUsdt?: number | null;
+        riskPercent?: number | null;
+      };
     };
     if (snapshot.analysisGate?.analysisAllowed !== true)
       return validationFailure(['ANALYSIS_NOT_ALLOWED'], 409);
@@ -371,9 +374,9 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     const quantityResult = validateRiskQuantity({
       entry: plan.entry,
       stop: plan.stop,
-      maxLossUsdt: plan.maxLossUsdt,
-      accountEquity: plan.accountEquity,
-      riskPercent: plan.riskPercent,
+      maxLossUsdt: plan.maxLossUsdt ?? snapshot.strategy?.maxLossUsdt,
+      accountEquity: snapshot.account?.availableBalance,
+      riskPercent: plan.riskPercent ?? snapshot.strategy?.riskPercent,
       availableMargin: snapshot.account?.availableBalance,
       entryFeeRate: entryFeeRate ?? 0,
       exitFeeRate: exitFeeRate ?? 0,
