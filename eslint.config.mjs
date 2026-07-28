@@ -9,11 +9,13 @@ export default tseslint.config(
   {
     ignores: [
       '.vite/**',
+      '.wrangler/**',
       'coverage/**',
       'eslint.config.mjs',
       'node_modules/**',
       'out/**',
       'scripts/**',
+      'worker/worker-configuration.d.ts',
     ],
   },
   eslint.configs.recommended,

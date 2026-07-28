@@ -5,7 +5,11 @@
     "version": "1.0.0",
     "description": "Read-only BTCUSDT market snapshot and deterministic plan validation."
   },
-  "servers": [{ "url": "https://REPLACE_WITH_WORKER.workers.dev" }],
+  "servers": [
+    {
+      "url": "https://btc-futures-assistant-relay.btcgpt-ck1173.workers.dev"
+    }
+  ],
   "components": {
     "securitySchemes": {
       "actionKey": { "type": "http", "scheme": "bearer" }

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 interface OpenApiDocument {
+  servers: Array<{ url: string }>;
   paths: {
     '/v1/snapshot/latest': {
       get: {
@@ -32,6 +33,12 @@ describe('worker OpenAPI', () => {
     const p = path.join(process.cwd(), 'worker', 'openapi', 'openapi.json');
     const raw = fs.readFileSync(p, 'utf8');
     const json = JSON.parse(raw) as OpenApiDocument;
+    expect(json.servers).toEqual([
+      {
+        url: 'https://btc-futures-assistant-relay.btcgpt-ck1173.workers.dev',
+      },
+    ]);
+    expect(raw).not.toContain('REPLACE_WITH_WORKER');
     expect(json.paths['/v1/snapshot/latest'].get.operationId).toBe(
       'getLatestSnapshot',
     );

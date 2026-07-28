@@ -2,8 +2,11 @@ name = "btc-futures-assistant-relay"
 main = "worker/src/index.ts"
 compatibility_date = "2026-07-27"
 
+[secrets]
+required = ["UPLOADER_WRITE_KEY", "ACTION_READ_KEY"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "btc-futures-assistant"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "9d5eb8eb-5bd7-4f48-9c7c-60617ace5ae9"
 migrations_dir = "worker/migrations"

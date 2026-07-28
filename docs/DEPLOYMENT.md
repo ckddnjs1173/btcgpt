@@ -2,32 +2,42 @@
 
 ## Cloudflare Worker and D1
 
-Prerequisites: a Cloudflare account and Wrangler authenticated in the target
-account.
+Production Worker:
+`https://btc-futures-assistant-relay.btcgpt-ck1173.workers.dev`
+
+Prerequisites for maintenance: a Cloudflare account and Wrangler authenticated
+in the target account.
 
 ```powershell
 npm exec wrangler -- login
 npm exec wrangler -- whoami
 ```
 
-After authentication, let the implementation agent create D1, copy the returned
-opaque database ID into `wrangler.toml`, generate two independent cryptographic
-keys, apply migrations, set secrets, and deploy. The underlying commands are:
+The D1 database, migration, split Secrets, and first deployment are complete.
+Future migrations and deployments use:
 
 ```powershell
-npm exec wrangler -- d1 create btc-futures-assistant
 npm exec wrangler -- d1 migrations apply btc-futures-assistant --remote
-npm exec wrangler -- secret put UPLOADER_WRITE_KEY
-npm exec wrangler -- secret put ACTION_READ_KEY
-npm exec wrangler -- deploy
+npm exec wrangler -- deploy --secrets-file secrets/cloudflare-production.json --strict
 ```
 
-Do not reuse either key. Set `BTC_RELAY_URL` and `BTC_RELAY_UPLOAD_KEY` only in
-the local process environment; never commit them.
+The ignored `secrets/cloudflare-production.json` file contains the two distinct
+production keys. Never print, commit, or transmit the complete file.
+
+To configure the desktop app without printing the upload key:
+
+```powershell
+$relaySecrets = Get-Content -Raw secrets/cloudflare-production.json | ConvertFrom-Json
+$relaySecrets.UPLOADER_WRITE_KEY | Set-Clipboard
+Remove-Variable relaySecrets
+```
+
+Paste the clipboard value into the app's relay upload-key field, use the
+production Worker URL above, connect, then clear the clipboard.
 
 ## Custom GPT Action
 
-1. Replace the server URL in `worker/openapi/openapi.json` with the deployed
+1. Confirm the server URL in `worker/openapi/openapi.json` matches the deployed
    `workers.dev` URL.
 2. In the GPT editor, import that OpenAPI document.
 3. Select API-key authentication, Bearer mode, and enter only the Action read
@@ -36,6 +46,25 @@ the local process environment; never commit them.
 5. Confirm a snapshot older than 15 seconds returns `analysisAllowed: false`.
 
 No OpenAI API key is used.
+
+Copy only the Action read key to the clipboard without printing it:
+
+```powershell
+$relaySecrets = Get-Content -Raw secrets/cloudflare-production.json | ConvertFrom-Json
+$relaySecrets.ACTION_READ_KEY | Set-Clipboard
+Remove-Variable relaySecrets
+```
+
+After saving the GPT Action, clear the clipboard.
+
+## Key rotation
+
+1. Generate two new independent 256-bit random keys in the ignored Secret file.
+2. Deploy both with `--secrets-file`; never pass either value as a command
+   argument.
+3. Replace the desktop app upload key using the local settings screen.
+4. Replace the Custom GPT Bearer key using only the Action read key.
+5. Run both production relay smoke tests and clear the clipboard.
 
 ## Binance read-only account
 

@@ -1,6 +1,6 @@
 import { logger } from '../logging/logger';
 import type { MarketCache } from '../market/cache';
-import { generateSnapshot } from '../market/snapshot';
+import { generateSnapshot, type SnapshotOptions } from '../market/snapshot';
 import type { RelayStatus } from '../../shared/contracts';
 
 export interface RelayConfiguration {
@@ -16,6 +16,7 @@ export class RelayUploader {
   constructor(
     private readonly cache: MarketCache,
     private readonly configuration: RelayConfiguration,
+    private readonly getSnapshotOptions: () => SnapshotOptions = () => ({}),
   ) {
     this.status = {
       configured: true,
@@ -59,7 +60,7 @@ export class RelayUploader {
     this.status.lastAttemptAt = Date.now();
     let snapshotId: string | null = null;
     try {
-      const snapshot = generateSnapshot(this.cache);
+      const snapshot = generateSnapshot(this.cache, this.getSnapshotOptions());
       snapshotId = snapshot.snapshotId;
       const payload = JSON.stringify(snapshot);
       if (new TextEncoder().encode(payload).byteLength > 90_000)

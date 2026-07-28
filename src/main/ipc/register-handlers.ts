@@ -182,9 +182,14 @@ export function registerIpcHandlers({
     (_event, rawInput: unknown): PositionCalculationResult => {
       const input = positionCalculationInputSchema.parse(rawInput);
       const settings = database.readUserSettings();
+      const accountCommission = accountService.getStatus().commission;
+      const makerFeeRate =
+        accountCommission?.makerRate ?? settings.makerFeeRate;
+      const takerFeeRate =
+        accountCommission?.takerRate ?? settings.takerFeeRate;
       const filters = marketData.cache.productFilters;
       const errors: string[] = [];
-      if (settings.makerFeeRate === null || settings.takerFeeRate === null)
+      if (makerFeeRate === null || takerFeeRate === null)
         errors.push('FEE_RATE_REQUIRED');
       if (!filters) errors.push('PRODUCT_FILTERS_REQUIRED');
       if (
@@ -206,12 +211,12 @@ export function registerIpcHandlers({
         };
       const entryFeeRate =
         (input.entryOrderType ?? 'TAKER') === 'MAKER'
-          ? (settings.makerFeeRate ?? 0)
-          : (settings.takerFeeRate ?? 0);
+          ? (makerFeeRate ?? 0)
+          : (takerFeeRate ?? 0);
       const exitFeeRate =
         (input.exitOrderType ?? 'TAKER') === 'MAKER'
-          ? (settings.makerFeeRate ?? 0)
-          : (settings.takerFeeRate ?? 0);
+          ? (makerFeeRate ?? 0)
+          : (takerFeeRate ?? 0);
       const slippageRate =
         Math.max(settings.entrySlippageBps, settings.exitSlippageBps) / 10_000;
       const quantity = validateRiskQuantity({

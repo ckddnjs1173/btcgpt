@@ -1,6 +1,8 @@
 .vite
+.wrangler
 coverage
 node_modules
 out
 package-lock.json
 docs/PROJECT_SPEC.md
+worker/worker-configuration.d.ts

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WebSocket as NodeWebSocket } from 'ws';
 
 import { numericStringSchema, type KlineTuple } from '../binance/schemas';
 import {
@@ -40,7 +41,7 @@ const DEFAULT_DEPENDENCIES = {
   fetchOrderBook,
   fetchRatioHistory,
   fetchTicker24h,
-  createSocket: (url: string) => new WebSocket(url),
+  createSocket: (url: string) => new NodeWebSocket(url) as unknown as WebSocket,
 };
 
 type MarketDataDependencies = typeof DEFAULT_DEPENDENCIES;

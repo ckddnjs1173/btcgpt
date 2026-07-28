@@ -9,6 +9,7 @@ import { AppDatabase } from './db/database';
 import { registerIpcHandlers } from './ipc/register-handlers';
 import { logger } from './logging/logger';
 import { MarketDataService } from './market/service';
+import type { SnapshotOptions } from './market/snapshot';
 import { RelayUploader } from './relay/uploader';
 import { AccountService } from './binance/account/service';
 import { CredentialStore } from './security/credential-store';
@@ -98,12 +99,35 @@ void app.whenReady().then(() => {
     showWindow: showMainWindow,
     quitApplication,
   });
+  const getSnapshotOptions = (): SnapshotOptions => {
+    const accountStatus = accountService!.getStatus();
+    const settings = database!.readUserSettings();
+    return {
+      serverTime: Date.now() + marketData!.getServerOffsetMs(),
+      position: accountStatus.connected
+        ? accountStatus.position
+        : database!.readManualPosition(),
+      accountStatus,
+      makerFeeRate:
+        accountStatus.commission?.makerRate ?? settings.makerFeeRate,
+      takerFeeRate:
+        accountStatus.commission?.takerRate ?? settings.takerFeeRate,
+      entrySlippageBps: settings.entrySlippageBps,
+      exitSlippageBps: settings.exitSlippageBps,
+      maxLossUsdt: settings.maxLossUsdt,
+      riskPercent: settings.riskPercent,
+    };
+  };
   const startRelay = (baseUrl: string, uploadKey: string): RelayUploader => {
     relayUploader?.stop();
-    const uploader = new RelayUploader(marketData!.cache, {
-      baseUrl,
-      uploadKey,
-    });
+    const uploader = new RelayUploader(
+      marketData!.cache,
+      {
+        baseUrl,
+        uploadKey,
+      },
+      getSnapshotOptions,
+    );
     relayUploader = uploader;
     uploader.start();
     return uploader;
@@ -147,6 +171,7 @@ void app.whenReady().then(() => {
         }
       : null;
   const storedRelay = relayStore.load();
+  if (environmentRelay) relayStore.save(environmentRelay);
   const relayConfiguration = environmentRelay ?? storedRelay;
   if (relayConfiguration)
     startRelay(relayConfiguration.baseUrl, relayConfiguration.uploadKey);
