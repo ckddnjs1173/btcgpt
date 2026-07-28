@@ -7,6 +7,7 @@ function positionResponse() {
     JSON.stringify([
       {
         symbol: 'BTCUSDT',
+        positionSide: 'BOTH',
         positionAmt: '0.010',
         entryPrice: '60000',
         breakEvenPrice: '60020',
