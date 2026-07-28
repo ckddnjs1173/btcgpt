@@ -911,7 +911,7 @@ export function App() {
                   makerFeeRate: event.target.value,
                 }))
               }
-              placeholder="Maker 수수료율 (예: 0.0002)"
+              placeholder="Maker 수수료율 (Binance 실제 요율)"
             />
             <input
               aria-label="Taker 수수료율"
@@ -924,11 +924,12 @@ export function App() {
                   takerFeeRate: event.target.value,
                 }))
               }
-              placeholder="Taker 수수료율 (예: 0.0005)"
+              placeholder="Taker 수수료율 (Binance 실제 요율)"
             />
             <input
               aria-label="진입 슬리피지 bps"
               inputMode="decimal"
+              placeholder="진입 슬리피지 bps (초기 참고값: 1)"
               value={settingsDraft.entrySlippageBps}
               onChange={(event) =>
                 setSettingsDraft((current) => ({
@@ -940,6 +941,7 @@ export function App() {
             <input
               aria-label="청산 슬리피지 bps"
               inputMode="decimal"
+              placeholder="청산 슬리피지 bps (초기 참고값: 1)"
               value={settingsDraft.exitSlippageBps}
               onChange={(event) =>
                 setSettingsDraft((current) => ({
