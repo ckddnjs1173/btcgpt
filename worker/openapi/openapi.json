@@ -37,7 +37,6 @@
             "items": { "type": "number", "exclusiveMinimum": 0 }
           },
           "maxLossUsdt": { "type": "number", "exclusiveMinimum": 0 },
-          "accountEquity": { "type": "number", "exclusiveMinimum": 0 },
           "riskPercent": {
             "type": "number",
             "exclusiveMinimum": 0,
