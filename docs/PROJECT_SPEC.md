@@ -1,7 +1,7 @@
 # BTC Futures Assistant 최종 개발 기획서
 
-> 문서 버전: 3.0  
-> 기준일: 2026-07-27  
+> 문서 버전: 4.0  
+> 기준일: 2026-07-28  
 > 프로젝트명: `btc-futures-assistant`  
 > 저장소: `ckddnjs1173/btcgpt`  
 > 대상 환경: Windows 11  
@@ -22,8 +22,8 @@ Codex는 사용자가 `기획서 읽고 작업해`라고 요청하면 다음 순
 3. 단계별 완료조건을 기준으로 최초의 미완료 Phase를 판정한다.
 4. 해당 Phase에서 안전하게 완료할 수 있는 가장 작은 수직 기능 단위를 구현한다.
 5. 기존 사용자 변경사항과 관련 없는 코드를 훼손하지 않는다.
-6. 타입 검사, 린트, 단위 테스트, 통합 테스트와 빌드 중 현재 저장소에서 가능한 검증을 수행한다.
-7. 실패가 있으면 원인을 해결하고 다시 검증한다.
+6. 사용자가 별도로 요청하지 않으면 테스트 파일 생성, 단위·통합·E2E·soak 테스트 실행을 하지 않는다. 구현 변경에는 타입 검사·린트·프로덕션 빌드처럼 운영 산출물에 직접 필요한 최소 검증만 수행한다.
+7. 실행한 최소 검증이 실패하면 원인을 해결하고 다시 검증한다.
 8. 작업 결과, 검증 결과, 남은 작업과 사용자 확인이 필요한 항목을 보고한다.
 
 이 문서를 작업일지로 바꾸거나 임의로 제품 방향을 변경하지 않는다. 제품 범위 변경이 필요하면 구현 전에 사용자에게 이유와 영향을 설명하고 승인을 받는다.
@@ -32,18 +32,20 @@ Codex는 사용자가 `기획서 읽고 작업해`라고 요청하면 다음 순
 
 ## 1. 제품 정의
 
-`BTC Futures Assistant`는 Binance BTCUSDT USDⓈ-M 무기한 선물의 실시간 시장정보와 사용자 포지션을 수집·정규화·계산하여 전용 코인 분석 GPT에 전달하는 Windows 로컬 거래 보조 프로그램이다.
+`BTC Futures Assistant`는 Binance BTCUSDT USDⓈ-M 무기한 선물의 실시간 시장정보와 사용자 포지션을 수집·정규화·계산하여 전용 코인 분석 GPT에 전달하는 Windows 로컬 거래 보조 프로그램이다. 실시간 거래 판단이 제품의 중심이며, 뉴스·거시경제·옵션·온체인·심리 정보는 진입을 대신 결정하지 않고 돌발 위험과 중장기 맥락을 보강하는 보조 컨텍스트로만 사용한다.
 
 최종 사용 흐름은 다음과 같다.
 
 1. 로컬 프로그램이 Binance의 최신 시장정보를 계속 수집한다.
 2. 프로그램이 원본 데이터를 검증하고 GPT가 읽기 좋은 최신 스냅샷으로 압축한다.
 3. 프로그램이 스냅샷을 인증된 무료 HTTPS 중계소에 주기적으로 갱신한다.
-4. 사용자가 전용 GPT에 `지금 분석해줘` 또는 `내 포지션 봐줘`라고 요청한다.
-5. 전용 GPT가 Actions로 가장 최근 스냅샷을 직접 조회한다.
-6. GPT가 롱·숏·관망, 진입구간, 손절, 무효화 조건, TP1~TP3와 포지션 관리안을 제시한다.
-7. 계산이 필요한 계획은 Actions의 순수 계산 API로 수수료·슬리피지·수량·순손익을 검증한다.
-8. 사용자가 Binance 화면에서 주문과 보호주문을 직접 실행한다.
+4. 별도 컨텍스트 수집기가 무료 공식·공개 소스의 뉴스·거시경제·옵션·온체인 정보를 낮은 빈도로 갱신한다.
+5. 사용자가 전용 GPT에 `지금 분석해줘`, `뉴스 포함 분석해줘`, `내 포지션 봐줘` 또는 `2개월 전망을 정리해줘`라고 요청한다.
+6. 전용 GPT가 Actions로 가장 최근 시장 스냅샷을 직접 조회한다.
+7. 요청 범위나 위험 플래그에 따라 GPT가 외부 컨텍스트를 추가 조회한다.
+8. GPT가 롱·숏·관망, 진입구간, 손절, 무효화 조건, TP1~TP3와 포지션 관리안 또는 조건부 중장기 시나리오를 제시한다.
+9. 계산이 필요한 계획은 Actions의 순수 계산 API로 수수료·슬리피지·수량·순손익을 검증한다.
+10. 사용자가 Binance 화면에서 주문과 보호주문을 직접 실행한다.
 
 프로그램은 GPT의 실시간 눈과 계산기다. GPT는 시장 분석가다. 사용자는 최종 결정권자이자 주문 실행자다.
 
@@ -67,7 +69,7 @@ Codex는 사용자가 `기획서 읽고 작업해`라고 요청하면 다음 순
 
 1. 거래소는 Binance만 지원한다.
 2. 상품은 USDⓈ-M Futures의 `BTCUSDT` 무기한 선물만 지원한다.
-3. 분석 시간봉은 `5m`, `15m`, `1h`, `4h`다.
+3. 실시간 실행 판단의 핵심 시간봉은 `5m`, `15m`, `1h`, `4h`다. `1d`, `1w`는 마감봉만 사용하는 중장기 참고 시간봉이며 단기 진입 트리거로 사용하지 않는다.
 4. 사용자 전략 기준 레버리지는 10배 고정이다.
 5. 사용자 전략 기준 마진 방식은 격리마진이다.
 6. 프로그램은 자동주문을 실행하지 않는다.
@@ -85,6 +87,11 @@ Codex는 사용자가 `기획서 읽고 작업해`라고 요청하면 다음 순
 18. 검증되지 않은 승률, 성공확률과 수익보장을 출력하지 않는다.
 19. 손실 중인 포지션에 대한 물타기를 기본적으로 권하지 않는다.
 20. ChatGPT Plus 구독료 외 추가 운영비 0원을 목표로 한다.
+21. 실시간 Binance 수집 경로는 언제나 외부 컨텍스트 수집보다 우선한다.
+22. 외부 컨텍스트는 별도 서비스·큐·신선도 상태를 사용하며 실패나 지연이 시장 데이터 분석 게이트를 차단하지 않는다.
+23. 자동 수집은 공식 문서화된 공개 API·RSS·WebSocket과 사용자가 발급한 무료 키만 사용한다.
+24. 유료 API, 비공식 사설 엔드포인트, 약관을 우회하는 스크래핑을 사용하지 않는다.
+25. 뉴스와 장기 자료는 미래 가격을 확정하거나 검증되지 않은 확률을 만드는 근거로 사용하지 않는다.
 
 ---
 
@@ -106,6 +113,8 @@ Codex는 사용자가 `기획서 읽고 작업해`라고 요청하면 다음 순
 - GPT 전달용 스냅샷 생성
 - 클립보드 전달 방식 제공
 - 최종 연동용 HTTPS 중계소 업로드
+- 실시간 경로와 분리된 외부 컨텍스트 수집·정규화·중복 제거
+- 중계소가 시장 조회 응답에 결합할 2KB 이하 `riskContext` 요약 생성
 - 연결과 데이터 오류 표시
 
 프로그램은 다음을 결정하지 않는다.
@@ -135,6 +144,8 @@ GPT는 요청할 때마다 최신 스냅샷을 조회한 후 다음을 담당한
 - 조건부 추가진입 가능 여부
 - 거래 취소조건과 반대 시나리오
 - 충돌하는 데이터와 주요 위험요인 설명
+- 뉴스·거시경제·옵션·온체인 자료의 출처·시각·신뢰등급을 구분한 해석
+- 30~90일 전망 요청 시 상승·하락·무효화 조건을 가진 시나리오 작성
 
 ### 4.3 사용자
 
@@ -159,10 +170,12 @@ GPT는 요청할 때마다 최신 스냅샷을 조회한 후 다음을 담당한
 | 거래소 | Binance |
 | 시장 | USDⓈ-M Futures |
 | 심볼 | BTCUSDT 무기한 선물 |
-| 시간봉 | 5m, 15m, 1h, 4h |
+| 핵심 시간봉 | 5m, 15m, 1h, 4h |
+| 참고 시간봉 | 1d, 1w 마감봉 |
 | 레버리지 기준 | 10x |
 | 마진 기준 | Isolated |
 | 시장 데이터 | Binance 공개 REST·WebSocket |
+| 외부 컨텍스트 | 무료 공식·공개 뉴스, 거시경제, 옵션, 온체인, 심리 지표 |
 | 계정 데이터 | 수동입력 + 선택적 읽기 전용 조회 |
 | 로컬 DB | SQLite |
 | AI 연동 | Custom GPT Actions |
@@ -212,6 +225,22 @@ GPT는 요청할 때마다 최신 스냅샷을 조회한 후 다음을 담당한
 - GPT는 스냅샷 생성시각이 기준을 넘으면 거래 분석을 거절한다.
 - 사용자에게 프로그램 실행과 연결 복구를 안내한다.
 
+### 6.5 뉴스 포함 실시간 분석
+
+1. GPT는 먼저 최신 시장 스냅샷을 조회한다.
+2. `riskContext`가 고위험 이벤트를 표시하거나 사용자가 뉴스를 명시하면 `getExternalContext`를 `INTRADAY`로 호출한다.
+3. 게시시각·수집시각·출처·신뢰등급을 확인하고 중복 보도를 하나의 사건으로 묶어 해석한다.
+4. 외부 컨텍스트가 오래됐거나 일부 소스가 실패했으면 시장 분석은 계속하되 뉴스 근거의 한계를 명시한다.
+5. 뉴스만으로 진입 방향을 뒤집거나 가격을 확정하지 않는다.
+
+### 6.6 30~90일 전망
+
+1. GPT는 최신 시장 스냅샷의 `1d`, `1w` 마감봉과 `getExternalContext(MACRO)`를 함께 조회한다.
+2. 거시 일정, 규제, 옵션 변동성, 온체인 상태와 장기 기술 구조를 분리해 정리한다.
+3. 단일 목표가를 예언하지 않고 상승·중립·하락 시나리오, 촉발 조건과 무효화 조건을 제시한다.
+4. 검증된 통계가 없으면 확률이나 적중률을 붙이지 않는다.
+5. 장기 전망을 현재 단기 진입 신호로 자동 변환하지 않는다.
+
 ---
 
 ## 7. 전체 아키텍처
@@ -220,9 +249,11 @@ GPT는 요청할 때마다 최신 스냅샷을 조회한 후 다음을 담당한
 
 ```mermaid
 flowchart TD
-    B[Binance 시장·계정 데이터] --> L[Windows 로컬 프로그램]
-    L --> D[로컬 차트·계산·SQLite]
-    L --> R[Cloudflare Worker·D1]
+    B[Binance 실시간 시장·계정] --> M[MarketDataService]
+    X[무료 외부 컨텍스트] --> C[ExternalContextService]
+    M --> L[로컬 차트·계산·SQLite]
+    M --> R[Cloudflare Worker·D1]
+    C --> R
     R --> G[전용 GPT Actions]
     G --> U[사용자 수동주문]
 ```
@@ -240,16 +271,18 @@ flowchart LR
 
 ### 7.3 데이터 흐름
 
-1. REST 초기화
-2. WebSocket 실시간 갱신
-3. Zod 검증
-4. 내부 도메인 타입으로 정규화
-5. 메모리 캐시와 SQLite 반영
-6. 객관적 지표·비용 계산
-7. 데이터 신선도 판정
-8. 스냅샷 생성
-9. 로컬 UI·클립보드·중계소가 동일 스냅샷 사용
-10. GPT Action 조회
+1. Binance REST 초기화
+2. Binance WebSocket 실시간 갱신
+3. 외부 컨텍스트는 별도 주기와 연결에서 병렬 수집
+4. 모든 외부 응답의 런타임 검증
+5. 내부 도메인 타입으로 정규화
+6. 시장 데이터는 메모리 캐시와 SQLite 반영
+7. 객관적 지표·비용 계산
+8. 시장 데이터 신선도와 외부 컨텍스트 신선도를 독립 판정
+9. 시장 스냅샷과 외부 컨텍스트 생성
+10. 로컬 UI·클립보드·중계소가 동일 시장 스냅샷 사용
+11. Worker가 최신 외부 위험 요약을 시장 응답에 결합
+12. GPT Action 조회
 
 화면용 값, 클립보드용 값과 Action용 값은 각각 다시 계산하지 않는다. 하나의 검증된 스냅샷을 여러 출력 경로가 공유한다.
 
@@ -288,6 +321,7 @@ flowchart LR
 다음을 Main에서만 처리한다.
 
 - Binance REST·WebSocket 연결
+- 시장 경로와 격리된 외부 컨텍스트 REST·RSS·WebSocket 연결
 - 계정 API 서명
 - 데이터 검증·정규화
 - 메모리 캐시와 SQLite
@@ -319,6 +353,7 @@ Raw `ipcRenderer`, 임의 채널 호출과 Node API를 노출하지 않는다.
 Renderer는 표시와 입력만 담당한다.
 
 - 차트와 시장 카드
+- 한 개의 압축된 외부 위험 카드
 - 연결·신선도 상태
 - 수동 포지션
 - 계산기
@@ -484,6 +519,14 @@ Renderer는 파일시스템, SQLite, `shell`, Binance 클라이언트, API Secre
 
 청산 이벤트가 없다는 것은 정상일 수 있다. 이벤트 부재를 연결 중단으로 판단하지 않고 WebSocket 연결 상태를 별도로 관리한다.
 
+### 10.5 중장기 참고 캔들
+
+- `1d`, `1w`는 Binance REST에서 마감봉만 수집한다.
+- 앱 시작 시와 새 마감봉이 확정된 뒤에만 갱신한다.
+- 진행 중인 일봉·주봉은 장기 시나리오의 확정 근거로 사용하지 않는다.
+- 1d·1w 누락은 단기 시장 분석 게이트를 차단하지 않지만 장기 전망 응답에는 `INSUFFICIENT_DATA`로 표시한다.
+- 장기 참고 캔들은 실시간 WebSocket 채널 수를 늘리지 않는다.
+
 ---
 
 ## 11. 데이터 신뢰성
@@ -568,6 +611,14 @@ GPT는 `analysisAllowed=false`인 경우 신규 진입 방향·가격·수량을
 - 화면 표시용 반올림값으로 내부 계산하지 않는다.
 - 원본 단위와 표시 단위를 분리한다.
 
+### 11.7 외부 컨텍스트 상태
+
+- 외부 소스는 시장 데이터와 별도의 `ContextStatus`와 `sourceHealth`를 가진다.
+- 하나의 소스가 실패해도 다른 소스와 Binance 시장 수집은 계속된다.
+- 외부 컨텍스트가 오래됐다는 이유만으로 `analysisGate.analysisAllowed`를 false로 바꾸지 않는다.
+- 다만 GPT는 오래된 외부 정보로 뉴스 기반 단정을 하지 않고 최신 확인이 불가능하다고 명시한다.
+- 게시시각과 수집시각을 분리하며 미래 시각, 비정상 URL, 지나치게 긴 본문과 중복 항목을 거부한다.
+
 ---
 
 ## 12. 객관적 지표
@@ -596,6 +647,7 @@ GPT는 `analysisAllowed=false`인 경우 신규 진입 방향·가격·수량을
 - 외부 라이브러리와 고정 fixture로 결과를 교차검증한다.
 - 지표 값으로 프로그램이 매수·매도 신호를 생성하지 않는다.
 - `EMA 정배열`, `과매수` 같은 해석 레이블을 핵심 도메인 로직으로 만들지 않는다.
+- `1d`, `1w`는 마감봉 기준 EMA·RSI·ATR·최근 고저점처럼 장기 맥락에 필요한 최소 지표만 계산한다.
 
 ---
 
@@ -767,6 +819,15 @@ rawQuantity = maxLoss / riskPerBtc
     "updatedAt": null
   },
   "costSettings": {},
+  "riskContext": {
+    "status": "UNAVAILABLE",
+    "updatedAt": null,
+    "highRiskNews": false,
+    "nextMacroEvent": null,
+    "binanceCriticalNotice": false,
+    "optionsVolatilityState": null,
+    "sourceWarnings": []
+  },
   "sourceHealth": {}
 }
 ```
@@ -818,6 +879,25 @@ rawQuantity = maxLoss / riskPerBtc
 
 GPT가 단순한 전체 상태뿐 아니라 어떤 데이터가 불완전한지 판단할 수 있어야 한다.
 
+### 14.5 `riskContext` 계약
+
+`getLatestSnapshot`에는 실시간 판단을 방해하지 않는 2,048 bytes 이하의 요약만 결합한다.
+
+필수 필드:
+
+- 외부 컨텍스트 전체 상태와 갱신시각
+- 고위험 뉴스 존재 여부와 대표 사건 ID
+- 다음 주요 거시 이벤트명·시각·남은 시간
+- Binance 중요 공지 존재 여부
+- 옵션 변동성 이상 여부
+- 온체인 또는 mempool 이상 여부
+- Fear & Greed 최신값과 기준시각
+- 소스 누락·지연 경고
+
+긴 기사 목록과 원문은 시장 스냅샷에 넣지 않는다. 상세 자료는 `getExternalContext`에서만 제공한다.
+
+Worker는 `GET /v1/snapshot/latest` 응답 시 D1의 최신 `external_context_summary`를 읽어 `riskContext`를 결합한다. 외부 요약 결합 실패는 시장 스냅샷 자체를 실패시키지 않고 `riskContext.status=UNAVAILABLE`과 경고만 반환한다.
+
 ---
 
 ## 15. 전용 GPT 응답 계약
@@ -840,6 +920,14 @@ GPT가 단순한 전체 상태뿐 아니라 어떤 데이터가 불완전한지 
 14. 손실 중인 포지션의 단순 물타기를 권하지 않는다.
 15. 보장, 확정, 무조건과 같은 표현을 사용하지 않는다.
 16. 실제 주문은 사용자가 직접 해야 한다고 명시한다.
+17. 기본 `지금 분석`은 `getLatestSnapshot` 한 번으로 끝내고, `riskContext`가 고위험을 표시하거나 사용자가 요청한 경우에만 상세 외부 컨텍스트를 조회한다.
+18. `뉴스 포함 분석`은 `getExternalContext(INTRADAY)`를 호출하고 각 사건의 출처 URL·게시시각·신뢰등급을 표시한다.
+19. `2개월 전망` 같은 30~90일 요청은 `getExternalContext(MACRO)`와 1d·1w 마감봉을 사용한다.
+20. 외부 컨텍스트는 시장 구조의 보조 근거이며, stale 외부 정보가 정상 시장 스냅샷 분석을 차단하지 않는다.
+21. 동일 사건의 반복 보도량을 독립된 여러 근거로 세지 않는다.
+22. 공식 자료, 복수 매체 확인, 단일 매체, 미확인·소셜 정보를 구분한다.
+23. 장기 전망은 조건부 시나리오와 무효화 조건으로 작성하며 단일 가격 경로를 확정하지 않는다.
+24. 자동 수집에 없는 X·Reddit·Telegram 정보는 사용자가 명시적으로 요청했을 때만 웹 검색으로 확인하고 미확인 정보로 표시한다.
 
 기본 답변 형식:
 
@@ -956,6 +1044,28 @@ D1을 선택하는 이유는 무료 KV의 쓰기 횟수보다 5초 갱신에 적
 - 수량, 비용, 손익, ROI와 오류를 반환
 - OpenAPI에 `x-openai-isConsequential: false` 명시
 
+#### `PUT /v1/context/latest`
+
+- 로컬 `ExternalContextService` 전용
+- 기존 `UPLOADER_WRITE_KEY` 인증
+- 정규화된 새 항목, source health와 horizon 요약을 업로드
+- body size, 항목 수, URL, timestamp, schemaVersion 검증
+- 오래된 context가 새 context를 덮어쓰지 못하게 함
+- D1 write가 성공한 뒤에만 성공 응답
+- 시장 snapshot 업로드와 별도 route·실패 상태 사용
+
+#### `GET /v1/context/latest?horizon=INTRADAY|SWING|MACRO`
+
+- GPT Action 전용
+- `ACTION_READ_KEY` 인증
+- 정규화·중복 제거된 최신 외부 컨텍스트 반환
+- horizon별 시간 범위와 항목 상한 적용
+- 게시시각·수집시각·출처 URL·신뢰등급·source health 포함
+- 기사 전체 본문, Secret과 사용자 계정정보는 반환하지 않음
+- `Cache-Control: no-store`
+- OpenAPI operationId는 `getExternalContext`
+- 조회 외부효과가 없으므로 `x-openai-isConsequential: false`
+
 ### 16.5 인증 분리
 
 두 개의 서로 다른 긴 랜덤 Secret을 사용한다.
@@ -997,6 +1107,7 @@ Cloudflare Worker는 정상 요청을 수 초가 아니라 가급적 1초 이내
 필수 operationId:
 
 - `getLatestSnapshot`
+- `getExternalContext`
 - `validateTradePlan`
 
 OpenAPI 스키마와 실제 Worker 계약은 자동 contract test로 일치시킨다.
@@ -1005,7 +1116,225 @@ OpenAPI 스키마와 실제 Worker 계약은 자동 contract test로 일치시�
 
 ---
 
-## 17. 복사·붙여넣기 보조 연동
+## 17. 무료 외부 컨텍스트 확장
+
+### 17.1 목적과 우선순위
+
+외부 컨텍스트는 실시간 거래 엔진을 대체하지 않는다. 목적은 다음 세 가지다.
+
+1. 갑작스러운 규제·거래소·거시 이벤트를 현재 분석에 경고로 제공
+2. 옵션과 온체인 상태로 현물·선물 차트에 보이지 않는 위험을 보강
+3. 30~90일 전망 요청에 조건부 시나리오를 작성할 근거 제공
+
+우선순위는 항상 다음과 같다.
+
+1. Binance 실시간 시장 데이터와 신선도
+2. 사용자의 현재 포지션과 비용·위험 계산
+3. 공식 공지와 예정된 거시 이벤트
+4. 옵션·온체인·심리 지표
+5. 일반 뉴스와 소셜 정보
+
+외부 수집 때문에 Binance WebSocket 처리, 5초 relay 업로드 또는 로컬 UI 갱신이 지연되어서는 안 된다.
+
+### 17.2 수집 구조
+
+`ExternalContextService`를 `MarketDataService`와 분리한다.
+
+- 별도 요청 큐, 타이머, timeout, retry와 backoff
+- 소스별 adapter와 런타임 스키마
+- 소스별 마지막 성공·실패·다음 예정시각
+- 수집 실패 시 마지막 값을 최신값으로 위장하지 않음
+- 시장 서비스와 메모리 캐시를 공유하지 않음
+- 외부 컨텍스트 업로드 실패가 시장 snapshot 업로드를 막지 않음
+- 앱 종료 시 각 연결과 타이머를 독립적으로 정리
+- 외부 소스가 모두 실패해도 실시간 시장 분석은 계속 가능
+
+### 17.3 무료 수집 소스
+
+| 범주 | 소스 | 방식 | 기본 주기 | 인증·조건 |
+| --- | --- | --- | ---: | --- |
+| Binance 공식 공지 | Binance Announcements | 공식 WebSocket `com_announcement_en` | push | 공개, 별도 독립 소켓 |
+| 글로벌 뉴스 | GDELT DOC 2.0 | HTTPS JSONFeed·JSON | 15분 | 공개 |
+| 한국 뉴스 | Naver 뉴스 검색 API | HTTPS JSON | 15분 | 무료 Client ID·Secret 필요 |
+| 미국 통화정책 | Federal Reserve | 공식 일정·RSS | 30분 | 공개 |
+| 미국 규제 | SEC | 공식 RSS | 30분 | 공개 |
+| 파생상품 규제 | CFTC | 공식 RSS | 30분 | 공개 |
+| 미국 물가·고용 | BLS | 공식 일정·RSS | 30분 | 공개 |
+| BTC 옵션 | Deribit public API | HTTPS JSON-RPC | 5분 | 공개 |
+| BTC 네트워크 지표 | Coin Metrics Community | HTTPS REST | 15분 | community endpoint 범위만 |
+| mempool·수수료 | mempool.space | HTTPS REST | 5분 | 공개 API 범위만 |
+| 시장 심리 | Alternative.me Fear & Greed | HTTPS REST | 6시간 | 공개 |
+
+주기는 기본값이며 공식 rate limit·응답 헤더·서비스 정책을 우선한다. 한 번의 실패로 짧은 간격 재시도를 반복하지 않는다.
+
+Naver 자격 증명은 선택사항이다. 사용자가 발급하지 않으면 한국 뉴스 소스만 `DISABLED`로 표시하고 나머지 기능은 정상 운영한다. Client ID와 Secret은 Electron Main의 `safeStorage`로 저장하고 Renderer·로그·GPT·Git에 노출하지 않는다.
+
+### 17.4 명시적으로 자동 수집하지 않는 소스
+
+무료 운영 원칙과 약관·안정성을 위해 다음은 자동 수집하지 않는다.
+
+- X API
+- Reddit API
+- Telegram 채널 자동 스크래핑
+- Glassnode
+- CryptoQuant
+- 유료 뉴스·ETF flow·소셜 집계 API
+- 비공식 웹페이지 내부 API
+- 로그인·CAPTCHA·지역제한을 우회하는 스크래핑
+- Cloudflare Workers AI
+- OpenAI API
+
+사용자가 특정 소문이나 게시물을 요청하면 전용 GPT의 웹 검색으로 확인할 수 있다. 이 결과는 자동 수집 데이터와 분리하고 `UNVERIFIED_SOCIAL` 또는 해당 출처 등급을 표시한다.
+
+### 17.5 정규화 레코드
+
+뉴스·공지 레코드는 원문 전체가 아니라 다음 메타데이터만 저장한다.
+
+```ts
+type ExternalContextItem = {
+  id: string;
+  source: string;
+  category: 'BINANCE' | 'MACRO' | 'REGULATION' | 'NEWS' | 'OPTIONS' | 'ONCHAIN' | 'SENTIMENT';
+  title: string;
+  snippet: string | null;
+  url: string;
+  publishedAt: number;
+  observedAt: number;
+  language: string | null;
+  trustTier: 'OFFICIAL' | 'MULTI_SOURCE' | 'SINGLE_SOURCE' | 'UNVERIFIED_SOCIAL';
+  btcRelevance: 'HIGH' | 'MEDIUM' | 'LOW';
+  duplicateGroupId: string | null;
+  duplicateCount: number;
+  tags: string[];
+};
+```
+
+원칙:
+
+- 기사·공지 전체 본문을 D1이나 GPT snapshot에 저장하지 않음
+- HTML을 제거하고 제목·짧은 snippet 길이를 제한
+- canonical URL, 정규화 제목과 게시시각으로 중복 제거
+- 같은 사건을 보도한 기사 수는 `duplicateCount`로만 표현
+- 프로그램은 LLM 없이 결정 가능한 정규화·키워드 분류만 수행
+- 긍정·부정 방향이나 가격 효과의 최종 판단은 GPT가 수행
+- 저작권과 각 소스의 이용조건을 준수
+
+### 17.6 옵션·온체인 요약
+
+Deribit public 데이터에서 계산 가능한 범위:
+
+- BTC 옵션 만기별 open interest
+- put/call OI 비율
+- 근접 만기 ATM implied volatility
+- 25-delta skew는 필요한 원시 필드가 충분할 때만 계산
+- 주요 만기와 만기까지 남은 시간
+- 신뢰 가능한 표본이 없으면 `null`과 이유
+
+Coin Metrics Community와 mempool.space에서 공개되는 범위:
+
+- 네트워크 활동·공급·수수료 관련 선택 지표
+- mempool 크기, 권장 수수료, 최근 블록 상태
+- source timestamp와 community 제공 범위
+- 유료 지표를 추정하거나 대체값으로 위장하지 않음
+
+Fear & Greed는 외부 제공 지표의 값·분류·기준시각만 전달하며 프로그램이 자체 공포·탐욕 점수를 만들지 않는다.
+
+### 17.7 신뢰등급과 사건 위험
+
+신뢰등급:
+
+1. `OFFICIAL`: Binance, Fed, SEC, CFTC, BLS 등 원발표
+2. `MULTI_SOURCE`: 독립된 복수 매체가 같은 사건을 확인
+3. `SINGLE_SOURCE`: 하나의 일반 매체
+4. `UNVERIFIED_SOCIAL`: 소셜 게시물·확인되지 않은 소문
+
+`highRiskNews`는 가격 방향 신호가 아니라 다음과 같은 운영 위험 플래그다.
+
+- BTCUSDT 거래·선물 시스템에 직접 영향을 주는 Binance 중요 공지
+- 예정 또는 방금 발표된 FOMC·CPI·고용 등 주요 거시 이벤트
+- 공식 기관의 BTC·거래소·ETF·파생상품 관련 중대 발표
+- 여러 신뢰 가능한 소스에서 확인된 보안 사고나 대규모 서비스 중단
+
+프로그램은 `highRiskNews=true`만 만들 수 있고 LONG·SHORT 방향을 만들지 않는다.
+
+### 17.8 저장과 보존
+
+D1 논리 테이블:
+
+- `external_context_items`: 정규화 항목과 중복 그룹
+- `external_context_state`: source health, cursor, 마지막 성공과 다음 수집시각
+- `external_context_summary`: horizon별 최신 압축 요약
+
+보존 기준:
+
+- INTRADAY 원자료: 72시간
+- SWING 원자료: 30일
+- MACRO 일정·공식자료: 180일
+- 중복·저관련 항목은 더 짧게 유지
+- 오래된 레코드는 배치 정리
+- 전체 기사 본문과 소셜 원문은 저장하지 않음
+
+정확한 보존기간은 D1 무료 사용량을 측정한 뒤 더 짧게 조정할 수 있다.
+
+### 17.9 Action 응답
+
+`getExternalContext(horizon)`:
+
+- `INTRADAY`: 최근 24시간과 향후 24시간의 거래 위험
+- `SWING`: 최근 7일과 향후 14일의 추세 보조 맥락
+- `MACRO`: 최근 30일과 향후 90일의 중장기 시나리오 자료
+
+각 응답에는 다음을 포함한다.
+
+- 생성시각과 전체 상태
+- 소스별 상태·마지막 성공·age
+- 중복 제거된 핵심 사건
+- 예정된 주요 이벤트
+- 옵션 요약
+- 온체인·mempool 요약
+- Fear & Greed
+- 누락·지연·비활성 소스
+- 각 사건의 출처 URL
+
+응답은 90,000자 이하이며 horizon별 항목 상한을 둔다. 신뢰등급과 BTC 관련성이 낮은 항목부터 제거한다.
+
+### 17.10 GPT 사용 모드
+
+| 사용자 요청 | 필수 Action | 원칙 |
+| --- | --- | --- |
+| 지금 분석 | `getLatestSnapshot` | riskContext로 충분하면 한 번만 호출 |
+| 뉴스 포함 분석 | snapshot + `getExternalContext(INTRADAY)` | 이벤트가 현재 구조에 미치는 위험만 보강 |
+| 스윙 관점 | snapshot + `getExternalContext(SWING)` | 4h·1d 중심, 단기 진입과 구분 |
+| 2개월 전망 | snapshot + `getExternalContext(MACRO)` | 1d·1w와 30~90일 조건부 시나리오 |
+| 특정 소문 확인 | 위 Action + 필요 시 웹 검색 | 공식 확인 여부와 출처 등급 명시 |
+
+### 17.11 무료 운영 한도
+
+- 기존 시장 snapshot 5초 업로드는 유지
+- 외부 컨텍스트는 최대 5분 주기이며 소스별 due time을 적용
+- 동일 자료를 매 주기 다시 쓰지 않음
+- 새 항목·상태 변경·요약 변경 때만 D1 write
+- 한 번의 실행에서 소스별 항목 수와 body 크기 제한
+- Worker·D1 무료 한도에 가까워지면 외부 수집부터 감속 또는 중단
+- 시장 snapshot 업로드와 조회는 끝까지 우선
+- 유료 전환을 자동으로 활성화하지 않음
+
+### 17.12 완료조건
+
+1. 외부 소스 실패가 Binance 실시간 상태와 `analysisAllowed`를 변경하지 않는다.
+2. `getLatestSnapshot`의 `riskContext`가 2KB 이하로 유지된다.
+3. `getExternalContext`가 세 horizon을 구분한다.
+4. 모든 뉴스 항목에 URL·게시시각·수집시각·신뢰등급이 있다.
+5. 중복 보도를 여러 독립 근거처럼 반환하지 않는다.
+6. Naver Secret과 모든 인증정보가 Renderer·로그·GPT·Git에 노출되지 않는다.
+7. 기사 전체 본문을 D1과 snapshot에 저장하지 않는다.
+8. 1d·1w 마감봉이 장기 전망에만 사용된다.
+9. 외부 컨텍스트가 stale이면 GPT가 한계를 말하되 정상 시장 분석은 계속한다.
+10. 운영비가 추가 0원 구조를 유지한다.
+
+---
+
+## 18. 복사·붙여넣기 보조 연동
 
 다음 기능은 초기 MVP이자 최종 연동 장애 시 fallback이다.
 
@@ -1022,9 +1351,9 @@ GPT URL은 사용자가 설정한다. 외부 URL은 `https://chatgpt.com`과 명
 
 ---
 
-## 18. Binance 계정 읽기 전용 연동
+## 19. Binance 계정 읽기 전용 연동
 
-### 18.1 목적
+### 19.1 목적
 
 최종적으로 GPT가 실제 사용자의 현재 포지션을 볼 수 있게 한다. 직접 연동 전과 오류 시에는 수동입력을 유지한다.
 
@@ -1041,7 +1370,7 @@ GPT URL은 사용자가 설정한다. 외부 URL은 `https://chatgpt.com`과 명
 - 실제 수수료율
 - 현재 미체결 주문과 보호주문 조회
 
-### 18.2 허용 경계
+### 19.2 허용 경계
 
 - signed `USER_DATA` 조회만 허용
 - 계정 클라이언트에 endpoint allowlist 적용
@@ -1052,7 +1381,7 @@ GPT URL은 사용자가 설정한다. 외부 URL은 `https://chatgpt.com`과 명
 
 가능하면 Binance에서 제공하는 최소 권한 키를 사용하고 출금 권한을 절대 활성화하지 않는다. 계정 키 권한 설정이 충분히 읽기 전용이 될 수 없는 경우 사용자는 수동 모드를 선택할 수 있다.
 
-### 18.3 Secret 저장
+### 19.3 Secret 저장
 
 - Main 프로세스에서만 취급
 - Electron `safeStorage`로 암호화 후 저장
@@ -1061,7 +1390,7 @@ GPT URL은 사용자가 설정한다. 외부 URL은 `https://chatgpt.com`과 명
 - 메모리에서 불필요해진 평문 참조를 오래 유지하지 않음
 - 연결 해제 시 저장값 삭제 기능 제공
 
-### 18.4 포지션 출처 우선순위
+### 19.4 포지션 출처 우선순위
 
 1. 정상 상태의 Binance 계정 조회
 2. 사용자가 명시적으로 선택한 최신 수동입력
@@ -1071,9 +1400,9 @@ GPT URL은 사용자가 설정한다. 외부 URL은 `https://chatgpt.com`과 명
 
 ---
 
-## 19. 화면 명세
+## 20. 화면 명세
 
-### 19.1 상단 상태
+### 20.1 상단 상태
 
 - 앱 상태
 - Binance REST 상태
@@ -1085,7 +1414,7 @@ GPT URL은 사용자가 설정한다. 외부 URL은 `https://chatgpt.com`과 명
 - `정상 / 지연 / 분석 금지`
 - 현재가·마크가격
 
-### 19.2 차트
+### 20.2 차트
 
 - 5m·15m·1h·4h 전환
 - 캔들
@@ -1096,7 +1425,7 @@ GPT URL은 사용자가 설정한다. 외부 URL은 `https://chatgpt.com`과 명
 - pivot high·low
 - 데이터 기준시각
 
-### 19.3 시장정보
+### 20.3 시장정보
 
 - last·mark·index price
 - spread
@@ -1107,9 +1436,11 @@ GPT URL은 사용자가 설정한다. 외부 URL은 `https://chatgpt.com`과 명
 - long/short ratios
 - liquidation summary
 - RSI·ATR·volume ratio
+- 1d·1w 마감봉 기반 장기 참고 상태
+- 외부 위험 카드: 고위험 뉴스, 다음 거시 이벤트, 옵션 변동성, 외부 갱신상태
 - 항목별 마지막 갱신시각
 
-### 19.4 포지션·계산기
+### 20.4 포지션·계산기
 
 - 자동조회·수동입력 출처
 - 방향·진입가·수량·증거금
@@ -1120,7 +1451,7 @@ GPT URL은 사용자가 설정한다. 외부 URL은 `https://chatgpt.com`과 명
 - 수동입력 수정시각
 - 초기화
 
-### 19.5 GPT 연동
+### 20.5 GPT 연동
 
 - 전용 GPT URL
 - 최신 스냅샷 상태
@@ -1131,7 +1462,7 @@ GPT URL은 사용자가 설정한다. 외부 URL은 `https://chatgpt.com`과 명
 - 복사
 - 복사 + GPT 열기
 
-### 19.6 설정
+### 20.6 설정
 
 - GPT URL
 - maker·taker 수수료
@@ -1147,7 +1478,7 @@ GPT URL은 사용자가 설정한다. 외부 URL은 `https://chatgpt.com`과 명
 
 자동실행 기본값은 꺼짐이다.
 
-### 19.7 알림
+### 20.7 알림
 
 거래 진입 알람과 자동 GPT 응답은 구현하지 않는다.
 
@@ -1161,7 +1492,7 @@ GPT URL은 사용자가 설정한다. 외부 URL은 `https://chatgpt.com`과 명
 
 ---
 
-## 20. 로컬 데이터베이스
+## 21. 로컬 데이터베이스
 
 SQLite는 migration version을 관리한다. `node:sqlite`는 `AppDatabase` 인터페이스 뒤에 둔다.
 
@@ -1214,7 +1545,21 @@ Secret 평문은 저장하지 않는다.
 - status
 - upload result
 
-전체 GPT payload 원문과 민감한 계정 응답은 기본 저장하지 않는다.
+### `external_context_items`
+
+- 정규화 뉴스·공지·이벤트 메타데이터
+- source·category·trust tier
+- canonical URL
+- published·observed timestamp
+- duplicate group과 relevance
+
+### `external_context_state`
+
+- source별 상태·cursor
+- 마지막 성공·실패
+- 다음 수집 예정시각
+
+전체 GPT payload 원문, 기사 전체 본문과 민감한 계정 응답은 기본 저장하지 않는다.
 
 ### 보존
 
@@ -1225,7 +1570,7 @@ Secret 평문은 저장하지 않는다.
 
 ---
 
-## 21. 로그와 진단
+## 22. 로그와 진단
 
 기록 가능:
 
@@ -1239,6 +1584,8 @@ Secret 평문은 저장하지 않는다.
 - 스냅샷 생성 크기와 상태
 - 중계 업로드 성공·실패
 - Action 서버 오류 코드
+- 외부 source 연결·수집 성공·실패 요약
+- 외부 중복 제거·보존 정리 건수
 
 기록 금지:
 
@@ -1265,9 +1612,9 @@ Pino redaction 대상에는 최소 다음 이름을 포함한다.
 
 ---
 
-## 22. 비용 정책
+## 23. 비용 정책
 
-### 22.1 비용 구조
+### 23.1 비용 구조
 
 | 항목 | 목표비용 | 조건 |
 | --- | ---: | --- |
@@ -1278,10 +1625,11 @@ Pino redaction 대상에는 최소 다음 이름을 포함한다.
 | Custom GPT | 별도 API 과금 없음 | 사용자의 ChatGPT 플랜과 사용한도 적용 |
 | Cloudflare Workers | 0원 | Free 한도 내 |
 | Cloudflare D1 | 0원 | Free 한도 내 |
+| 외부 컨텍스트 | 0원 | 공식 공개 API·RSS·WebSocket과 사용자 무료 Naver key만 사용 |
 | HTTPS 주소 | 0원 | `workers.dev` 사용 |
 | 별도 도메인 | 사용하지 않음 | 원하면 향후 유료 구매 |
 
-### 22.2 무료 한도 보호
+### 23.2 무료 한도 보호
 
 - 업로드 기본 5초
 - 단일 최신 행 upsert
@@ -1296,13 +1644,13 @@ Pino redaction 대상에는 최소 다음 이름을 포함한다.
 
 ---
 
-## 23. 보안 위협과 대응
+## 24. 보안 위협과 대응
 
-### 23.1 중계 endpoint 유출
+### 24.1 중계 endpoint 유출
 
 URL만 알아도 데이터를 읽을 수 없도록 Action API key 인증을 사용한다.
 
-### 23.2 업로드 키 탈취
+### 24.2 업로드 키 탈취
 
 - 조회 키와 분리
 - Worker Secret
@@ -1311,7 +1659,7 @@ URL만 알아도 데이터를 읽을 수 없도록 Action API key 인증을 사�
 - 요청 크기·빈도 제한
 - 스키마 검증
 
-### 23.3 스냅샷 변조
+### 24.3 스냅샷 변조
 
 - HTTPS
 - 인증
@@ -1321,15 +1669,15 @@ URL만 알아도 데이터를 읽을 수 없도록 Action API key 인증을 사�
 - 10배·격리 전략값 검증
 - 이상치와 미래 timestamp 거부
 
-### 23.4 오래된 데이터 재사용
+### 24.4 오래된 데이터 재사용
 
 Worker가 로컬 앱의 상태값을 그대로 믿지 않고 서버 현재시각으로 age를 다시 계산한다.
 
-### 23.5 Renderer 침해
+### 24.5 Renderer 침해
 
 Secret과 네트워크 클라이언트를 Main에 격리하고 제한된 IPC만 사용한다.
 
-### 23.6 주문 위험
+### 24.6 주문 위험
 
 - 주문 endpoint 미구현
 - OpenAPI에 주문 operation 없음
@@ -1339,7 +1687,7 @@ Secret과 네트워크 클라이언트를 Main에 격리하고 제한된 IPC만 
 
 ---
 
-## 24. 단계별 개발 계획
+## 25. 단계별 개발 계획
 
 기존 Phase 0 코드는 폐기하지 않는다. 현재 코드가 완료조건을 만족하는지 검사한 뒤 부족한 부분만 보완한다.
 
@@ -1514,11 +1862,40 @@ Secret과 네트워크 클라이언트를 Main에 격리하고 제한된 IPC만 
 6. clean Windows 환경 설치·실행
 7. 최종 사용 시나리오 전체 통과
 
+### Phase 7 — 무료 외부 컨텍스트 확장
+
+구현 순서:
+
+1. 1d·1w 마감봉과 schemaVersion 확장
+2. `ExternalContextService`, 공통 adapter 계약과 source health
+3. Binance Announcement 독립 WebSocket
+4. Deribit·mempool.space·Coin Metrics Community·Fear & Greed adapter
+5. Fed·SEC·CFTC·BLS 공식 일정·RSS adapter
+6. GDELT와 선택적 Naver 뉴스 adapter
+7. 정규화·중복 제거·신뢰등급·보존 정리
+8. D1 migration과 external context upload/read
+9. `riskContext` 결합과 `getExternalContext` route
+10. 로컬 외부 위험 카드
+11. OpenAPI와 GPT Instructions 최종 적용
+
+완료조건:
+
+1. 기존 5초 시장 업로드와 UI 갱신 주기에 회귀가 없음
+2. source별 timeout·backoff·stale·disabled 상태 확인
+3. 공식 원자료와 정규화 결과가 일치
+4. Naver 미설정 상태에서도 나머지 소스 정상
+5. D1 무료 한도 보호와 보존 정리 동작
+6. `riskContext` 2KB, 전체 Action 응답 90,000자 제한 준수
+7. Worker 배포 후 세 horizon 실제 조회
+8. 전용 GPT에서 지금 분석·뉴스 포함·2개월 전망 흐름 확인
+9. OpenAI API와 유료 외부 API를 사용하지 않음
+10. 자동주문·프로그램 자체 방향 신호가 추가되지 않음
+
 ---
 
-## 25. 테스트 전략
+## 26. 테스트 전략
 
-### 25.1 단위 테스트
+### 26.1 단위 테스트
 
 - 외부 schema validation
 - candle upsert
@@ -1536,7 +1913,7 @@ Secret과 네트워크 클라이언트를 Main에 격리하고 제한된 IPC만 
 - payload size reduction
 - secret redaction
 
-### 25.2 통합 테스트
+### 26.2 통합 테스트
 
 - REST 초기화 → WebSocket 갱신
 - disconnect → reconnect → REST 복구
@@ -1547,9 +1924,9 @@ Secret과 네트워크 클라이언트를 Main에 격리하고 제한된 IPC만 
 - Worker → D1
 - OpenAPI → 실제 route
 
-외부 API 테스트는 recorded fixture를 기본으로 하고 실제 네트워크 smoke test를 분리한다.
+외부 API 테스트는 recorded fixture를 기본으로 하고 실제 네트워크 smoke test를 분리한다. 단, 이 절의 테스트는 사용자가 명시적으로 요청한 경우에만 생성·실행한다.
 
-### 25.3 E2E
+### 26.3 E2E
 
 - 첫 실행
 - 시장 데이터 표시
@@ -1562,7 +1939,7 @@ Secret과 네트워크 클라이언트를 Main에 격리하고 제한된 IPC만 
 - 트레이
 - 재실행
 
-### 25.4 보안 테스트
+### 26.4 보안 테스트
 
 - 허용되지 않은 IPC 거부
 - 외부 navigation 차단
@@ -1574,7 +1951,7 @@ Secret과 네트워크 클라이언트를 Main에 격리하고 제한된 IPC만 
 - payload 계정정보 미포함
 - 주문 관련 route·client method 부재 확인
 
-### 25.5 계산 테스트
+### 26.5 계산 테스트
 
 대표 fixture:
 
@@ -1591,7 +1968,7 @@ Secret과 네트워크 클라이언트를 Main에 격리하고 제한된 IPC만 
 
 ---
 
-## 26. 저장소와 코드 구조 원칙
+## 27. 저장소와 코드 구조 원칙
 
 구체적인 폴더명은 현재 저장소 구조를 우선하되 책임은 분리한다.
 
@@ -1637,7 +2014,7 @@ tests/
 
 ---
 
-## 27. Git 작업 원칙
+## 28. Git 작업 원칙
 
 - 관련 없는 사용자 변경을 되돌리지 않는다.
 - 하나의 커밋은 하나의 명확한 목적을 가진다.
@@ -1658,7 +2035,7 @@ tests/
 
 ---
 
-## 28. 명시적 제외 범위
+## 29. 명시적 제외 범위
 
 다음은 최종 제품 범위에 포함하지 않는다.
 
@@ -1678,7 +2055,10 @@ tests/
 - 백테스트
 - 모의매매 성과검증
 - 거래일지
-- 소셜·뉴스 분석
+- X·Reddit·Telegram 자동 수집
+- 유료 뉴스·소셜·온체인·ETF flow API
+- 약관을 우회하는 스크래핑
+- 프로그램 자체 뉴스 방향 점수와 가격 예측
 - 다른 거래소
 - BTC 이외 코인
 - 모바일 앱
@@ -1690,7 +2070,7 @@ tests/
 
 ---
 
-## 29. 최종 완료 기준
+## 30. 최종 완료 기준
 
 다음이 모두 충족되면 제품의 큰 그림이 완성된 것으로 본다.
 
@@ -1712,12 +2092,19 @@ tests/
 16. 모든 실제 주문은 사용자가 직접 실행한다.
 17. Secret이 Renderer·로그·GPT·Git에 노출되지 않는다.
 18. Cloudflare 무료 한도 안에서 운영된다.
-19. 주요 단위·통합·E2E·보안 테스트가 통과한다.
+19. 사용자가 요청한 범위의 검증과 Windows 운영 빌드가 통과한다.
 20. 프로그램과 GPT의 역할이 중복되지 않는다.
+21. 1d·1w 마감봉이 중장기 참고자료로 제공된다.
+22. 무료 외부 컨텍스트 수집이 실시간 시장 경로와 격리된다.
+23. 시장 snapshot에 2KB 이하 `riskContext`가 결합된다.
+24. GPT가 `getExternalContext`로 INTRADAY·SWING·MACRO를 구분해 조회한다.
+25. 모든 외부 사건에 출처·시각·신뢰등급이 포함된다.
+26. 외부 컨텍스트 장애가 정상 실시간 시장 분석을 차단하지 않는다.
+27. 유료 API 없이 추가 운영비 0원 구조를 유지한다.
 
 ---
 
-## 30. 공식 참고자료
+## 31. 공식 참고자료
 
 기술 구현 전 기준 변경 여부를 다시 확인한다.
 
@@ -1741,6 +2128,20 @@ tests/
 - [D1 한도](https://developers.cloudflare.com/d1/platform/limits/)
 - [`workers.dev` 주소](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)
 
+### 외부 컨텍스트
+
+- [Binance Announcements](https://developers.binance.com/en/docs/products/announcements/announcement)
+- [GDELT DOC 2.0](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/)
+- [Naver 뉴스 검색 API](https://developers.naver.com/docs/serviceapi/search/news/news.md)
+- [Deribit public market data](https://docs.deribit.com/api-reference/market-data/public-get_book_summary_by_currency)
+- [Coin Metrics Community API](https://docs.coinmetrics.io/api/v4/)
+- [mempool.space REST API](https://mempool.space/docs/api/rest)
+- [Alternative.me Crypto API](https://alternative.me/crypto/api/)
+- [Federal Reserve RSS](https://www.federalreserve.gov/feeds/feeds.htm)
+- [SEC RSS](https://www.sec.gov/about/rss-feeds)
+- [CFTC RSS](https://www.cftc.gov/RSS/index.htm)
+- [BLS RSS](https://www.bls.gov/help/hlp_rss.htm)
+
 ### Electron
 
 - [Electron 보안 체크리스트](https://www.electronjs.org/docs/latest/tutorial/security)
@@ -1749,10 +2150,10 @@ tests/
 
 ---
 
-## 31. 최종 선언
+## 32. 최종 선언
 
 `BTC Futures Assistant`는 자동매매 프로그램이나 독립 신호 프로그램이 아니다.
 
-프로그램은 Binance BTCUSDT 선물시장을 실시간으로 관찰하고, 신뢰할 수 있는 데이터와 정확한 계산값을 만든다. 전용 GPT는 사용자가 요청한 순간 그 최신 데이터를 직접 조회해 시장과 포지션을 해석한다. 사용자는 분석을 참고하여 Binance에서 최종 결정을 내리고 주문을 직접 실행한다.
+프로그램은 Binance BTCUSDT 선물시장을 실시간으로 관찰하고, 신뢰할 수 있는 데이터와 정확한 계산값을 만든다. 무료 외부 컨텍스트는 별도 경로에서 뉴스·거시경제·옵션·온체인 위험을 보강하지만 실시간 시장 엔진과 진입 판단을 대신하지 않는다. 전용 GPT는 사용자가 요청한 순간 최신 시장과 필요한 컨텍스트를 직접 조회해 시장·포지션·조건부 전망을 해석한다. 사용자는 분석을 참고하여 Binance에서 최종 결정을 내리고 주문을 직접 실행한다.
 
 이 역할 분리가 프로젝트 전체 설계와 모든 구현 판단의 최우선 기준이다.
