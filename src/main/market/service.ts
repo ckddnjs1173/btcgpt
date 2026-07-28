@@ -16,7 +16,7 @@ import {
 } from '../binance/public/rest';
 import { logger } from '../logging/logger';
 import { percentageChange } from '../../shared/calculations/market';
-import { MarketCache } from './cache';
+import { MarketCache, type MarketStreamChannel } from './cache';
 import { normalizeRestCandle } from './normalize';
 import { TIMEFRAMES } from './types';
 import type { Candle } from './types';
@@ -46,16 +46,20 @@ const DEFAULT_DEPENDENCIES = {
 
 type MarketDataDependencies = typeof DEFAULT_DEPENDENCIES;
 
-const WS_URL =
-  'wss://fstream.binance.com/stream?streams=' +
-  [
+const STREAM_CHANNELS = ['public', 'market'] as const;
+const WS_URLS: Record<MarketStreamChannel, string> = {
+  public:
+    'wss://fstream.binance.com/public/stream?streams=' +
+    ['btcusdt@bookTicker', 'btcusdt@depth20@100ms'].join('/'),
+  market:
+    'wss://fstream.binance.com/market/stream?streams=' +
+    [
     'btcusdt@aggTrade',
     'btcusdt@markPrice@1s',
     ...TIMEFRAMES.map((tf) => `btcusdt@kline_${tf}`),
-    'btcusdt@bookTicker',
-    'btcusdt@depth20@100ms',
     'btcusdt@forceOrder',
-  ].join('/');
+    ].join('/'),
+};
 
 const streamEnvelopeSchema = z.object({
   stream: z.string(),
@@ -124,16 +128,34 @@ const forceOrderSchema = z.object({
 
 export class MarketDataService {
   readonly cache = new MarketCache();
-  private socket: WebSocket | null = null;
+  private readonly sockets: Record<MarketStreamChannel, WebSocket | null> = {
+    public: null,
+    market: null,
+  };
   private stopping = false;
-  private reconnectTimer: NodeJS.Timeout | null = null;
+  private readonly reconnectTimers: Record<
+    MarketStreamChannel,
+    NodeJS.Timeout | null
+  > = {
+    public: null,
+    market: null,
+  };
   private pollTimer: NodeJS.Timeout | null = null;
   private candlePollTimer: NodeJS.Timeout | null = null;
   private statisticsTimer: NodeJS.Timeout | null = null;
   private serverTimeTimer: NodeJS.Timeout | null = null;
   private exchangeInfoTimer: NodeJS.Timeout | null = null;
-  private plannedReconnectTimer: NodeJS.Timeout | null = null;
-  private reconnectAttempt = 0;
+  private readonly plannedReconnectTimers: Record<
+    MarketStreamChannel,
+    NodeJS.Timeout | null
+  > = {
+    public: null,
+    market: null,
+  };
+  private readonly reconnectAttempts: Record<MarketStreamChannel, number> = {
+    public: 0,
+    market: 0,
+  };
   private serverOffsetMs = 0;
 
   private readonly dependencies: MarketDataDependencies;
@@ -156,7 +178,7 @@ export class MarketDataService {
         this.cache.upsertCandle(candle);
     }
     await this.bootstrap();
-    this.connect();
+    for (const channel of STREAM_CHANNELS) this.connect(channel);
     this.pollTimer = setInterval(() => {
       void this.refreshFast().catch((error: unknown) => {
         this.cache.recordValidationError('REST_REFRESH_FAILED');
@@ -189,18 +211,24 @@ export class MarketDataService {
   stop(): void {
     this.stopping = true;
     for (const timer of [
-      this.reconnectTimer,
       this.pollTimer,
       this.candlePollTimer,
       this.statisticsTimer,
       this.serverTimeTimer,
       this.exchangeInfoTimer,
-      this.plannedReconnectTimer,
     ])
       if (timer) clearTimeout(timer);
-    this.socket?.close();
-    this.socket = null;
-    this.cache.setConnected(false, 'service stopped');
+    for (const channel of STREAM_CHANNELS) {
+      const reconnectTimer = this.reconnectTimers[channel];
+      const plannedReconnectTimer = this.plannedReconnectTimers[channel];
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (plannedReconnectTimer) clearTimeout(plannedReconnectTimer);
+      this.reconnectTimers[channel] = null;
+      this.plannedReconnectTimers[channel] = null;
+      this.sockets[channel]?.close();
+      this.sockets[channel] = null;
+      this.cache.setStreamConnected(channel, false, 'service stopped');
+    }
   }
 
   ingestRecordedMessage(raw: string, receivedAt = Date.now()): void {
@@ -463,49 +491,67 @@ export class MarketDataService {
     });
   }
 
-  private connect(): void {
+  private connect(channel: MarketStreamChannel): void {
     if (this.stopping) return;
-    const socket = this.dependencies.createSocket(WS_URL);
-    this.socket = socket;
+    const socket = this.dependencies.createSocket(WS_URLS[channel]);
+    this.sockets[channel] = socket;
     socket.addEventListener('open', () => {
-      this.reconnectAttempt = 0;
-      this.cache.setConnected(true);
-      this.plannedReconnectTimer = setTimeout(
+      if (this.sockets[channel] !== socket) return;
+      this.reconnectAttempts[channel] = 0;
+      this.cache.setStreamConnected(channel, true);
+      this.plannedReconnectTimers[channel] = setTimeout(
         () => socket.close(1000, 'planned reconnect'),
         23 * 60 * 60_000,
       );
-      logger.info('Binance public WebSocket connected');
+      logger.info({ channel }, 'Binance WebSocket connected');
     });
     socket.addEventListener('message', (event) => {
       try {
         this.ingestRecordedMessage(String(event.data), Date.now());
       } catch (error) {
-        logger.warn({ error }, 'Binance WebSocket schema validation failed');
+        logger.warn(
+          { channel, error },
+          'Binance WebSocket schema validation failed',
+        );
       }
     });
     socket.addEventListener('error', () => {
-      logger.warn('Binance public WebSocket error');
+      logger.warn({ channel }, 'Binance WebSocket error');
     });
     socket.addEventListener('close', () => {
-      if (this.plannedReconnectTimer) clearTimeout(this.plannedReconnectTimer);
-      this.plannedReconnectTimer = null;
-      this.cache.setConnected(false, 'WebSocket disconnected');
-      this.scheduleReconnect();
+      if (this.sockets[channel] !== socket) return;
+      const plannedReconnectTimer = this.plannedReconnectTimers[channel];
+      if (plannedReconnectTimer) clearTimeout(plannedReconnectTimer);
+      this.plannedReconnectTimers[channel] = null;
+      this.sockets[channel] = null;
+      this.cache.setStreamConnected(
+        channel,
+        false,
+        `${channel} WebSocket disconnected`,
+      );
+      this.scheduleReconnect(channel);
     });
   }
 
-  private scheduleReconnect(): void {
-    if (this.stopping || this.reconnectTimer) return;
-    const base = Math.min(30_000, 1_000 * 2 ** this.reconnectAttempt);
+  private scheduleReconnect(channel: MarketStreamChannel): void {
+    if (this.stopping || this.reconnectTimers[channel]) return;
+    const base = Math.min(
+      30_000,
+      1_000 * 2 ** this.reconnectAttempts[channel],
+    );
     const delay = Math.round(base * (0.8 + Math.random() * 0.4));
-    this.reconnectAttempt += 1;
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
+    this.reconnectAttempts[channel] += 1;
+    this.reconnectTimers[channel] = setTimeout(() => {
+      this.reconnectTimers[channel] = null;
+      if (channel === 'public') {
+        this.connect(channel);
+        return;
+      }
       void Promise.all(TIMEFRAMES.map((tf) => this.recoverTimeframe(tf)))
-        .catch((error: unknown) =>
-          logger.warn({ error }, 'REST gap recovery failed'),
-        )
-        .finally(() => this.connect());
+        .catch((error: unknown) => {
+          logger.warn({ channel, error }, 'REST gap recovery failed');
+        })
+        .finally(() => this.connect(channel));
     }, delay);
   }
 

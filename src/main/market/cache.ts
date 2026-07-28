@@ -15,6 +15,19 @@ import {
 
 const MAX_CANDLES = 500;
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1_000;
+export type MarketStreamChannel = 'public' | 'market';
+
+const SOURCE_CHANNELS: Record<string, MarketStreamChannel> = {
+  market: 'market',
+  depth: 'public',
+  bookTicker: 'public',
+  trades: 'market',
+  liquidations: 'market',
+  'candle:5m': 'market',
+  'candle:15m': 'market',
+  'candle:1h': 'market',
+  'candle:4h': 'market',
+};
 
 export class MarketCache {
   private readonly closed = new Map<Timeframe, Map<number, Candle>>(
@@ -27,12 +40,32 @@ export class MarketCache {
   >();
   private readonly trades: TradeEvent[] = [];
   private readonly liquidations: LiquidationEvent[] = [];
-  private reconnectCount = 0;
   private lastEventAt: number | null = null;
-  private connected = false;
   private message: string | null = null;
   private validationError: string | null = null;
   private consecutiveFailures = 0;
+  private readonly streamStates: Record<
+    MarketStreamChannel,
+    {
+      connected: boolean;
+      reconnectCount: number;
+      consecutiveFailures: number;
+      message: string | null;
+    }
+  > = {
+    public: {
+      connected: false,
+      reconnectCount: 0,
+      consecutiveFailures: 0,
+      message: null,
+    },
+    market: {
+      connected: false,
+      reconnectCount: 0,
+      consecutiveFailures: 0,
+      message: null,
+    },
+  };
 
   readonly depth: DepthState = {
     bids: [],
@@ -97,15 +130,25 @@ export class MarketCache {
   }
 
   setConnected(connected: boolean, message: string | null = null): void {
-    if (connected && !this.connected) this.reconnectCount += 1;
-    this.connected = connected;
-    this.message = message;
+    this.setStreamConnected('public', connected, message);
+    this.setStreamConnected('market', connected, message);
+  }
+
+  setStreamConnected(
+    channel: MarketStreamChannel,
+    connected: boolean,
+    message: string | null = null,
+  ): void {
+    const state = this.streamStates[channel];
+    if (connected && !state.connected) state.reconnectCount += 1;
+    state.connected = connected;
+    state.message = message;
     if (connected) {
       this.lastEventAt = Date.now();
-      this.consecutiveFailures = 0;
+      state.consecutiveFailures = 0;
       this.validationError = null;
     } else {
-      this.consecutiveFailures += 1;
+      state.consecutiveFailures += 1;
     }
   }
 
@@ -190,8 +233,12 @@ export class MarketCache {
     return Object.fromEntries(
       Object.entries(thresholds).map(([source, [delayed, stale]]) => {
         const time = this.sourceTimes.get(source);
+        const channel = SOURCE_CHANNELS[source];
+        const streamState = channel
+          ? this.streamStates[channel]
+          : null;
         const ageMs = time ? now - time.receivedAt : Number.POSITIVE_INFINITY;
-        const status: DataStatus = !this.connected
+        const status: DataStatus = streamState && !streamState.connected
           ? 'DISCONNECTED'
           : !time
             ? 'INSUFFICIENT_DATA'
@@ -209,10 +256,14 @@ export class MarketCache {
             receivedTime: time?.receivedAt ?? null,
             lastSuccess: time?.receivedAt ?? null,
             ageMs,
-            reconnectCount: Math.max(0, this.reconnectCount - 1),
-            consecutiveFailures: this.consecutiveFailures,
+            reconnectCount: streamState
+              ? Math.max(0, streamState.reconnectCount - 1)
+              : 0,
+            consecutiveFailures:
+              (streamState?.consecutiveFailures ?? 0) +
+              this.consecutiveFailures,
             validationError: this.validationError,
-            message: this.message,
+            message: streamState?.message ?? this.message,
           },
         ];
       }),
@@ -233,9 +284,15 @@ export class MarketCache {
       (source) => sources[source]?.status ?? 'INSUFFICIENT_DATA',
     );
     let status: DataStatus;
-    if (!this.connected) status = 'DISCONNECTED';
+    if (
+      !this.streamStates.public.connected &&
+      !this.streamStates.market.connected
+    )
+      status = 'DISCONNECTED';
     else if (TIMEFRAMES.some((tf) => this.getClosed(tf).length < 250))
       status = 'INSUFFICIENT_DATA';
+    else if (statuses.some((value) => value === 'DISCONNECTED'))
+      status = 'DISCONNECTED';
     else if (statuses.some((value) => value === 'STALE')) status = 'STALE';
     else if (statuses.some((value) => value === 'INSUFFICIENT_DATA'))
       status = 'INSUFFICIENT_DATA';
@@ -252,8 +309,13 @@ export class MarketCache {
       receivedTime: this.lastEventAt,
       lastSuccess: this.lastEventAt,
       ageMs,
-      reconnectCount: Math.max(0, this.reconnectCount - 1),
-      consecutiveFailures: this.consecutiveFailures,
+      reconnectCount:
+        Math.max(0, this.streamStates.public.reconnectCount - 1) +
+        Math.max(0, this.streamStates.market.reconnectCount - 1),
+      consecutiveFailures:
+        this.consecutiveFailures +
+        this.streamStates.public.consecutiveFailures +
+        this.streamStates.market.consecutiveFailures,
       validationError: this.validationError,
       message: this.message,
     };
