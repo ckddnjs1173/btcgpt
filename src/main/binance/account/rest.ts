@@ -14,6 +14,7 @@ const ALLOWED_PATHS = new Set([
 const positionSchema = z.array(
   z.object({
     symbol: z.literal('BTCUSDT'),
+    positionSide: z.enum(['BOTH', 'LONG', 'SHORT']),
     positionAmt: numericStringSchema,
     entryPrice: numericStringSchema,
     breakEvenPrice: numericStringSchema.optional(),
@@ -129,12 +130,24 @@ export class BinanceAccountClient {
       configuration.marginType.toLowerCase() !== 'isolated'
     )
       throw new Error('BTCUSDT must be configured as 10x isolated');
-    const item = raw.find((position) => position.symbol === 'BTCUSDT');
-    if (!item || Number(item.positionAmt) === 0) return null;
+    const activePositions = raw.filter(
+      (position) =>
+        position.symbol === 'BTCUSDT' && Number(position.positionAmt) !== 0,
+    );
+    if (activePositions.length === 0) return null;
+    if (activePositions.length > 1)
+      throw new Error('Multiple active BTCUSDT position legs are not supported');
+    const item = activePositions[0]!;
     const amount = Number(item.positionAmt);
+    const side =
+      item.positionSide === 'LONG' || item.positionSide === 'SHORT'
+        ? item.positionSide
+        : amount > 0
+          ? 'LONG'
+          : 'SHORT';
     return {
       source: 'BINANCE_READ_ONLY',
-      side: amount > 0 ? 'LONG' : 'SHORT',
+      side,
       quantity: Math.abs(amount),
       entryPrice: Number(item.entryPrice),
       breakEvenPrice: item.breakEvenPrice ? Number(item.breakEvenPrice) : null,
