@@ -51,11 +51,20 @@ export class RelayUploader {
 
   async testConnection(): Promise<void> {
     const response = await fetch(
-      new URL('/health', this.configuration.baseUrl),
-      { signal: AbortSignal.timeout(4_000) },
+      new URL('/v1/uploader/status', this.configuration.baseUrl),
+      {
+        headers: {
+          authorization: `Bearer ${this.configuration.uploadKey}`,
+        },
+        signal: AbortSignal.timeout(4_000),
+      },
     );
     if (!response.ok)
-      throw new Error(`Relay health returned HTTP ${response.status}`);
+      throw new Error(
+        response.status === 401
+          ? 'Relay upload key was rejected'
+          : `Relay readiness returned HTTP ${response.status}`,
+      );
   }
 
   private requestUpload(): void {
