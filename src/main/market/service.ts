@@ -47,6 +47,7 @@ const DEFAULT_DEPENDENCIES = {
 type MarketDataDependencies = typeof DEFAULT_DEPENDENCIES;
 
 const STREAM_CHANNELS = ['public', 'market'] as const;
+const STATISTICS_TIMEFRAMES = ['5m', '15m', '1h', '4h'] as const;
 const WS_URLS: Record<MarketStreamChannel, string> = {
   public:
     'wss://fstream.binance.com/public/stream?streams=' +
@@ -459,12 +460,12 @@ export class MarketDataService {
         this.dependencies.fetchRatioHistory(
           '/futures/data/takerlongshortRatio',
         ),
-        ...TIMEFRAMES.map((timeframe) =>
+        ...STATISTICS_TIMEFRAMES.map((timeframe) =>
           this.dependencies.fetchOpenInterestHistory(timeframe, 2),
         ),
       ]);
     const openInterestChanges = Object.fromEntries(
-      TIMEFRAMES.map((timeframe, index) => {
+      STATISTICS_TIMEFRAMES.map((timeframe, index) => {
         const history = oiHistories[index] ?? [];
         return [
           timeframe,

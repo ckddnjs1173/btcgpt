@@ -1,7 +1,7 @@
 import type { DataStatus } from '../../shared/contracts';
 
 export const SYMBOL = 'BTCUSDT' as const;
-export const TIMEFRAMES = ['5m', '15m', '1h', '4h'] as const;
+export const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h'] as const;
 export const REFERENCE_TIMEFRAMES = ['1d', '1w'] as const;
 export type CoreTimeframe = (typeof TIMEFRAMES)[number];
 export type ReferenceTimeframe = (typeof REFERENCE_TIMEFRAMES)[number];
@@ -69,6 +69,20 @@ export interface DepthState {
   asks: Array<[number, number]>;
   eventTime: number | null;
   receivedAt: number | null;
+}
+
+export interface DepthSample {
+  observedAt: number;
+  imbalance20: number | null;
+  bidWallPrice: number | null;
+  bidWallNotional: number | null;
+  askWallPrice: number | null;
+  askWallNotional: number | null;
+}
+
+export interface OpenInterestSample {
+  observedAt: number;
+  value: number;
 }
 
 export interface TradeEvent {

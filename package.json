@@ -1,7 +1,7 @@
 {
   "name": "btc-futures-assistant",
   "productName": "BTC Futures Assistant",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Local, manual-order BTCUSDT futures monitoring assistant",
   "author": "BTC Futures Assistant",
   "main": ".vite/build/main.js",

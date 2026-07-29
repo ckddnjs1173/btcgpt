@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "BTC Futures Assistant Actions",
-    "version": "2.0.0",
-    "description": "Read-only BTCUSDT market snapshot, free external context, and deterministic plan validation."
+    "version": "3.0.0",
+    "description": "Read-only BTCUSDT scalp snapshot, free external context, and deterministic plan validation."
   },
   "servers": [
     {

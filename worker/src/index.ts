@@ -30,11 +30,13 @@ export interface Env {
 
 const snapshotSchema = z
   .object({
-    schemaVersion: z.literal(2),
+    schemaVersion: z.union([z.literal(2), z.literal(3)]),
     snapshotId: z.string().min(1).max(100),
     symbol: z.literal('BTCUSDT'),
     market: z.literal('BINANCE_USDM_PERPETUAL'),
     generatedAt: z.number().int().positive(),
+    scalpContext: z.unknown().optional(),
+    timeframes: z.record(z.string(), z.unknown()).optional(),
     analysisGate: z
       .object({
         analysisAllowed: z.boolean(),
@@ -49,7 +51,19 @@ const snapshotSchema = z
       })
       .passthrough(),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((snapshot, context) => {
+    if (
+      snapshot.schemaVersion === 3 &&
+      (!snapshot.scalpContext ||
+        !snapshot.timeframes ||
+        !Object.hasOwn(snapshot.timeframes, '1m'))
+    )
+      context.addIssue({
+        code: 'custom',
+        message: 'Schema version 3 requires scalpContext and 1m timeframe',
+      });
+  });
 
 const contextStatusSchema = z.enum([
   'INITIALIZING',

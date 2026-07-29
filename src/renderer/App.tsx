@@ -14,9 +14,9 @@ import { MarketChart } from './MarketChart';
 
 type Timeframe = Extract<
   keyof MarketSnapshot['timeframes'],
-  '5m' | '15m' | '1h' | '4h'
+  '1m' | '5m' | '15m' | '1h' | '4h'
 >;
-const TIMEFRAMES: Timeframe[] = ['5m', '15m', '1h', '4h'];
+const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '1h', '4h'];
 const DEFAULT_SETTINGS: UserSettings = {
   gptUrl: 'https://chatgpt.com/',
   makerFeeRate: null,
@@ -578,7 +578,9 @@ export function App() {
                 <dt>OI {timeframe}</dt>
                 <dd>
                   {formatNumber(
-                    snapshot.openInterest.changes[timeframe] ?? null,
+                    timeframe === '1m'
+                      ? snapshot.openInterest.localChanges['1m']
+                      : snapshot.openInterest.changes[timeframe] ?? null,
                     2,
                   )}
                   %
@@ -698,6 +700,111 @@ export function App() {
               </div>
             </dl>
           </article>
+        </section>
+      )}
+
+      {snapshot && (
+        <section className="panel scalp-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">SCALP CONTEXT · OBJECTIVE DATA</p>
+              <h3>1m·5m 초단기 구조</h3>
+            </div>
+            <span className="fixed-policy">
+              방향·진입 신호를 생성하지 않습니다
+            </span>
+          </div>
+          <div className="scalp-grid">
+            {(['1m', '5m'] as const).map((item) => {
+              const candle = snapshot.scalpContext.candles[item];
+              return (
+                <article key={item}>
+                  <strong>{item} 캔들</strong>
+                  <dl>
+                    <div>
+                      <dt>진행률</dt>
+                      <dd>
+                        {candle.progressRatio === null
+                          ? '마감'
+                          : `${formatNumber(candle.progressRatio * 100, 1)}%`}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>몸통 / 윗꼬리 / 아랫꼬리</dt>
+                      <dd>
+                        {formatNumber((candle.bodyRatio ?? 0) * 100, 1)} /{' '}
+                        {formatNumber((candle.upperWickRatio ?? 0) * 100, 1)} /{' '}
+                        {formatNumber((candle.lowerWickRatio ?? 0) * 100, 1)}%
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>EMA20 기울기</dt>
+                      <dd>{formatNumber(candle.ema20SlopePerCandle, 3)}</dd>
+                    </div>
+                    <div>
+                      <dt>VWAP 이격</dt>
+                      <dd>{formatNumber(candle.vwapDistanceBps, 2)} bps</dd>
+                    </div>
+                    <div>
+                      <dt>5/20 범위 압축비</dt>
+                      <dd>{formatNumber(candle.rangeCompression5vs20, 3)}</dd>
+                    </div>
+                  </dl>
+                </article>
+              );
+            })}
+            <article>
+              <strong>체결·호가·OI 표본</strong>
+              <dl>
+                <div>
+                  <dt>15s / 30s 체결</dt>
+                  <dd>
+                    {snapshot.orderFlow['15s'].sampleCount} /{' '}
+                    {snapshot.orderFlow['30s'].sampleCount}
+                  </dd>
+                </div>
+                <div>
+                  <dt>15s delta 변화</dt>
+                  <dd>
+                    {formatNumber(
+                      snapshot.orderFlow['15s'].deltaChangeFromPreviousWindow,
+                      4,
+                    )}{' '}
+                    BTC
+                  </dd>
+                </div>
+                <div>
+                  <dt>Depth 5s / 30s 표본</dt>
+                  <dd>
+                    {snapshot.scalpContext.depth.sampleCount5s} /{' '}
+                    {snapshot.scalpContext.depth.sampleCount30s}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Imbalance Δ 5s / 30s</dt>
+                  <dd>
+                    {formatNumber(
+                      snapshot.scalpContext.depth.imbalanceChange5s,
+                      4,
+                    )}{' '}
+                    /{' '}
+                    {formatNumber(
+                      snapshot.scalpContext.depth.imbalanceChange30s,
+                      4,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>로컬 OI Δ 1m / 5m</dt>
+                  <dd>
+                    {formatNumber(snapshot.openInterest.localChanges['1m'], 4)}%
+                    {' / '}
+                    {formatNumber(snapshot.openInterest.localChanges['5m'], 4)}%
+                  </dd>
+                </div>
+              </dl>
+            </article>
+          </div>
         </section>
       )}
 

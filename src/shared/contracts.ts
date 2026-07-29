@@ -110,8 +110,11 @@ export interface MarketSnapshot {
     quoteVolume24h: number | null;
   };
   orderFlow: Record<
-    '1m' | '5m' | '15m' | '1h',
+    '15s' | '30s' | '1m' | '3m' | '5m' | '15m' | '1h',
     {
+      windowStart: number;
+      windowEnd: number;
+      sampleCount: number;
       takerBuyVolume: number;
       takerSellVolume: number;
       buyRatio: number | null;
@@ -119,7 +122,12 @@ export interface MarketSnapshot {
       delta: number;
       cumulativeDelta: number;
       tradeCount: number;
+      buyTradeCount: number;
+      sellTradeCount: number;
       averageTradeSize: number | null;
+      tradesPerSecond: number;
+      notionalPerSecond: number;
+      deltaChangeFromPreviousWindow: number | null;
     }
   > & {
     orderBookImbalance5: number | null;
@@ -136,6 +144,13 @@ export interface MarketSnapshot {
     current: number | null;
     notional: number | null;
     changes: Partial<Record<'5m' | '15m' | '1h' | '4h', number | null>>;
+    localChanges: {
+      '1m': number | null;
+      '5m': number | null;
+      sampleCount1m: number;
+      sampleCount5m: number;
+      observedAt: number | null;
+    };
   };
   sentiment: {
     globalLongShortAccountRatio: number | null;
@@ -192,6 +207,7 @@ export interface MarketSnapshot {
   >;
   timeframes: {
     '5m': TimeframeSnapshot;
+    '1m': TimeframeSnapshot;
     '15m': TimeframeSnapshot;
     '1h': TimeframeSnapshot;
     '4h': TimeframeSnapshot;
@@ -199,6 +215,44 @@ export interface MarketSnapshot {
     '1w': TimeframeSnapshot;
   };
   riskContext: RiskContext;
+  scalpContext: {
+    generatedAt: number;
+    candles: Record<
+      '1m' | '5m',
+      {
+        closedAt: number | null;
+        liveObservedAt: number | null;
+        progressRatio: number | null;
+        bodyRatio: number | null;
+        upperWickRatio: number | null;
+        lowerWickRatio: number | null;
+        closeLocation: number | null;
+        ema20SlopePerCandle: number | null;
+        vwapDistanceBps: number | null;
+        pivotHighDistanceAtr: number | null;
+        pivotLowDistanceAtr: number | null;
+        rangeCompression5vs20: number | null;
+        liveVolumeRatio: number | null;
+        volumeZScore: number | null;
+        abovePivotHigh: boolean | null;
+        belowPivotLow: boolean | null;
+      }
+    >;
+    depth: {
+      observedAt: number | null;
+      sampleCount5s: number;
+      sampleCount30s: number;
+      imbalanceChange5s: number | null;
+      imbalanceChange30s: number | null;
+      bidDominanceRatio5s: number | null;
+      bidWallPrice: number | null;
+      bidWallNotional: number | null;
+      askWallPrice: number | null;
+      askWallNotional: number | null;
+      bidWallPersistence5s: number | null;
+      askWallPersistence5s: number | null;
+    };
+  };
 }
 
 export type ContextStatus =
@@ -288,7 +342,7 @@ export interface MarketStatus {
   lastSnapshotAt: number | null;
   markPrice: string | null;
   indexPrice: string | null;
-  timeframeCounts: Record<'5m' | '15m' | '1h' | '4h', number>;
+  timeframeCounts: Record<'1m' | '5m' | '15m' | '1h' | '4h', number>;
   dataStatus: DataStatus;
 }
 

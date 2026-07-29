@@ -41,12 +41,22 @@ const FIELDS = [
   'tradeCount',
 ] as const;
 const WINDOW_MS = {
+  '15s': 15_000,
+  '30s': 30_000,
+  '1m': 60_000,
+  '3m': 3 * 60_000,
+  '5m': 5 * 60_000,
+  '15m': 15 * 60_000,
+  '1h': 60 * 60_000,
+} as const;
+const LIQUIDATION_WINDOW_MS = {
   '1m': 60_000,
   '5m': 5 * 60_000,
   '15m': 15 * 60_000,
   '1h': 60 * 60_000,
 } as const;
 const PERIODS_PER_YEAR: Record<Timeframe, number> = {
+  '1m': 365 * 24 * 60,
   '5m': 365 * 24 * 12,
   '15m': 365 * 24 * 4,
   '1h': 365 * 24,
@@ -177,6 +187,110 @@ function finiteAge(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : -1;
 }
 
+function percentageFromSamples(
+  samples: Array<{ observedAt: number; value: number }>,
+  expectedWindowMs: number,
+): number | null {
+  if (samples.length < 2) return null;
+  const firstObservedAt = samples[0]?.observedAt;
+  const lastObservedAt = samples.at(-1)?.observedAt;
+  if (
+    firstObservedAt === undefined ||
+    lastObservedAt === undefined ||
+    lastObservedAt - firstObservedAt < expectedWindowMs * 0.8
+  )
+    return null;
+  const first = samples[0]?.value;
+  const last = samples.at(-1)?.value;
+  if (first === undefined || last === undefined || first === 0) return null;
+  return ((last - first) / first) * 100;
+}
+
+function candleStructure(
+  cache: MarketCache,
+  timeframe: '1m' | '5m',
+  now: number,
+): MarketSnapshot['scalpContext']['candles']['1m'] {
+  const closed = cache.getClosed(timeframe);
+  const live = cache.getLive(timeframe);
+  const selected = live ?? closed.at(-1) ?? null;
+  const range = selected ? selected.high - selected.low : 0;
+  const body = selected ? Math.abs(selected.close - selected.open) : 0;
+  const upperWick = selected
+    ? selected.high - Math.max(selected.open, selected.close)
+    : 0;
+  const lowerWick = selected
+    ? Math.min(selected.open, selected.close) - selected.low
+    : 0;
+  const closes = closed.map((candle) => candle.close);
+  const latestEma = ema(closes, 20);
+  const previousEma = ema(closes.slice(0, -1), 20);
+  const timeframeIndicators = indicators(closed, timeframe);
+  const selectedPrice = selected?.close ?? null;
+  const ranges = (candles: Candle[]) =>
+    candles.length
+      ? Math.max(...candles.map((candle) => candle.high)) -
+        Math.min(...candles.map((candle) => candle.low))
+      : null;
+  const range5 = closed.length >= 5 ? ranges(closed.slice(-5)) : null;
+  const range20 = closed.length >= 20 ? ranges(closed.slice(-20)) : null;
+  const progressRatio = live
+    ? Math.min(
+        1,
+        Math.max(0, (now - live.openTime) / (live.closeTime - live.openTime)),
+      )
+    : null;
+  return {
+    closedAt: closed.at(-1)?.closeTime ?? null,
+    liveObservedAt: live?.receivedAt ?? null,
+    progressRatio,
+    bodyRatio: range > 0 ? body / range : null,
+    upperWickRatio: range > 0 ? upperWick / range : null,
+    lowerWickRatio: range > 0 ? lowerWick / range : null,
+    closeLocation:
+      range > 0 && selected ? (selected.close - selected.low) / range : null,
+    ema20SlopePerCandle:
+      latestEma !== null && previousEma !== null ? latestEma - previousEma : null,
+    vwapDistanceBps:
+      selectedPrice !== null && timeframeIndicators.vwap
+        ? ((selectedPrice - timeframeIndicators.vwap) /
+            timeframeIndicators.vwap) *
+          10_000
+        : null,
+    pivotHighDistanceAtr:
+      selectedPrice !== null &&
+      timeframeIndicators.pivotHigh !== null &&
+      timeframeIndicators.atr14
+        ? (timeframeIndicators.pivotHigh - selectedPrice) /
+          timeframeIndicators.atr14
+        : null,
+    pivotLowDistanceAtr:
+      selectedPrice !== null &&
+      timeframeIndicators.pivotLow !== null &&
+      timeframeIndicators.atr14
+        ? (selectedPrice - timeframeIndicators.pivotLow) /
+          timeframeIndicators.atr14
+        : null,
+    rangeCompression5vs20:
+      range5 !== null && range20 ? range5 / range20 : null,
+    liveVolumeRatio:
+      live && progressRatio && timeframeIndicators.volumeSma20
+        ? live.volume /
+          progressRatio /
+          timeframeIndicators.volumeSma20
+        : null,
+    volumeZScore: timeframeIndicators.volumeZScore,
+    abovePivotHigh:
+      selectedPrice !== null && timeframeIndicators.pivotHigh !== null
+        ? selectedPrice > timeframeIndicators.pivotHigh
+        : null,
+    belowPivotLow:
+      selectedPrice !== null && timeframeIndicators.pivotLow !== null
+        ? selectedPrice < timeframeIndicators.pivotLow
+        : null,
+  };
+}
+
 export function generateSnapshot(
   cache: MarketCache,
   options: SnapshotOptions = {},
@@ -211,8 +325,11 @@ export function generateSnapshot(
   ].filter((reason): reason is string => reason !== null);
 
   const orderFlowWindows = Object.fromEntries(
-    Object.entries(WINDOW_MS).map(([label, windowMs]) => {
+    Object.entries(LIQUIDATION_WINDOW_MS).map(([label, windowMs]) => {
       const trades = cache.getTrades(windowMs, generatedAt);
+      const previousTrades = cache
+        .getTrades(windowMs * 2, generatedAt)
+        .filter((trade) => trade.eventTime < generatedAt - windowMs);
       const takerBuyVolume = trades
         .filter((trade) => !trade.buyerIsMaker)
         .reduce((sum, trade) => sum + trade.quantity, 0);
@@ -220,9 +337,23 @@ export function generateSnapshot(
         .filter((trade) => trade.buyerIsMaker)
         .reduce((sum, trade) => sum + trade.quantity, 0);
       const total = takerBuyVolume + takerSellVolume;
+      const buyTradeCount = trades.filter(
+        (trade) => !trade.buyerIsMaker,
+      ).length;
+      const sellTradeCount = trades.length - buyTradeCount;
+      const previousBuy = previousTrades
+        .filter((trade) => !trade.buyerIsMaker)
+        .reduce((sum, trade) => sum + trade.quantity, 0);
+      const previousSell = previousTrades
+        .filter((trade) => trade.buyerIsMaker)
+        .reduce((sum, trade) => sum + trade.quantity, 0);
+      const durationSeconds = windowMs / 1_000;
       return [
         label,
         {
+          windowStart: generatedAt - windowMs,
+          windowEnd: generatedAt,
+          sampleCount: trades.length,
           takerBuyVolume,
           takerSellVolume,
           buyRatio: total > 0 ? takerBuyVolume / total : null,
@@ -230,11 +361,28 @@ export function generateSnapshot(
           delta: takerBuyVolume - takerSellVolume,
           cumulativeDelta: takerBuyVolume - takerSellVolume,
           tradeCount: trades.length,
+          buyTradeCount,
+          sellTradeCount,
           averageTradeSize: trades.length > 0 ? total / trades.length : null,
+          tradesPerSecond: trades.length / durationSeconds,
+          notionalPerSecond:
+            trades.reduce(
+              (sum, trade) => sum + trade.price * trade.quantity,
+              0,
+            ) / durationSeconds,
+          deltaChangeFromPreviousWindow:
+            previousTrades.length > 0
+              ? takerBuyVolume -
+                takerSellVolume -
+                (previousBuy - previousSell)
+              : null,
         },
       ];
     }),
-  ) as Pick<MarketSnapshot['orderFlow'], '1m' | '5m' | '15m' | '1h'>;
+  ) as Pick<
+    MarketSnapshot['orderFlow'],
+    '15s' | '30s' | '1m' | '3m' | '5m' | '15m' | '1h'
+  >;
   const bidNotional20 = cache.depth.bids
     .slice(0, 20)
     .reduce((sum, [price, quantity]) => sum + price * quantity, 0);
@@ -266,6 +414,38 @@ export function generateSnapshot(
   const bid = cache.state.bidPrice;
   const ask = cache.state.askPrice;
   const spread = bid !== null && ask !== null ? ask - bid : null;
+  const depth5s = cache.getDepthSamples(5_000, generatedAt);
+  const depth30s = cache.getDepthSamples(30_000, generatedAt);
+  const latestDepth = depth30s.at(-1) ?? null;
+  const imbalanceChange = (
+    samples: ReturnType<MarketCache['getDepthSamples']>,
+  ) => {
+    const first = samples[0]?.imbalance20;
+    const last = samples.at(-1)?.imbalance20;
+    return first !== null &&
+      first !== undefined &&
+      last !== null &&
+      last !== undefined &&
+      samples.length >= 2
+      ? last - first
+      : null;
+  };
+  const wallPersistence = (
+    side: 'bid' | 'ask',
+    samples: ReturnType<MarketCache['getDepthSamples']>,
+  ) => {
+    const price =
+      side === 'bid' ? latestDepth?.bidWallPrice : latestDepth?.askWallPrice;
+    if (price === null || price === undefined || samples.length === 0)
+      return null;
+    const matches = samples.filter(
+      (sample) =>
+        (side === 'bid' ? sample.bidWallPrice : sample.askWallPrice) === price,
+    ).length;
+    return matches / samples.length;
+  };
+  const oi1m = cache.getOpenInterestSamples(60_000, generatedAt);
+  const oi5m = cache.getOpenInterestSamples(5 * 60_000, generatedAt);
   const sourceHealthSnapshot = Object.fromEntries(
     Object.entries(sourceHealth).map(([source, state]) => [
       source,
@@ -287,7 +467,7 @@ export function generateSnapshot(
     updatedAt: null,
   };
   const snapshot: MarketSnapshot = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     snapshotId: randomUUID(),
     symbol: 'BTCUSDT',
     market: 'BINANCE_USDM_PERPETUAL',
@@ -377,6 +557,13 @@ export function generateSnapshot(
           ? cache.state.openInterest * mark
           : null,
       changes: cache.sentiment.openInterestChanges,
+      localChanges: {
+        '1m': percentageFromSamples(oi1m, 60_000),
+        '5m': percentageFromSamples(oi5m, 5 * 60_000),
+        sampleCount1m: oi1m.length,
+        sampleCount5m: oi5m.length,
+        observedAt: oi5m.at(-1)?.observedAt ?? null,
+      },
     },
     sentiment: {
       globalLongShortAccountRatio: cache.sentiment.globalLongShortAccountRatio,
@@ -427,6 +614,33 @@ export function generateSnapshot(
       onchainAnomaly: false,
       fearAndGreed: null,
       sourceWarnings: ['EXTERNAL_CONTEXT_UNAVAILABLE'],
+    },
+    scalpContext: {
+      generatedAt,
+      candles: {
+        '1m': candleStructure(cache, '1m', generatedAt),
+        '5m': candleStructure(cache, '5m', generatedAt),
+      },
+      depth: {
+        observedAt: latestDepth?.observedAt ?? null,
+        sampleCount5s: depth5s.length,
+        sampleCount30s: depth30s.length,
+        imbalanceChange5s: imbalanceChange(depth5s),
+        imbalanceChange30s: imbalanceChange(depth30s),
+        bidDominanceRatio5s:
+          depth5s.length > 0
+            ? depth5s.filter(
+                (sample) =>
+                  sample.imbalance20 !== null && sample.imbalance20 > 0,
+              ).length / depth5s.length
+            : null,
+        bidWallPrice: latestDepth?.bidWallPrice ?? null,
+        bidWallNotional: latestDepth?.bidWallNotional ?? null,
+        askWallPrice: latestDepth?.askWallPrice ?? null,
+        askWallNotional: latestDepth?.askWallNotional ?? null,
+        bidWallPersistence5s: wallPersistence('bid', depth5s),
+        askWallPersistence5s: wallPersistence('ask', depth5s),
+      },
     },
   };
   if (

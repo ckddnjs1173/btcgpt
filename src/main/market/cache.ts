@@ -5,7 +5,9 @@ import {
   TIMEFRAMES,
   type Candle,
   type DepthState,
+  type DepthSample,
   type LiquidationEvent,
+  type OpenInterestSample,
   type ProductFilters,
   type PublicMarketState,
   type SentimentState,
@@ -25,6 +27,7 @@ const SOURCE_CHANNELS: Record<string, MarketStreamChannel> = {
   trades: 'market',
   liquidations: 'market',
   'candle:5m': 'market',
+  'candle:1m': 'market',
   'candle:15m': 'market',
   'candle:1h': 'market',
   'candle:4h': 'market',
@@ -44,6 +47,8 @@ export class MarketCache {
   >();
   private readonly trades: TradeEvent[] = [];
   private readonly liquidations: LiquidationEvent[] = [];
+  private readonly depthSamples: DepthSample[] = [];
+  private readonly openInterestSamples: OpenInterestSample[] = [];
   private lastEventAt: number | null = null;
   private message: string | null = null;
   private validationError: string | null = null;
@@ -163,6 +168,17 @@ export class MarketCache {
     eventTime = receivedAt,
   ): void {
     Object.assign(this.state, values, { updatedAt: receivedAt });
+    if (
+      source === 'openInterest' &&
+      values.openInterest !== undefined &&
+      values.openInterest !== null
+    ) {
+      this.openInterestSamples.push({
+        observedAt: receivedAt,
+        value: values.openInterest,
+      });
+      this.pruneSamples(receivedAt);
+    }
     this.markSource(source, eventTime, receivedAt);
   }
 
@@ -177,6 +193,32 @@ export class MarketCache {
     receivedAt = Date.now(),
   ): void {
     Object.assign(this.depth, { bids, asks, eventTime, receivedAt });
+    const wall = (levels: Array<[number, number]>) =>
+      levels
+        .slice(0, 20)
+        .map(([price, quantity]) => ({
+          price,
+          notional: price * quantity,
+        }))
+        .sort((a, b) => b.notional - a.notional)[0] ?? null;
+    const bidNotional = bids
+      .slice(0, 20)
+      .reduce((sum, [price, quantity]) => sum + price * quantity, 0);
+    const askNotional = asks
+      .slice(0, 20)
+      .reduce((sum, [price, quantity]) => sum + price * quantity, 0);
+    const total = bidNotional + askNotional;
+    const bidWall = wall(bids);
+    const askWall = wall(asks);
+    this.depthSamples.push({
+      observedAt: receivedAt,
+      imbalance20: total > 0 ? (bidNotional - askNotional) / total : null,
+      bidWallPrice: bidWall?.price ?? null,
+      bidWallNotional: bidWall?.notional ?? null,
+      askWallPrice: askWall?.price ?? null,
+      askWallNotional: askWall?.notional ?? null,
+    });
+    this.pruneSamples(receivedAt);
     this.markSource('depth', eventTime, receivedAt);
   }
 
@@ -220,6 +262,21 @@ export class MarketCache {
     );
   }
 
+  getDepthSamples(windowMs: number, now = Date.now()): DepthSample[] {
+    return this.depthSamples.filter(
+      (sample) => sample.observedAt >= now - windowMs,
+    );
+  }
+
+  getOpenInterestSamples(
+    windowMs: number,
+    now = Date.now(),
+  ): OpenInterestSample[] {
+    return this.openInterestSamples.filter(
+      (sample) => sample.observedAt >= now - windowMs,
+    );
+  }
+
   sourceHealth(now = Date.now()): Record<string, SourceHealth> {
     const thresholds: Record<string, [number, number]> = {
       market: [2_000, 5_000],
@@ -230,6 +287,7 @@ export class MarketCache {
       liquidations: [60_000, 300_000],
       statistics: [300_000, 900_000],
       'candle:5m': [5_000, 15_000],
+      'candle:1m': [5_000, 15_000],
       'candle:15m': [5_000, 15_000],
       'candle:1h': [5_000, 15_000],
       'candle:4h': [5_000, 15_000],
@@ -355,5 +413,20 @@ export class MarketCache {
     while ((this.trades[0]?.eventTime ?? now) < cutoff) this.trades.shift();
     while ((this.liquidations[0]?.eventTime ?? now) < cutoff)
       this.liquidations.shift();
+  }
+
+  private pruneSamples(now: number): void {
+    const depthCutoff = now - 35_000;
+    while (
+      this.depthSamples.length > 0 &&
+      (this.depthSamples[0]?.observedAt ?? now) < depthCutoff
+    )
+      this.depthSamples.shift();
+    const oiCutoff = now - 6 * 60_000;
+    while (
+      this.openInterestSamples.length > 0 &&
+      (this.openInterestSamples[0]?.observedAt ?? now) < oiCutoff
+    )
+      this.openInterestSamples.shift();
   }
 }

@@ -1,6 +1,7 @@
 import type { Candle, Timeframe } from './types';
 
 const INTERVAL_MS: Record<Timeframe, number> = {
+  '1m': 60_000,
   '5m': 5 * 60_000,
   '15m': 15 * 60_000,
   '1h': 60 * 60_000,
