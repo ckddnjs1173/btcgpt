@@ -550,6 +550,9 @@ footer p {
   color: #dbe4f1;
   text-align: right;
 }
+.risk-card {
+  grid-column: 1 / -1;
+}
 .positive {
   color: #44d18b;
 }

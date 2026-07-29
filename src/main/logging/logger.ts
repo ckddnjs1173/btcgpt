@@ -11,6 +11,10 @@ export const SECRET_REDACTION_PATHS = [
   'relayUploadKey',
   'actionReadKey',
   'X-MBX-APIKEY',
+  'clientId',
+  'clientSecret',
+  'NAVER_CLIENT_ID',
+  'NAVER_CLIENT_SECRET',
   '*.apiKey',
   '*.apiSecret',
   '*.secret',
@@ -21,6 +25,10 @@ export const SECRET_REDACTION_PATHS = [
   '*.relayUploadKey',
   '*.actionReadKey',
   '*.X-MBX-APIKEY',
+  '*.clientId',
+  '*.clientSecret',
+  '*.NAVER_CLIENT_ID',
+  '*.NAVER_CLIENT_SECRET',
 ] as const;
 
 export function createAppLogger(destination?: DestinationStream): Logger {

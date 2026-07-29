@@ -41,6 +41,9 @@ const desktopApi: DesktopApi = {
     ipcRenderer.invoke(IPC_CHANNELS.configureRelay, input),
   disconnectRelay: () => ipcRenderer.invoke(IPC_CHANNELS.disconnectRelay),
   resetLocalData: () => ipcRenderer.invoke(IPC_CHANNELS.resetLocalData),
+  configureNaver: (input) =>
+    ipcRenderer.invoke(IPC_CHANNELS.configureNaver, input),
+  disconnectNaver: () => ipcRenderer.invoke(IPC_CHANNELS.disconnectNaver),
 };
 
 contextBridge.exposeInMainWorld('desktopApi', desktopApi);

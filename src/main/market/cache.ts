@@ -1,6 +1,7 @@
 import type { DataStatus } from '../../shared/contracts';
 import {
   SYMBOL,
+  REFERENCE_TIMEFRAMES,
   TIMEFRAMES,
   type Candle,
   type DepthState,
@@ -31,7 +32,10 @@ const SOURCE_CHANNELS: Record<string, MarketStreamChannel> = {
 
 export class MarketCache {
   private readonly closed = new Map<Timeframe, Map<number, Candle>>(
-    TIMEFRAMES.map((timeframe) => [timeframe, new Map()]),
+    [...TIMEFRAMES, ...REFERENCE_TIMEFRAMES].map((timeframe) => [
+      timeframe,
+      new Map(),
+    ]),
   );
   private readonly live = new Map<Timeframe, Candle>();
   private readonly sourceTimes = new Map<

@@ -2,7 +2,10 @@ import type { DataStatus } from '../../shared/contracts';
 
 export const SYMBOL = 'BTCUSDT' as const;
 export const TIMEFRAMES = ['5m', '15m', '1h', '4h'] as const;
-export type Timeframe = (typeof TIMEFRAMES)[number];
+export const REFERENCE_TIMEFRAMES = ['1d', '1w'] as const;
+export type CoreTimeframe = (typeof TIMEFRAMES)[number];
+export type ReferenceTimeframe = (typeof REFERENCE_TIMEFRAMES)[number];
+export type Timeframe = CoreTimeframe | ReferenceTimeframe;
 
 export interface Candle {
   symbol: typeof SYMBOL;
@@ -91,6 +94,6 @@ export interface SentimentState {
   topLongShortAccountRatio: number | null;
   topLongShortPositionRatio: number | null;
   takerBuySellRatio: number | null;
-  openInterestChanges: Partial<Record<Timeframe, number | null>>;
+  openInterestChanges: Partial<Record<CoreTimeframe, number | null>>;
   updatedAt: number | null;
 }

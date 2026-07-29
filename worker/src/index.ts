@@ -30,7 +30,7 @@ export interface Env {
 
 const snapshotSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     snapshotId: z.string().min(1).max(100),
     symbol: z.literal('BTCUSDT'),
     market: z.literal('BINANCE_USDM_PERPETUAL'),
@@ -50,6 +50,91 @@ const snapshotSchema = z
       .passthrough(),
   })
   .passthrough();
+
+const contextStatusSchema = z.enum([
+  'INITIALIZING',
+  'NORMAL',
+  'DELAYED',
+  'STALE',
+  'DISCONNECTED',
+  'INSUFFICIENT_DATA',
+  'DISABLED',
+  'UNAVAILABLE',
+]);
+const contextItemSchema = z
+  .object({
+    id: z.string().min(1).max(100),
+    source: z.string().min(1).max(80),
+    category: z.enum([
+      'BINANCE',
+      'MACRO',
+      'REGULATION',
+      'NEWS',
+      'OPTIONS',
+      'ONCHAIN',
+      'SENTIMENT',
+    ]),
+    title: z.string().min(1).max(240),
+    snippet: z.string().max(500).nullable(),
+    url: z.url().refine((url) => url.startsWith('https://')),
+    publishedAt: z.number().int().positive(),
+    observedAt: z.number().int().positive(),
+    trustTier: z.enum([
+      'OFFICIAL',
+      'MULTI_SOURCE',
+      'SINGLE_SOURCE',
+      'UNVERIFIED_SOCIAL',
+    ]),
+    btcRelevance: z.enum(['HIGH', 'MEDIUM', 'LOW']),
+    duplicateGroupId: z.string().max(100).nullable(),
+    duplicateCount: z.number().int().positive().max(1_000),
+    tags: z.array(z.string().max(40)).max(12),
+  })
+  .passthrough();
+const riskContextSchema = z
+  .object({
+    status: contextStatusSchema,
+    updatedAt: z.number().int().positive().nullable(),
+    highRiskNews: z.boolean(),
+    representativeEventId: z.string().max(100).nullable(),
+    nextMacroEvent: z
+      .object({
+        name: z.string().max(200),
+        at: z.number().int().positive(),
+        remainingMs: z.number(),
+      })
+      .nullable(),
+    binanceCriticalNotice: z.boolean(),
+    optionsVolatilityState: z.string().max(100).nullable(),
+    onchainAnomaly: z.boolean(),
+    fearAndGreed: z
+      .object({
+        value: z.number().min(0).max(100),
+        classification: z.string().max(80),
+        at: z.number().int().positive(),
+      })
+      .nullable(),
+    sourceWarnings: z.array(z.string().max(160)).max(20),
+  })
+  .strict();
+const contextSnapshotSchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    generatedAt: z.number().int().positive(),
+    status: contextStatusSchema,
+    horizon: z.enum(['INTRADAY', 'SWING', 'MACRO']),
+    items: z.array(contextItemSchema).max(120),
+    sourceHealth: z.record(z.string(), z.unknown()),
+    riskContext: riskContextSchema,
+  })
+  .strict();
+const contextUploadSchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    generatedAt: z.number().int().positive(),
+    snapshot: contextSnapshotSchema,
+  })
+  .strict();
 
 const planSchema = z.object({
   side: z.enum(['LONG', 'SHORT']),
@@ -167,6 +252,65 @@ async function load(env: Env) {
     .first<{ raw: string; generatedAt: number; receivedAt: number }>();
 }
 
+async function saveContext(
+  env: Env,
+  parsed: z.infer<typeof contextUploadSchema>,
+): Promise<void> {
+  const receivedAt = Date.now();
+  const snapshot = parsed.snapshot;
+  const result = await requireDatabase(env)
+    .prepare(
+        `INSERT INTO external_context_payloads
+          (horizon, payload, generated_at, received_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(horizon) DO UPDATE SET payload=excluded.payload,
+           generated_at=excluded.generated_at, received_at=excluded.received_at
+         WHERE excluded.generated_at >= external_context_payloads.generated_at`,
+      )
+    .bind(
+      snapshot.horizon,
+      JSON.stringify(snapshot),
+      snapshot.generatedAt,
+      receivedAt,
+    )
+    .run();
+  if (!result.success) throw new Error('D1_CONTEXT_WRITE_FAILED');
+  if (snapshot.horizon !== 'INTRADAY') return;
+  const summary = snapshot.riskContext;
+  const summaryResult = await requireDatabase(env)
+    .prepare(
+      `INSERT INTO external_context_summary
+        (id, payload, generated_at, received_at)
+       VALUES (1, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,
+         generated_at=excluded.generated_at, received_at=excluded.received_at
+       WHERE excluded.generated_at >= external_context_summary.generated_at`,
+    )
+    .bind(JSON.stringify(summary), parsed.generatedAt, receivedAt)
+    .run();
+  if (!summaryResult.success) throw new Error('D1_CONTEXT_SUMMARY_WRITE_FAILED');
+}
+
+async function loadContext(env: Env, horizon: string) {
+  return requireDatabase(env)
+    .prepare(
+      `SELECT payload AS raw, generated_at AS generatedAt,
+        received_at AS receivedAt
+       FROM external_context_payloads WHERE horizon = ?`,
+    )
+    .bind(horizon)
+    .first<{ raw: string; generatedAt: number; receivedAt: number }>();
+}
+
+async function loadRiskContext(env: Env) {
+  return requireDatabase(env)
+    .prepare(
+      `SELECT payload AS raw, generated_at AS generatedAt
+       FROM external_context_summary WHERE id = 1`,
+    )
+    .first<{ raw: string; generatedAt: number }>();
+}
+
 export async function handler(request: Request, env: Env): Promise<Response> {
   if (rateLimited(request)) return json({ error: 'RATE_LIMITED' }, 429);
   const url = new URL(request.url);
@@ -263,13 +407,107 @@ export async function handler(request: Request, env: Env): Promise<Response> {
         ],
       };
     }
-    const responseBody = { ...payload, relayReceivedAt: stored.receivedAt };
+    const responseBody: Record<string, unknown> = {
+      ...payload,
+      relayReceivedAt: stored.receivedAt,
+    };
+    try {
+      const summary = await loadRiskContext(env);
+      if (summary) {
+        const risk = JSON.parse(summary.raw) as Record<string, unknown>;
+        const riskAgeMs = Date.now() - summary.generatedAt;
+        responseBody.riskContext = {
+          ...risk,
+          status:
+            riskAgeMs > 60 * 60_000
+              ? 'STALE'
+              : (risk.status ?? 'UNAVAILABLE'),
+          ageMs: riskAgeMs,
+        };
+      } else {
+        responseBody.riskContext = {
+          status: 'UNAVAILABLE',
+          updatedAt: null,
+          highRiskNews: false,
+          sourceWarnings: ['EXTERNAL_CONTEXT_NOT_FOUND'],
+        };
+      }
+    } catch {
+      responseBody.riskContext = {
+        status: 'UNAVAILABLE',
+        updatedAt: null,
+        highRiskNews: false,
+        sourceWarnings: ['EXTERNAL_CONTEXT_STORAGE_UNAVAILABLE'],
+      };
+    }
     if (
       new TextEncoder().encode(JSON.stringify(responseBody)).byteLength >
       MAX_BODY_BYTES
     )
       return json({ error: 'RESPONSE_TOO_LARGE' }, 500);
     return json(responseBody);
+  }
+
+  if (url.pathname === '/v1/context/latest' && request.method === 'PUT') {
+    if (!authorized(request, env.UPLOADER_WRITE_KEY))
+      return json({ error: 'UNAUTHORIZED' }, 401);
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES)
+      return json({ error: 'PAYLOAD_TOO_LARGE' }, 413);
+    const candidate = contextUploadSchema.safeParse(
+      (() => {
+        try {
+          return JSON.parse(raw) as unknown;
+        } catch {
+          return null;
+        }
+      })(),
+    );
+    if (!candidate.success)
+      return json({ error: 'INVALID_EXTERNAL_CONTEXT' }, 400);
+    if (
+      candidate.data.generatedAt > Date.now() + FUTURE_TOLERANCE_MS ||
+      candidate.data.snapshot.items.some(
+          (contextItem) =>
+            contextItem.publishedAt > Date.now() + FUTURE_TOLERANCE_MS,
+        )
+    )
+      return json({ error: 'FUTURE_EXTERNAL_CONTEXT' }, 400);
+    try {
+      await saveContext(env, candidate.data);
+      return json({ ok: true, receivedAt: Date.now() });
+    } catch {
+      return json({ error: 'STORAGE_UNAVAILABLE' }, 503);
+    }
+  }
+
+  if (url.pathname === '/v1/context/latest' && request.method === 'GET') {
+    if (!authorized(request, env.ACTION_READ_KEY))
+      return json({ error: 'UNAUTHORIZED' }, 401);
+    const horizon = url.searchParams.get('horizon');
+    if (!['INTRADAY', 'SWING', 'MACRO'].includes(horizon ?? ''))
+      return json({ error: 'INVALID_HORIZON' }, 400);
+    try {
+      const storedContext = await loadContext(env, horizon!);
+      if (!storedContext) return json({ error: 'NOT_FOUND' }, 404);
+      const payload = JSON.parse(storedContext.raw) as Record<string, unknown>;
+      const ageMs = Date.now() - storedContext.generatedAt;
+      if (ageMs > 60 * 60_000)
+        payload.status = 'STALE';
+      const responseBody = {
+        ...payload,
+        ageMs,
+        relayReceivedAt: storedContext.receivedAt,
+      };
+      if (
+        new TextEncoder().encode(JSON.stringify(responseBody)).byteLength >
+        MAX_BODY_BYTES
+      )
+        return json({ error: 'RESPONSE_TOO_LARGE' }, 500);
+      return json(responseBody);
+    } catch {
+      return json({ error: 'STORAGE_UNAVAILABLE' }, 503);
+    }
   }
 
   if (url.pathname === '/v1/plan/validate' && request.method === 'POST') {

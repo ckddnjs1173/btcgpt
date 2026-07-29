@@ -28,12 +28,14 @@ import {
   positionCalculationInputSchema,
   relayConfigurationSchema,
   userSettingsSchema,
+  naverConfigurationSchema,
 } from '../../shared/schemas';
 import type { AppDatabase } from '../db/database';
 import { logger } from '../logging/logger';
 import type { MarketDataService } from '../market/service';
 import { generateSnapshot } from '../market/snapshot';
 import type { AccountService } from '../binance/account/service';
+import type { ExternalContextService } from '../external/service';
 import {
   breakevenExitPrice,
   calculatePositionPlan as calculatePlan,
@@ -46,9 +48,15 @@ interface RegisterIpcHandlersOptions {
   isTrayReady: () => boolean;
   marketData: MarketDataService;
   accountService: AccountService;
+  externalContext: ExternalContextService;
   getRelayStatus: () => RelayStatus;
   configureRelay: (input: RelayConfigurationInput) => Promise<void>;
   disconnectRelay: () => void;
+  configureNaver: (input: {
+    clientId: string;
+    clientSecret: string;
+  }) => void;
+  disconnectNaver: () => void;
 }
 
 function resetHandler(channel: string): void {
@@ -60,11 +68,22 @@ export function registerIpcHandlers({
   isTrayReady,
   marketData,
   accountService,
+  externalContext,
   getRelayStatus,
   configureRelay,
   disconnectRelay,
+  configureNaver,
+  disconnectNaver,
 }: RegisterIpcHandlersOptions): void {
   Object.values(IPC_CHANNELS).forEach(resetHandler);
+  ipcMain.handle(IPC_CHANNELS.configureNaver, (_event, raw: unknown) => {
+    configureNaver(naverConfigurationSchema.parse(raw));
+    return { ok: true, message: 'Naver 뉴스 연결 정보를 암호화 저장했습니다.' };
+  });
+  ipcMain.handle(IPC_CHANNELS.disconnectNaver, () => {
+    disconnectNaver();
+    return { ok: true, message: 'Naver 뉴스 연결 정보를 삭제했습니다.' };
+  });
 
   ipcMain.handle(IPC_CHANNELS.getPhaseZeroStatus, (): PhaseZeroStatus => ({
     appVersion: app.getVersion(),
@@ -111,11 +130,13 @@ export function registerIpcHandlers({
     async (_event, rawInput: unknown): Promise<ActionResult> => {
       const input = accountConfigurationSchema.parse(rawInput);
       await accountService.configure(input);
+      externalContext.reloadAnnouncements();
       return { ok: true, message: '읽기 전용 Binance 계정을 연결했습니다.' };
     },
   );
   ipcMain.handle(IPC_CHANNELS.disconnectAccount, (): ActionResult => {
     accountService.disconnect();
+    externalContext.reloadAnnouncements();
     return { ok: true, message: '계정 연결과 저장된 인증정보를 삭제했습니다.' };
   });
   ipcMain.handle(IPC_CHANNELS.getAccountStatus, (): AccountStatus =>
@@ -336,6 +357,7 @@ export function registerIpcHandlers({
       exitSlippageBps: settings.exitSlippageBps,
       maxLossUsdt: settings.maxLossUsdt,
       riskPercent: settings.riskPercent,
+      riskContext: externalContext.getStatus().riskContext,
     });
   });
 

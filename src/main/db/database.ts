@@ -12,7 +12,7 @@ import { manualPositionSchema } from '../../shared/schemas';
 import { userSettingsSchema } from '../../shared/schemas';
 import type { UserSettings } from '../../shared/contracts';
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const DEFAULT_USER_SETTINGS: UserSettings = {
   gptUrl: 'https://chatgpt.com/',
   makerFeeRate: null,
@@ -106,6 +106,25 @@ export class AppDatabase {
         size INTEGER NOT NULL,
         status TEXT NOT NULL,
         upload_result TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS external_context_items (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        category TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        published_at INTEGER NOT NULL,
+        observed_at INTEGER NOT NULL,
+        duplicate_group_id TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_external_context_published
+        ON external_context_items(published_at);
+
+      CREATE TABLE IF NOT EXISTS external_context_state (
+        source TEXT PRIMARY KEY,
+        payload TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
       );
     `);
 
@@ -290,6 +309,8 @@ export class AppDatabase {
       DELETE FROM manual_position;
       DELETE FROM market_state;
       DELETE FROM gpt_snapshot_meta;
+      DELETE FROM external_context_items;
+      DELETE FROM external_context_state;
       COMMIT;
     `);
   }

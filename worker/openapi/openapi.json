@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "BTC Futures Assistant Actions",
-    "version": "1.0.0",
-    "description": "Read-only BTCUSDT market snapshot and deterministic plan validation."
+    "version": "2.0.0",
+    "description": "Read-only BTCUSDT market snapshot, free external context, and deterministic plan validation."
   },
   "servers": [
     {
@@ -75,6 +75,31 @@
           "200": { "description": "Latest snapshot" },
           "401": { "description": "Unauthorized" },
           "404": { "description": "No snapshot" }
+        }
+      }
+    },
+    "/v1/context/latest": {
+      "get": {
+        "operationId": "getExternalContext",
+        "summary": "Get normalized external risk context for a requested horizon",
+        "x-openai-isConsequential": false,
+        "parameters": [
+          {
+            "name": "horizon",
+            "in": "query",
+            "required": true,
+            "description": "INTRADAY for current event risk, SWING for multi-day context, or MACRO for 30 to 90 day scenarios.",
+            "schema": {
+              "type": "string",
+              "enum": ["INTRADAY", "SWING", "MACRO"]
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Normalized context with source health" },
+          "400": { "description": "Invalid horizon" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "No external context" }
         }
       }
     },

@@ -5,6 +5,7 @@ import type {
   DataStatus,
   ManualPosition,
   MarketSnapshot,
+  RiskContext,
   TimeframeSnapshot,
 } from '../../shared/contracts';
 import { ema } from '../../shared/calculations/ema';
@@ -22,7 +23,12 @@ import {
   vwap,
 } from '../../shared/calculations/market';
 import type { MarketCache } from './cache';
-import { TIMEFRAMES, type Candle, type Timeframe } from './types';
+import {
+  REFERENCE_TIMEFRAMES,
+  TIMEFRAMES,
+  type Candle,
+  type Timeframe,
+} from './types';
 
 const FIELDS = [
   'openTime',
@@ -45,6 +51,8 @@ const PERIODS_PER_YEAR: Record<Timeframe, number> = {
   '15m': 365 * 24 * 4,
   '1h': 365 * 24,
   '4h': 365 * 6,
+  '1d': 365,
+  '1w': 52,
 };
 
 export interface SnapshotOptions {
@@ -57,6 +65,7 @@ export interface SnapshotOptions {
   exitSlippageBps?: number | null;
   maxLossUsdt?: number | null;
   riskPercent?: number | null;
+  riskContext?: RiskContext;
   publishedAt?: number | null;
 }
 
@@ -278,7 +287,7 @@ export function generateSnapshot(
     updatedAt: null,
   };
   const snapshot: MarketSnapshot = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     snapshotId: randomUUID(),
     symbol: 'BTCUSDT',
     market: 'BINANCE_USDM_PERPETUAL',
@@ -395,16 +404,40 @@ export function generateSnapshot(
     productFilters: cache.productFilters,
     sourceHealth: sourceHealthSnapshot,
     timeframes: Object.fromEntries(
-      TIMEFRAMES.map((timeframe) => [
+      [...TIMEFRAMES, ...REFERENCE_TIMEFRAMES].map((timeframe) => [
         timeframe,
         buildTimeframe(
           cache,
           timeframe,
-          sourceHealth[`candle:${timeframe}`]?.status ?? 'INSUFFICIENT_DATA',
+          sourceHealth[`candle:${timeframe}`]?.status ??
+            (cache.getClosed(timeframe).length >= 200
+              ? 'NORMAL'
+              : 'INSUFFICIENT_DATA'),
         ),
       ]),
     ) as MarketSnapshot['timeframes'],
+    riskContext: options.riskContext ?? {
+      status: 'UNAVAILABLE',
+      updatedAt: null,
+      highRiskNews: false,
+      representativeEventId: null,
+      nextMacroEvent: null,
+      binanceCriticalNotice: false,
+      optionsVolatilityState: null,
+      onchainAnomaly: false,
+      fearAndGreed: null,
+      sourceWarnings: ['EXTERNAL_CONTEXT_UNAVAILABLE'],
+    },
   };
+  if (
+    new TextEncoder().encode(JSON.stringify(snapshot.riskContext)).byteLength >
+    2_048
+  ) {
+    snapshot.riskContext = {
+      ...snapshot.riskContext,
+      sourceWarnings: snapshot.riskContext.sourceWarnings.slice(0, 5),
+    };
+  }
   const size = new TextEncoder().encode(JSON.stringify(snapshot)).byteLength;
   if (size > 90_000)
     throw new Error(`Snapshot exceeds the 90000-byte limit: ${size}`);

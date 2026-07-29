@@ -121,3 +121,8 @@ export const relayConfigurationSchema = z.object({
   }),
   uploadKey: z.string().min(32).max(256),
 });
+
+export const naverConfigurationSchema = z.object({
+  clientId: z.string().trim().min(8).max(100),
+  clientSecret: z.string().trim().min(8).max(200),
+});

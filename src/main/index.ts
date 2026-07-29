@@ -12,9 +12,12 @@ import { logger } from './logging/logger';
 import { MarketDataService } from './market/service';
 import type { SnapshotOptions } from './market/snapshot';
 import { RelayUploader } from './relay/uploader';
+import { ContextUploader } from './relay/context-uploader';
+import { ExternalContextService } from './external/service';
 import { AccountService } from './binance/account/service';
 import { CredentialStore } from './security/credential-store';
 import { RelayConfigurationStore } from './security/relay-configuration-store';
+import { NaverCredentialStore } from './security/naver-credential-store';
 
 if (started) {
   app.quit();
@@ -41,6 +44,8 @@ let marketData: MarketDataService | null = null;
 let relayUploader: RelayUploader | null = null;
 let accountService: AccountService | null = null;
 let notificationMonitor: OperationalNotificationMonitor | null = null;
+let externalContext: ExternalContextService | null = null;
+let contextUploader: ContextUploader | null = null;
 let quitting = false;
 
 function showMainWindow(): void {
@@ -76,6 +81,10 @@ app.on('will-quit', () => {
   relayUploader = null;
   marketData?.stop();
   marketData = null;
+  contextUploader?.stop();
+  contextUploader = null;
+  externalContext?.stop();
+  externalContext = null;
   database?.close();
   database = null;
 });
@@ -98,9 +107,15 @@ void app.whenReady().then(() => {
     openAtLogin: database.readUserSettings().autoStart,
   });
   marketData = new MarketDataService(database);
+  const naverStore = new NaverCredentialStore(database);
+  const accountCredentialStore = new CredentialStore(database);
+  externalContext = new ExternalContextService(
+    () => naverStore.load() ?? {},
+    () => accountCredentialStore.load() ?? {},
+  );
   const relayStore = new RelayConfigurationStore(database);
   accountService = new AccountService(
-    new CredentialStore(database),
+    accountCredentialStore,
     () => marketData?.getServerOffsetMs() ?? 0,
   );
   mainWindow = createMainWindow({ shouldQuit: () => quitting });
@@ -125,6 +140,7 @@ void app.whenReady().then(() => {
       exitSlippageBps: settings.exitSlippageBps,
       maxLossUsdt: settings.maxLossUsdt,
       riskPercent: settings.riskPercent,
+      riskContext: externalContext!.getStatus().riskContext,
     };
   };
   const startRelay = (baseUrl: string, uploadKey: string): RelayUploader => {
@@ -139,6 +155,12 @@ void app.whenReady().then(() => {
     );
     relayUploader = uploader;
     uploader.start();
+    contextUploader?.stop();
+    contextUploader = new ContextUploader(externalContext!, {
+      baseUrl,
+      uploadKey,
+    });
+    contextUploader.start();
     return uploader;
   };
 
@@ -146,6 +168,7 @@ void app.whenReady().then(() => {
     database,
     marketData,
     accountService,
+    externalContext,
     getRelayStatus: () =>
       relayUploader?.getStatus() ?? {
         configured: false,
@@ -165,7 +188,17 @@ void app.whenReady().then(() => {
     disconnectRelay: () => {
       relayUploader?.stop();
       relayUploader = null;
+      contextUploader?.stop();
+      contextUploader = null;
       relayStore.clear();
+    },
+    configureNaver: (input) => {
+      naverStore.save(input);
+      externalContext!.reloadNaver();
+    },
+    disconnectNaver: () => {
+      naverStore.clear();
+      externalContext!.reloadNaver();
     },
     isTrayReady: () => tray !== null && !tray.isDestroyed(),
   });
@@ -173,6 +206,7 @@ void app.whenReady().then(() => {
     void marketData.start().catch((error: unknown) => {
       logger.error({ error }, 'Market data service failed to start');
     });
+  externalContext.start();
   const environmentRelay =
     process.env.BTC_RELAY_URL && process.env.BTC_RELAY_UPLOAD_KEY
       ? {

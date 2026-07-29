@@ -18,13 +18,13 @@ import { logger } from '../logging/logger';
 import { percentageChange } from '../../shared/calculations/market';
 import { MarketCache, type MarketStreamChannel } from './cache';
 import { normalizeRestCandle } from './normalize';
-import { TIMEFRAMES } from './types';
-import type { Candle } from './types';
+import { REFERENCE_TIMEFRAMES, TIMEFRAMES } from './types';
+import type { Candle, Timeframe } from './types';
 import { detectCandleGaps } from './gaps';
 
 interface CandleRepository {
   readClosedCandles(
-    timeframe: (typeof TIMEFRAMES)[number],
+    timeframe: Timeframe,
     limit?: number,
   ): Candle[];
   upsertClosedCandle(candle: Candle): void;
@@ -145,6 +145,7 @@ export class MarketDataService {
   private statisticsTimer: NodeJS.Timeout | null = null;
   private serverTimeTimer: NodeJS.Timeout | null = null;
   private exchangeInfoTimer: NodeJS.Timeout | null = null;
+  private referenceCandleTimer: NodeJS.Timeout | null = null;
   private readonly plannedReconnectTimers: Record<
     MarketStreamChannel,
     NodeJS.Timeout | null
@@ -173,11 +174,12 @@ export class MarketDataService {
 
   async start(): Promise<void> {
     this.stopping = false;
-    for (const timeframe of TIMEFRAMES) {
+    for (const timeframe of [...TIMEFRAMES, ...REFERENCE_TIMEFRAMES]) {
       for (const candle of this.database.readClosedCandles(timeframe))
         this.cache.upsertCandle(candle);
     }
     await this.bootstrap();
+    await this.refreshReferenceCandles();
     for (const channel of STREAM_CHANNELS) this.connect(channel);
     this.pollTimer = setInterval(() => {
       void this.refreshFast().catch((error: unknown) => {
@@ -206,6 +208,11 @@ export class MarketDataService {
         logger.warn({ error }, 'Binance exchange-info refresh failed');
       });
     }, 5 * 60_000);
+    this.referenceCandleTimer = setInterval(() => {
+      void this.refreshReferenceCandles().catch((error: unknown) => {
+        logger.warn({ error }, 'Reference candle refresh failed');
+      });
+    }, 6 * 60 * 60_000);
   }
 
   stop(): void {
@@ -216,6 +223,7 @@ export class MarketDataService {
       this.statisticsTimer,
       this.serverTimeTimer,
       this.exchangeInfoTimer,
+      this.referenceCandleTimer,
     ])
       if (timer) clearTimeout(timer);
     for (const channel of STREAM_CHANNELS) {
@@ -353,7 +361,7 @@ export class MarketDataService {
   }
 
   private applyRestCandles(
-    timeframe: (typeof TIMEFRAMES)[number],
+    timeframe: Timeframe,
     tuples: KlineTuple[],
   ): void {
     for (const tuple of tuples) {
@@ -531,6 +539,19 @@ export class MarketDataService {
       );
       this.scheduleReconnect(channel);
     });
+  }
+
+  private async refreshReferenceCandles(): Promise<void> {
+    await Promise.all(
+      REFERENCE_TIMEFRAMES.map(async (timeframe) => {
+        const tuples = await this.dependencies.fetchKlines(
+          'BTCUSDT',
+          timeframe,
+          251,
+        );
+        this.applyRestCandles(timeframe, tuples);
+      }),
+    );
   }
 
   private scheduleReconnect(channel: MarketStreamChannel): void {

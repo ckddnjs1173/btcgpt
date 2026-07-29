@@ -12,7 +12,10 @@ import type {
 } from '../shared/contracts';
 import { MarketChart } from './MarketChart';
 
-type Timeframe = keyof MarketSnapshot['timeframes'];
+type Timeframe = Extract<
+  keyof MarketSnapshot['timeframes'],
+  '5m' | '15m' | '1h' | '4h'
+>;
 const TIMEFRAMES: Timeframe[] = ['5m', '15m', '1h', '4h'];
 const DEFAULT_SETTINGS: UserSettings = {
   gptUrl: 'https://chatgpt.com/',
@@ -114,7 +117,31 @@ export function App() {
     useState<PositionCalculationResult | null>(null);
   const [relayUrl, setRelayUrl] = useState('');
   const [relayUploadKey, setRelayUploadKey] = useState('');
+  const [naverClientId, setNaverClientId] = useState('');
+  const [naverClientSecret, setNaverClientSecret] = useState('');
   const [renderedAt, setRenderedAt] = useState(() => Date.now());
+
+  const configureNaver = async () => {
+    if (!window.desktopApi.configureNaver) return;
+    setBusy(true);
+    try {
+      setResult(
+        await window.desktopApi.configureNaver({
+          clientId: naverClientId,
+          clientSecret: naverClientSecret,
+        }),
+      );
+      setNaverClientId('');
+      setNaverClientSecret('');
+    } catch (error) {
+      setResult({
+        ok: false,
+        message: error instanceof Error ? error.message : 'Naver 설정 실패',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -501,6 +528,12 @@ export function App() {
                 <dd>{status?.timeframeCounts[item] ?? 0}</dd>
               </div>
             ))}
+            {(['1d', '1w'] as const).map((item) => (
+              <div key={item}>
+                <dt>{item} 마감 참고봉</dt>
+                <dd>{snapshot?.timeframes[item].closed.length ?? 0}</dd>
+              </div>
+            ))}
           </dl>
         </aside>
       </section>
@@ -628,6 +661,40 @@ export function App() {
               <div>
                 <dt>VWAP</dt>
                 <dd>{formatNumber(selectedIndicators?.vwap ?? null, 2)}</dd>
+              </div>
+            </dl>
+          </article>
+          <article className="panel metric-panel risk-card">
+            <p className="eyebrow">EXTERNAL RISK · READ ONLY</p>
+            <dl>
+              <div>
+                <dt>외부 컨텍스트</dt>
+                <dd>{snapshot.riskContext.status}</dd>
+              </div>
+              <div>
+                <dt>고위험 사건</dt>
+                <dd>{snapshot.riskContext.highRiskNews ? '있음' : '없음'}</dd>
+              </div>
+              <div>
+                <dt>Binance 중요 공지</dt>
+                <dd>
+                  {snapshot.riskContext.binanceCriticalNotice ? '있음' : '없음'}
+                </dd>
+              </div>
+              <div>
+                <dt>Fear & Greed</dt>
+                <dd>
+                  {snapshot.riskContext.fearAndGreed
+                    ? `${snapshot.riskContext.fearAndGreed.value} · ${snapshot.riskContext.fearAndGreed.classification}`
+                    : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt>소스 경고</dt>
+                <dd>
+                  {snapshot.riskContext.sourceWarnings.slice(0, 3).join(', ') ||
+                    '없음'}
+                </dd>
               </div>
             </dl>
           </article>
@@ -991,6 +1058,44 @@ export function App() {
               고정 정책: 10x · ISOLATED · 최소 비용차감 ROI 2%
             </label>
             <button onClick={() => void saveSettings()}>설정 저장</button>
+            <input
+              aria-label="Naver Client ID"
+              value={naverClientId}
+              onChange={(event) => setNaverClientId(event.target.value)}
+              placeholder="선택: Naver 뉴스 Client ID"
+            />
+            <input
+              aria-label="Naver Client Secret"
+              type="password"
+              value={naverClientSecret}
+              onChange={(event) => setNaverClientSecret(event.target.value)}
+              placeholder="선택: Naver 뉴스 Client Secret"
+            />
+            <button
+              disabled={busy || !naverClientId || !naverClientSecret}
+              onClick={() => void configureNaver()}
+            >
+              Naver 뉴스 키 암호화 저장
+            </button>
+            <button
+              disabled={busy}
+              onClick={() =>
+                void window.desktopApi
+                  .disconnectNaver?.()
+                  .then(setResult)
+                  .catch((error: unknown) =>
+                    setResult({
+                      ok: false,
+                      message:
+                        error instanceof Error
+                          ? error.message
+                          : 'Naver 연결 해제 실패',
+                    }),
+                  )
+              }
+            >
+              Naver 뉴스 연결 해제
+            </button>
             <button className="danger" onClick={() => void resetLocalData()}>
               로컬 데이터 초기화
             </button>

@@ -20,6 +20,8 @@ export const IPC_CHANNELS = {
   configureRelay: 'relay:configure',
   disconnectRelay: 'relay:disconnect',
   resetLocalData: 'settings:reset-local-data',
+  configureNaver: 'external-context:configure-naver',
+  disconnectNaver: 'external-context:disconnect-naver',
 } as const;
 
 export type DataStatus =
@@ -193,7 +195,92 @@ export interface MarketSnapshot {
     '15m': TimeframeSnapshot;
     '1h': TimeframeSnapshot;
     '4h': TimeframeSnapshot;
+    '1d': TimeframeSnapshot;
+    '1w': TimeframeSnapshot;
   };
+  riskContext: RiskContext;
+}
+
+export type ContextStatus =
+  | 'INITIALIZING'
+  | 'NORMAL'
+  | 'DELAYED'
+  | 'STALE'
+  | 'DISCONNECTED'
+  | 'INSUFFICIENT_DATA'
+  | 'DISABLED'
+  | 'UNAVAILABLE';
+
+export type ExternalContextHorizon = 'INTRADAY' | 'SWING' | 'MACRO';
+export type ExternalContextCategory =
+  | 'BINANCE'
+  | 'MACRO'
+  | 'REGULATION'
+  | 'NEWS'
+  | 'OPTIONS'
+  | 'ONCHAIN'
+  | 'SENTIMENT';
+export type TrustTier =
+  | 'OFFICIAL'
+  | 'MULTI_SOURCE'
+  | 'SINGLE_SOURCE'
+  | 'UNVERIFIED_SOCIAL';
+
+export interface ExternalContextItem {
+  id: string;
+  source: string;
+  category: ExternalContextCategory;
+  title: string;
+  snippet: string | null;
+  url: string;
+  publishedAt: number;
+  observedAt: number;
+  language: string | null;
+  trustTier: TrustTier;
+  btcRelevance: 'HIGH' | 'MEDIUM' | 'LOW';
+  duplicateGroupId: string | null;
+  duplicateCount: number;
+  tags: string[];
+}
+
+export interface ExternalSourceHealth {
+  status: ContextStatus;
+  lastSuccess: number | null;
+  lastFailure: number | null;
+  nextAttemptAt: number | null;
+  ageMs: number | null;
+  consecutiveFailures: number;
+  error: string | null;
+}
+
+export interface RiskContext {
+  status: ContextStatus;
+  updatedAt: number | null;
+  highRiskNews: boolean;
+  representativeEventId: string | null;
+  nextMacroEvent: { name: string; at: number; remainingMs: number } | null;
+  binanceCriticalNotice: boolean;
+  optionsVolatilityState: string | null;
+  onchainAnomaly: boolean;
+  fearAndGreed: { value: number; classification: string; at: number } | null;
+  sourceWarnings: string[];
+}
+
+export interface ExternalContextSnapshot {
+  schemaVersion: 2;
+  generatedAt: number;
+  status: ContextStatus;
+  horizon: ExternalContextHorizon;
+  items: ExternalContextItem[];
+  sourceHealth: Record<string, ExternalSourceHealth>;
+  riskContext: RiskContext;
+}
+
+export interface ExternalContextStatus {
+  status: ContextStatus;
+  updatedAt: number | null;
+  riskContext: RiskContext;
+  sourceHealth: Record<string, ExternalSourceHealth>;
 }
 
 export interface MarketStatus {
@@ -390,4 +477,9 @@ export interface DesktopApi {
   configureRelay(input: RelayConfigurationInput): Promise<ActionResult>;
   disconnectRelay(): Promise<ActionResult>;
   resetLocalData(): Promise<ActionResult>;
+  configureNaver?(input: {
+    clientId: string;
+    clientSecret: string;
+  }): Promise<ActionResult>;
+  disconnectNaver?(): Promise<ActionResult>;
 }
