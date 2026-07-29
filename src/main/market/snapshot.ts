@@ -325,7 +325,7 @@ export function generateSnapshot(
   ].filter((reason): reason is string => reason !== null);
 
   const orderFlowWindows = Object.fromEntries(
-    Object.entries(LIQUIDATION_WINDOW_MS).map(([label, windowMs]) => {
+    Object.entries(WINDOW_MS).map(([label, windowMs]) => {
       const trades = cache.getTrades(windowMs, generatedAt);
       const previousTrades = cache
         .getTrades(windowMs * 2, generatedAt)
@@ -390,7 +390,7 @@ export function generateSnapshot(
     .slice(0, 20)
     .reduce((sum, [price, quantity]) => sum + price * quantity, 0);
   const liquidationSummary = Object.fromEntries(
-    Object.entries(WINDOW_MS).map(([label, windowMs]) => {
+    Object.entries(LIQUIDATION_WINDOW_MS).map(([label, windowMs]) => {
       const events = cache.getLiquidations(windowMs, generatedAt);
       const longNotional = events
         .filter((event) => event.side === 'SELL')

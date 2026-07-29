@@ -373,7 +373,8 @@ export function App() {
     setRelay(await window.desktopApi.getRelayStatus());
   }, []);
 
-  const rows = snapshot?.timeframes[timeframe].closed ?? [];
+  const selectedTimeframe = snapshot?.timeframes?.[timeframe];
+  const rows = selectedTimeframe?.closed ?? [];
   const gate = snapshot?.analysisGate;
   const current = rows.at(-1);
   const previous = rows.at(-2);
@@ -381,7 +382,19 @@ export function App() {
     current && previous
       ? ((Number(current[4]) - Number(previous[4])) / Number(previous[4])) * 100
       : null;
-  const selectedIndicators = snapshot?.timeframes[timeframe].indicators;
+  const selectedIndicators = selectedTimeframe?.indicators;
+  const scalpContext = snapshot?.scalpContext;
+  const orderFlow15s = snapshot?.orderFlow?.['15s'];
+  const orderFlow30s = snapshot?.orderFlow?.['30s'];
+  const localOiChanges = snapshot?.openInterest?.localChanges;
+  const scalpReady = Boolean(
+    scalpContext?.candles?.['1m'] &&
+      scalpContext?.candles?.['5m'] &&
+      scalpContext?.depth &&
+      orderFlow15s &&
+      orderFlow30s &&
+      localOiChanges,
+  );
   const sourceHealth = snapshot?.sourceHealth;
 
   return (
@@ -486,17 +499,19 @@ export function App() {
               ))}
             </div>
           </div>
-          {snapshot ? (
-            <MarketChart timeframe={snapshot.timeframes[timeframe]} />
+          {selectedTimeframe ? (
+            <MarketChart timeframe={selectedTimeframe} />
           ) : (
             <div className="market-chart chart-loading">
-              시장 데이터를 준비하고 있습니다.
+              {snapshot
+                ? '초단기 데이터 준비 중'
+                : '시장 데이터를 준비하고 있습니다.'}
             </div>
           )}
           <div className="chart-meta">
             <span>마감 {rows.length}개</span>
             <span>
-              진행 {snapshot?.timeframes[timeframe].live ? 1 : 0}개 (신규 진입
+              진행 {selectedTimeframe?.live ? 1 : 0}개 (신규 진입
               판단 제외)
             </span>
           </div>
@@ -703,7 +718,7 @@ export function App() {
         </section>
       )}
 
-      {snapshot && (
+      {snapshot && scalpReady && scalpContext && localOiChanges ? (
         <section className="panel scalp-panel">
           <div className="panel-heading">
             <div>
@@ -716,7 +731,7 @@ export function App() {
           </div>
           <div className="scalp-grid">
             {(['1m', '5m'] as const).map((item) => {
-              const candle = snapshot.scalpContext.candles[item];
+              const candle = scalpContext.candles[item];
               return (
                 <article key={item}>
                   <strong>{item} 캔들</strong>
@@ -759,15 +774,15 @@ export function App() {
                 <div>
                   <dt>15s / 30s 체결</dt>
                   <dd>
-                    {snapshot.orderFlow['15s'].sampleCount} /{' '}
-                    {snapshot.orderFlow['30s'].sampleCount}
+                    {orderFlow15s?.sampleCount ?? 0} /{' '}
+                    {orderFlow30s?.sampleCount ?? 0}
                   </dd>
                 </div>
                 <div>
                   <dt>15s delta 변화</dt>
                   <dd>
                     {formatNumber(
-                      snapshot.orderFlow['15s'].deltaChangeFromPreviousWindow,
+                      orderFlow15s?.deltaChangeFromPreviousWindow ?? null,
                       4,
                     )}{' '}
                     BTC
@@ -776,20 +791,20 @@ export function App() {
                 <div>
                   <dt>Depth 5s / 30s 표본</dt>
                   <dd>
-                    {snapshot.scalpContext.depth.sampleCount5s} /{' '}
-                    {snapshot.scalpContext.depth.sampleCount30s}
+                    {scalpContext.depth.sampleCount5s} /{' '}
+                    {scalpContext.depth.sampleCount30s}
                   </dd>
                 </div>
                 <div>
                   <dt>Imbalance Δ 5s / 30s</dt>
                   <dd>
                     {formatNumber(
-                      snapshot.scalpContext.depth.imbalanceChange5s,
+                      scalpContext.depth.imbalanceChange5s,
                       4,
                     )}{' '}
                     /{' '}
                     {formatNumber(
-                      snapshot.scalpContext.depth.imbalanceChange30s,
+                      scalpContext.depth.imbalanceChange30s,
                       4,
                     )}
                   </dd>
@@ -797,16 +812,24 @@ export function App() {
                 <div>
                   <dt>로컬 OI Δ 1m / 5m</dt>
                   <dd>
-                    {formatNumber(snapshot.openInterest.localChanges['1m'], 4)}%
+                    {formatNumber(localOiChanges['1m'], 4)}%
                     {' / '}
-                    {formatNumber(snapshot.openInterest.localChanges['5m'], 4)}%
+                    {formatNumber(localOiChanges['5m'], 4)}%
                   </dd>
                 </div>
               </dl>
             </article>
           </div>
         </section>
-      )}
+      ) : snapshot ? (
+        <section className="panel scalp-panel scalp-loading">
+          <p className="eyebrow">SCALP CONTEXT</p>
+          <h3>초단기 데이터 준비 중</h3>
+          <p>
+            v3 체결·호가·OI 표본이 준비되면 이 영역이 자동으로 갱신됩니다.
+          </p>
+        </section>
+      ) : null}
 
       <section className="panel gpt-panel">
         <div>

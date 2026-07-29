@@ -556,6 +556,13 @@ footer p {
 .scalp-panel {
   margin-top: 18px;
 }
+.scalp-loading {
+  padding: 22px;
+  color: #8290a6;
+}
+.scalp-loading h3 {
+  color: #dbe4f1;
+}
 .scalp-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
