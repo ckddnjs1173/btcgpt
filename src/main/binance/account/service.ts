@@ -23,6 +23,8 @@ export class AccountService {
       commission: null,
       balance: null,
       openOrders: [],
+      recentTrades: [],
+      leverageBrackets: [],
     };
   }
 
@@ -42,11 +44,20 @@ export class AccountService {
     if (Math.abs(offset) > 10_000)
       throw new Error('System clock differs too much from Binance server time');
     const client = new BinanceAccountClient(input, fetch, offset);
-    const [position, commission, balance, openOrders] = await Promise.all([
+    const [
+      position,
+      commission,
+      balance,
+      openOrders,
+      recentTrades,
+      leverageBrackets,
+    ] = await Promise.all([
       client.fetchPosition(),
       client.fetchCommission(),
       client.fetchAvailableBalance(),
       client.fetchOpenOrders(),
+      client.fetchRecentTrades(),
+      client.fetchLeverageBrackets(),
     ]);
     this.credentials.save(input);
     this.status = {
@@ -58,6 +69,8 @@ export class AccountService {
       commission,
       balance,
       openOrders,
+      recentTrades,
+      leverageBrackets,
     };
     if (!this.timer)
       this.timer = setInterval(() => void this.refresh(), 30_000);
@@ -75,6 +88,8 @@ export class AccountService {
       commission: null,
       balance: null,
       openOrders: [],
+      recentTrades: [],
+      leverageBrackets: [],
     };
   }
 
@@ -92,11 +107,20 @@ export class AccountService {
           'System clock differs too much from Binance server time',
         );
       const client = new BinanceAccountClient(stored, fetch, offset);
-      const [position, commission, balance, openOrders] = await Promise.all([
+      const [
+        position,
+        commission,
+        balance,
+        openOrders,
+        recentTrades,
+        leverageBrackets,
+      ] = await Promise.all([
         client.fetchPosition(),
         client.fetchCommission(),
         client.fetchAvailableBalance(),
         client.fetchOpenOrders(),
+        client.fetchRecentTrades(),
+        client.fetchLeverageBrackets(),
       ]);
       this.status = {
         configured: true,
@@ -107,6 +131,8 @@ export class AccountService {
         commission,
         balance,
         openOrders,
+        recentTrades,
+        leverageBrackets,
       };
     } catch (error) {
       this.status = {
@@ -118,6 +144,8 @@ export class AccountService {
         commission: null,
         balance: null,
         openOrders: [],
+        recentTrades: [],
+        leverageBrackets: [],
       };
       logger.warn('Binance read-only account refresh failed');
     }

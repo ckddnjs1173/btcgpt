@@ -37,6 +37,14 @@ const desktopApi: DesktopApi = {
     ipcRenderer.invoke(IPC_CHANNELS.saveUserSettings, settings),
   calculatePositionPlan: (input: PositionCalculationInput) =>
     ipcRenderer.invoke(IPC_CHANNELS.calculatePositionPlan, input),
+  lockTradePlan: (input) =>
+    ipcRenderer.invoke(IPC_CHANNELS.lockTradePlan, input),
+  getTradingState: () => ipcRenderer.invoke(IPC_CHANNELS.getTradingState),
+  enterPaperTrade: () => ipcRenderer.invoke(IPC_CHANNELS.enterPaperTrade),
+  partiallyClosePaperTrade: (input) =>
+    ipcRenderer.invoke(IPC_CHANNELS.partiallyClosePaperTrade, input),
+  closePaperTrade: (input) =>
+    ipcRenderer.invoke(IPC_CHANNELS.closePaperTrade, input),
   configureRelay: (input: RelayConfigurationInput) =>
     ipcRenderer.invoke(IPC_CHANNELS.configureRelay, input),
   disconnectRelay: () => ipcRenderer.invoke(IPC_CHANNELS.disconnectRelay),

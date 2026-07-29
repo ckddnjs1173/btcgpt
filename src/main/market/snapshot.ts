@@ -7,6 +7,7 @@ import type {
   MarketSnapshot,
   RiskContext,
   TimeframeSnapshot,
+  TradingState,
 } from '../../shared/contracts';
 import { ema } from '../../shared/calculations/ema';
 import { rsi } from '../../shared/calculations/rsi';
@@ -77,6 +78,8 @@ export interface SnapshotOptions {
   riskPercent?: number | null;
   riskContext?: RiskContext;
   publishedAt?: number | null;
+  defaultLeverage?: number;
+  tradingState?: TradingState;
 }
 
 function row(candle: Candle): unknown[] {
@@ -467,7 +470,7 @@ export function generateSnapshot(
     updatedAt: null,
   };
   const snapshot: MarketSnapshot = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     snapshotId: randomUUID(),
     symbol: 'BTCUSDT',
     market: 'BINANCE_USDM_PERPETUAL',
@@ -488,7 +491,10 @@ export function generateSnapshot(
       missingFields,
     },
     strategy: {
-      leverage: 10,
+      leverage:
+        options.tradingState?.activePlan?.leverage ??
+        options.defaultLeverage ??
+        10,
       marginMode: 'ISOLATED',
       minimumNetMarginRoiPercent: 2,
       maxLossUsdt: options.maxLossUsdt ?? null,
@@ -581,6 +587,8 @@ export function generateSnapshot(
         options.accountStatus?.balance?.availableBalance ?? null,
       commission: options.accountStatus?.commission ?? null,
       openOrders: options.accountStatus?.openOrders ?? [],
+      recentTrades: options.accountStatus?.recentTrades ?? [],
+      leverageBrackets: options.accountStatus?.leverageBrackets ?? [],
     },
     costSettings: {
       makerFeeRate: options.makerFeeRate ?? null,
@@ -640,6 +648,32 @@ export function generateSnapshot(
         askWallNotional: latestDepth?.askWallNotional ?? null,
         bidWallPersistence5s: wallPersistence('bid', depth5s),
         askWallPersistence5s: wallPersistence('ask', depth5s),
+      },
+    },
+    trading: options.tradingState ?? {
+      mode: 'PAPER',
+      activePlan: null,
+      activePaperTrade: null,
+      statistics: {
+        closedTrades: 0,
+        wins: 0,
+        losses: 0,
+        winRate: null,
+        grossProfit: 0,
+        grossLoss: 0,
+        netPnl: 0,
+        averageNetPnl: null,
+        profitFactor: null,
+        maxDrawdown: null,
+      },
+      liveManual: {
+        available: false,
+        blockedReasons: ['TRADING_STATE_UNAVAILABLE'],
+        position: null,
+        protectiveOrders: [],
+        recentTrades: [],
+        realizedPnl: null,
+        planMatchesPosition: null,
       },
     },
   };

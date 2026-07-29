@@ -45,6 +45,7 @@ export const manualPositionInputSchema = z.object({
   side: z.enum(['LONG', 'SHORT']),
   quantity: z.number().positive().max(100),
   entryPrice: z.number().positive().max(10_000_000),
+  leverage: z.number().int().min(1).max(150).default(10),
   stopPrice: z.number().positive().max(10_000_000).nullable().optional(),
   targetPrices: z
     .array(z.number().positive().max(10_000_000))
@@ -62,7 +63,7 @@ export const manualPositionSchema = z.object({
   entryPrice: z.number().positive(),
   notional: z.number().positive(),
   isolatedMargin: z.number().positive(),
-  leverage: z.literal(10),
+  leverage: z.number().int().min(1).max(150).default(10),
   marginMode: z.literal('ISOLATED'),
   stopPrice: z.number().positive().nullable(),
   targetPrices: z.array(z.number().positive()).max(3),
@@ -89,6 +90,8 @@ export const userSettingsSchema = z.object({
     ),
   minimumNetMarginRoiPercent: z.literal(2),
   autoStart: z.boolean(),
+  tradingMode: z.enum(['PAPER', 'LIVE_MANUAL']).default('PAPER'),
+  defaultLeverage: z.number().int().min(1).max(150).default(10),
 });
 
 export const positionCalculationInputSchema = z.object({
@@ -96,11 +99,35 @@ export const positionCalculationInputSchema = z.object({
   entry: z.number().positive().max(10_000_000),
   stop: z.number().positive().max(10_000_000),
   target: z.number().positive().max(10_000_000),
+  leverage: z.number().int().min(1).max(150).default(10),
+  sizeMode: z
+    .enum([
+      'MARGIN_USDT',
+      'QUANTITY_BTC',
+      'NOTIONAL_USDT',
+      'MAX_LOSS_USDT',
+    ])
+    .default('MAX_LOSS_USDT'),
+  sizeValue: z.number().positive().max(1_000_000_000).optional(),
   maxLossUsdt: z.number().positive().nullable().optional(),
   accountEquity: z.number().positive().nullable().optional(),
   riskPercent: z.number().positive().max(1).nullable().optional(),
   entryOrderType: z.enum(['MAKER', 'TAKER']).optional(),
   exitOrderType: z.enum(['MAKER', 'TAKER']).optional(),
+  expectedFundingPeriods: z.number().int().min(0).max(90).default(1),
+});
+
+export const lockTradePlanInputSchema = positionCalculationInputSchema.extend({
+  targets: z
+    .array(z.number().positive().max(10_000_000))
+    .min(1)
+    .max(3)
+    .optional(),
+});
+
+export const paperCloseInputSchema = z.object({
+  quantity: z.number().positive().max(100).optional(),
+  exitPrice: z.number().positive().max(10_000_000).optional(),
 });
 
 export const relayConfigurationSchema = z.object({

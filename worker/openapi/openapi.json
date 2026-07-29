@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "BTC Futures Assistant Actions",
-    "version": "3.0.0",
-    "description": "Read-only BTCUSDT scalp snapshot, free external context, and deterministic plan validation."
+    "version": "4.0.0",
+    "description": "Read-only BTCUSDT Phase 8 scalp data, Phase 9 paper plans, Phase 10 live-manual context, and deterministic validation."
   },
   "servers": [
     {
@@ -23,6 +23,8 @@
           "entry",
           "stop",
           "targets",
+          "sizeMode",
+          "sizeValue",
           "leverage",
           "marginMode"
         ],
@@ -58,7 +60,21 @@
             "maximum": 12,
             "default": 0
           },
-          "leverage": { "type": "integer", "const": 10 },
+          "sizeMode": {
+            "type": "string",
+            "enum": ["MARGIN_USDT", "QUANTITY_BTC", "NOTIONAL_USDT", "MAX_LOSS_USDT"]
+          },
+          "sizeValue": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Exact user value for the selected sizing mode. It is never silently changed."
+          },
+          "leverage": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 150,
+            "default": 10
+          },
           "marginMode": { "type": "string", "const": "ISOLATED" }
         }
       }
@@ -106,7 +122,7 @@
     "/v1/plan/validate": {
       "post": {
         "operationId": "validateTradePlan",
-        "summary": "Validate a manual 10x isolated trade plan",
+        "summary": "Validate an exact-size 1 to 150x isolated manual trade plan",
         "x-openai-isConsequential": false,
         "requestBody": {
           "required": true,

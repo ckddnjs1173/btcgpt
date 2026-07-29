@@ -17,6 +17,11 @@ export const IPC_CHANNELS = {
   getUserSettings: 'settings:get',
   saveUserSettings: 'settings:save',
   calculatePositionPlan: 'calculations:position-plan',
+  lockTradePlan: 'trading:lock-plan',
+  getTradingState: 'trading:get-state',
+  enterPaperTrade: 'trading:paper-enter',
+  partiallyClosePaperTrade: 'trading:paper-partial-close',
+  closePaperTrade: 'trading:paper-close',
   configureRelay: 'relay:configure',
   disconnectRelay: 'relay:disconnect',
   resetLocalData: 'settings:reset-local-data',
@@ -85,7 +90,7 @@ export interface MarketSnapshot {
   binanceServerTime: number;
   analysisGate: AnalysisGate;
   strategy: {
-    leverage: 10;
+    leverage: number;
     marginMode: 'ISOLATED';
     minimumNetMarginRoiPercent: 2;
     maxLossUsdt: number | null;
@@ -178,6 +183,8 @@ export interface MarketSnapshot {
     availableBalance: number | null;
     commission: AccountStatus['commission'];
     openOrders: AccountStatus['openOrders'];
+    recentTrades: AccountStatus['recentTrades'];
+    leverageBrackets: AccountStatus['leverageBrackets'];
   };
   costSettings: {
     makerFeeRate: number | null;
@@ -253,6 +260,7 @@ export interface MarketSnapshot {
       askWallPersistence5s: number | null;
     };
   };
+  trading: TradingState;
 }
 
 export type ContextStatus =
@@ -395,7 +403,7 @@ export interface AccountStatus {
     unrealizedPnl: number;
     isolatedMargin: number;
     liquidationPrice: number | null;
-    leverage: 10;
+    leverage: number;
     marginMode: 'ISOLATED';
     updatedAt: number;
   } | null;
@@ -419,6 +427,26 @@ export interface AccountStatus {
     protective: boolean;
     updatedAt: number;
   }>;
+  recentTrades: Array<{
+    tradeId: string;
+    side: 'BUY' | 'SELL';
+    positionSide: 'BOTH' | 'LONG' | 'SHORT';
+    price: number;
+    quantity: number;
+    realizedPnl: number;
+    commission: number;
+    commissionAsset: string;
+    maker: boolean;
+    timestamp: number;
+  }>;
+  leverageBrackets: Array<{
+    bracket: number;
+    initialLeverage: number;
+    notionalFloor: number;
+    notionalCap: number;
+    maintenanceMarginRate: number;
+    updatedAt: number;
+  }>;
 }
 
 export interface ManualPosition {
@@ -428,7 +456,7 @@ export interface ManualPosition {
   entryPrice: number;
   notional: number;
   isolatedMargin: number;
-  leverage: 10;
+  leverage: number;
   marginMode: 'ISOLATED';
   stopPrice: number | null;
   targetPrices: number[];
@@ -442,6 +470,7 @@ export interface ManualPositionInput {
   side: 'LONG' | 'SHORT';
   quantity: number;
   entryPrice: number;
+  leverage?: number;
   stopPrice?: number | null;
   targetPrices?: number[];
   entryOrderType?: 'MAKER' | 'TAKER';
@@ -475,18 +504,31 @@ export interface UserSettings {
   partialTakeProfitRatios: [number, number, number];
   minimumNetMarginRoiPercent: 2;
   autoStart: boolean;
+  tradingMode: TradingMode;
+  defaultLeverage: number;
 }
+
+export type TradingMode = 'PAPER' | 'LIVE_MANUAL';
+export type PositionSizeMode =
+  | 'MARGIN_USDT'
+  | 'QUANTITY_BTC'
+  | 'NOTIONAL_USDT'
+  | 'MAX_LOSS_USDT';
 
 export interface PositionCalculationInput {
   side: 'LONG' | 'SHORT';
   entry: number;
   stop: number;
   target: number;
+  leverage?: number;
+  sizeMode?: PositionSizeMode;
+  sizeValue?: number;
   maxLossUsdt?: number | null;
   accountEquity?: number | null;
   riskPercent?: number | null;
   entryOrderType?: 'MAKER' | 'TAKER';
   exitOrderType?: 'MAKER' | 'TAKER';
+  expectedFundingPeriods?: number;
 }
 
 export interface PositionCalculationResult {
@@ -494,7 +536,21 @@ export interface PositionCalculationResult {
   errors: string[];
   warnings: string[];
   quantity: number | null;
+  requestedQuantity: number | null;
+  notional: number | null;
+  isolatedMargin: number | null;
+  leverage: number;
+  sizeMode: PositionSizeMode;
+  sizeValue: number | null;
   breakevenPrice: number | null;
+  estimatedLiquidationPrice: number | null;
+  liquidationDistancePercent: number | null;
+  maximumAllowed: {
+    leverage: number | null;
+    notional: number | null;
+    quantity: number | null;
+    margin: number | null;
+  };
   estimatedMaxLoss: number | null;
   target: {
     grossPnl: number;
@@ -505,6 +561,95 @@ export interface PositionCalculationResult {
     exitFee: number;
     slippage: number;
   } | null;
+}
+
+export interface LockedTradePlan {
+  id: string;
+  mode: TradingMode;
+  status: 'LOCKED' | 'ENTERED' | 'PARTIALLY_CLOSED' | 'CLOSED' | 'CANCELLED';
+  side: 'LONG' | 'SHORT';
+  entry: number;
+  stop: number;
+  targets: number[];
+  leverage: number;
+  marginMode: 'ISOLATED';
+  sizeMode: PositionSizeMode;
+  sizeValue: number;
+  quantity: number;
+  notional: number;
+  isolatedMargin: number;
+  maxLossUsdt: number | null;
+  estimatedMaxLoss: number;
+  breakevenPrice: number;
+  estimatedLiquidationPrice: number | null;
+  entryFeeRate: number;
+  exitFeeRate: number;
+  entrySlippageBps: number;
+  exitSlippageBps: number;
+  fundingRate: number;
+  expectedFundingPeriods: number;
+  snapshotId: string;
+  marketGeneratedAt: number;
+  lockedAt: number;
+}
+
+export interface LockTradePlanInput extends PositionCalculationInput {
+  targets?: number[];
+}
+
+export interface PaperTrade {
+  id: string;
+  planId: string;
+  status: 'OPEN' | 'PARTIALLY_CLOSED' | 'CLOSED';
+  side: 'LONG' | 'SHORT';
+  entryPrice: number;
+  initialQuantity: number;
+  remainingQuantity: number;
+  leverage: number;
+  isolatedMargin: number;
+  openedAt: number;
+  closedAt: number | null;
+  realizedGrossPnl: number;
+  feesPaid: number;
+  slippagePaid: number;
+  fundingPaid: number;
+  realizedNetPnl: number;
+  lastMarkPrice: number;
+  updatedAt: number;
+}
+
+export interface PaperCloseInput {
+  quantity?: number;
+  exitPrice?: number;
+}
+
+export interface TradingStatistics {
+  closedTrades: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  grossProfit: number;
+  grossLoss: number;
+  netPnl: number;
+  averageNetPnl: number | null;
+  profitFactor: number | null;
+  maxDrawdown: number | null;
+}
+
+export interface TradingState {
+  mode: TradingMode;
+  activePlan: LockedTradePlan | null;
+  activePaperTrade: PaperTrade | null;
+  statistics: TradingStatistics;
+  liveManual: {
+    available: boolean;
+    blockedReasons: string[];
+    position: AccountStatus['position'];
+    protectiveOrders: AccountStatus['openOrders'];
+    recentTrades: AccountStatus['recentTrades'];
+    realizedPnl: number | null;
+    planMatchesPosition: boolean | null;
+  };
 }
 
 export interface DesktopApi {
@@ -528,6 +673,11 @@ export interface DesktopApi {
   calculatePositionPlan(
     input: PositionCalculationInput,
   ): Promise<PositionCalculationResult>;
+  lockTradePlan?(input: LockTradePlanInput): Promise<LockedTradePlan>;
+  getTradingState?(): Promise<TradingState>;
+  enterPaperTrade?(): Promise<PaperTrade>;
+  partiallyClosePaperTrade?(input: PaperCloseInput): Promise<PaperTrade>;
+  closePaperTrade?(input: PaperCloseInput): Promise<PaperTrade>;
   configureRelay(input: RelayConfigurationInput): Promise<ActionResult>;
   disconnectRelay(): Promise<ActionResult>;
   resetLocalData(): Promise<ActionResult>;

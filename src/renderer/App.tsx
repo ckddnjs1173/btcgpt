@@ -28,6 +28,8 @@ const DEFAULT_SETTINGS: UserSettings = {
   partialTakeProfitRatios: [0.3, 0.3, 0.4],
   minimumNetMarginRoiPercent: 2,
   autoStart: false,
+  tradingMode: 'PAPER',
+  defaultLeverage: 10,
 };
 
 interface NumericSettingsDraft {
@@ -110,6 +112,13 @@ export function App() {
     entry: '',
     stop: '',
     target: '',
+    leverage: '10',
+    sizeMode: 'MARGIN_USDT' as
+      | 'MARGIN_USDT'
+      | 'QUANTITY_BTC'
+      | 'NOTIONAL_USDT'
+      | 'MAX_LOSS_USDT',
+    sizeValue: '',
     entryOrderType: 'TAKER' as 'MAKER' | 'TAKER',
     exitOrderType: 'TAKER' as 'MAKER' | 'TAKER',
   });
@@ -253,6 +262,7 @@ export function App() {
         side: manualSide,
         quantity: Number(manualQuantity),
         entryPrice: Number(manualEntry),
+        leverage: settings.defaultLeverage,
         stopPrice: manualStop ? Number(manualStop) : null,
         targetPrices: manualTargets
           .filter((value) => Number(value) > 0)
@@ -267,7 +277,14 @@ export function App() {
           error instanceof Error ? error.message : '수동 포지션 저장 실패',
       });
     }
-  }, [manualEntry, manualQuantity, manualSide, manualStop, manualTargets]);
+  }, [
+    manualEntry,
+    manualQuantity,
+    manualSide,
+    manualStop,
+    manualTargets,
+    settings.defaultLeverage,
+  ]);
 
   const saveSettings = useCallback(async () => {
     try {
@@ -319,6 +336,9 @@ export function App() {
           entry: Number(calculator.entry),
           stop: Number(calculator.stop),
           target: Number(calculator.target),
+          leverage: Number(calculator.leverage),
+          sizeMode: calculator.sizeMode,
+          sizeValue: Number(calculator.sizeValue),
           entryOrderType: calculator.entryOrderType,
           exitOrderType: calculator.exitOrderType,
         }),
@@ -330,6 +350,59 @@ export function App() {
       });
     }
   }, [calculator]);
+
+  const lockPlan = useCallback(async () => {
+    try {
+      if (!window.desktopApi.lockTradePlan) throw new Error('계획 고정 API 미지원');
+      await window.desktopApi.lockTradePlan({
+        side: calculator.side,
+        entry: Number(calculator.entry),
+        stop: Number(calculator.stop),
+        target: Number(calculator.target),
+        targets: [Number(calculator.target)],
+        leverage: Number(calculator.leverage),
+        sizeMode: calculator.sizeMode,
+        sizeValue: Number(calculator.sizeValue),
+        entryOrderType: calculator.entryOrderType,
+        exitOrderType: calculator.exitOrderType,
+      });
+      setResult({ ok: true, message: '검증된 진입 전 계획을 고정했습니다.' });
+      await refresh();
+    } catch (error) {
+      setResult({
+        ok: false,
+        message: error instanceof Error ? error.message : '계획 고정 실패',
+      });
+    }
+  }, [calculator, refresh]);
+
+  const enterPaperTrade = useCallback(async () => {
+    try {
+      if (!window.desktopApi.enterPaperTrade) throw new Error('PAPER API 미지원');
+      await window.desktopApi.enterPaperTrade();
+      setResult({ ok: true, message: 'PAPER 거래를 시작했습니다.' });
+      await refresh();
+    } catch (error) {
+      setResult({
+        ok: false,
+        message: error instanceof Error ? error.message : 'PAPER 진입 실패',
+      });
+    }
+  }, [refresh]);
+
+  const closePaperTrade = useCallback(async () => {
+    try {
+      if (!window.desktopApi.closePaperTrade) throw new Error('PAPER API 미지원');
+      await window.desktopApi.closePaperTrade({});
+      setResult({ ok: true, message: 'PAPER 거래를 비용 차감 후 종료했습니다.' });
+      await refresh();
+    } catch (error) {
+      setResult({
+        ok: false,
+        message: error instanceof Error ? error.message : 'PAPER 종료 실패',
+      });
+    }
+  }, [refresh]);
 
   const connectRelay = useCallback(async () => {
     setBusy(true);
@@ -866,6 +939,61 @@ export function App() {
 
       <section className="panel account-panel">
         <div>
+          <p className="eyebrow">PHASE 9·10 · {snapshot?.trading.mode ?? settings.tradingMode}</p>
+          <h3>고정 계획과 포지션 관리</h3>
+          <p>
+            앱은 객관값과 비용 차감 결과만 기록합니다. 실제 주문·부분익절·종료와
+            레버리지 설정은 Binance에서 직접 수행합니다.
+          </p>
+        </div>
+        <div className="account-status">
+          <strong>
+            {snapshot?.trading.activePlan
+              ? `${snapshot.trading.activePlan.status} · ${snapshot.trading.activePlan.side} ${snapshot.trading.activePlan.quantity} BTC · ${snapshot.trading.activePlan.leverage}x`
+              : '고정 계획 없음'}
+          </strong>
+          {snapshot?.trading.activePaperTrade && (
+            <span>
+              PAPER {snapshot.trading.activePaperTrade.status} · 잔여{' '}
+              {formatNumber(snapshot.trading.activePaperTrade.remainingQuantity, 8)} BTC ·
+              순실현손익{' '}
+              {formatNumber(snapshot.trading.activePaperTrade.realizedNetPnl)} USDT
+            </span>
+          )}
+          <span>
+            종료 표본 {snapshot?.trading.statistics.closedTrades ?? 0} · 승률{' '}
+            {snapshot?.trading.statistics.winRate === null
+              ? '검증 표본 없음'
+              : `${formatNumber((snapshot?.trading.statistics.winRate ?? 0) * 100, 2)}%`}
+            {' · '}누적 순손익{' '}
+            {formatNumber(snapshot?.trading.statistics.netPnl ?? 0)} USDT
+          </span>
+          {settings.tradingMode === 'PAPER' &&
+            snapshot?.trading.activePlan?.status === 'LOCKED' && (
+              <button onClick={() => void enterPaperTrade()}>
+                고정 계획으로 PAPER 진입
+              </button>
+            )}
+          {snapshot?.trading.activePaperTrade && (
+            <button onClick={() => void closePaperTrade()}>
+              현재 mark로 PAPER 전량 종료
+            </button>
+          )}
+          {settings.tradingMode === 'LIVE_MANUAL' && (
+            <span>
+              LIVE 판단{' '}
+              {snapshot?.trading.liveManual.available
+                ? '가능'
+                : `차단: ${snapshot?.trading.liveManual.blockedReasons.join(', ') || '준비 중'}`}
+              {' · '}보호주문{' '}
+              {snapshot?.trading.liveManual.protectiveOrders.length ?? 0}개
+            </span>
+          )}
+        </div>
+      </section>
+
+      <section className="panel account-panel">
+        <div>
           <p className="eyebrow">CLOUDFLARE RELAY</p>
           <h3>GPT Actions 중계</h3>
           <p>
@@ -934,7 +1062,7 @@ export function App() {
             <strong>{account.connected ? '연결됨' : '연결 끊김'}</strong>
             <span>
               {account.position
-                ? `${account.position.side} ${account.position.quantity} BTC · 10x ISOLATED`
+                ? `${account.position.side} ${account.position.quantity} BTC · ${account.position.leverage}x ISOLATED`
                 : '현재 포지션 없음'}
             </span>
             <button onClick={() => void disconnectAccount()}>
@@ -972,7 +1100,7 @@ export function App() {
       <section className="panel settings-layout">
         <div>
           <p className="eyebrow">DETERMINISTIC CALCULATOR</p>
-          <h3>최대손실 기반 수량·비용 검증</h3>
+          <h3>규모·레버리지·비용 검증과 계획 고정</h3>
           <div className="account-form">
             <select
               value={calculator.side}
@@ -1019,6 +1147,47 @@ export function App() {
               }
               placeholder="목표가"
             />
+            <input
+              aria-label="선택 레버리지"
+              inputMode="numeric"
+              min="1"
+              max="150"
+              value={calculator.leverage}
+              onChange={(event) =>
+                setCalculator((current) => ({
+                  ...current,
+                  leverage: event.target.value,
+                }))
+              }
+              placeholder="레버리지 1~150"
+            />
+            <select
+              aria-label="규모 지정 방식"
+              value={calculator.sizeMode}
+              onChange={(event) =>
+                setCalculator((current) => ({
+                  ...current,
+                  sizeMode: event.target.value as typeof current.sizeMode,
+                }))
+              }
+            >
+              <option value="MARGIN_USDT">MARGIN_USDT</option>
+              <option value="QUANTITY_BTC">QUANTITY_BTC</option>
+              <option value="NOTIONAL_USDT">NOTIONAL_USDT</option>
+              <option value="MAX_LOSS_USDT">MAX_LOSS_USDT</option>
+            </select>
+            <input
+              aria-label="규모 값"
+              inputMode="decimal"
+              value={calculator.sizeValue}
+              onChange={(event) =>
+                setCalculator((current) => ({
+                  ...current,
+                  sizeValue: event.target.value,
+                }))
+              }
+              placeholder="선택 방식의 값"
+            />
             <select
               aria-label="진입 주문 유형"
               value={calculator.entryOrderType}
@@ -1046,6 +1215,12 @@ export function App() {
               <option>MAKER</option>
             </select>
             <button onClick={() => void runCalculator()}>수량·비용 검증</button>
+            <button
+              disabled={!calculation?.valid}
+              onClick={() => void lockPlan()}
+            >
+              검증값으로 계획 고정
+            </button>
           </div>
           {calculation && (
             <div
@@ -1060,6 +1235,20 @@ export function App() {
                 <span>
                   순손익 {formatNumber(calculation.target.netPnl)} USDT · 증거금
                   ROI {formatNumber(calculation.target.netMarginRoiPercent)}%
+                </span>
+              )}
+              {calculation.notional !== null && (
+                <span>
+                  명목가치 {formatNumber(calculation.notional)} USDT · 격리
+                  증거금 {formatNumber(calculation.isolatedMargin)} USDT ·{' '}
+                  {calculation.leverage}x
+                </span>
+              )}
+              {calculation.estimatedLiquidationPrice && (
+                <span>
+                  추정 청산가{' '}
+                  {formatNumber(calculation.estimatedLiquidationPrice)} · 거리{' '}
+                  {formatNumber(calculation.liquidationDistancePercent)}%
                 </span>
               )}
               {calculation.breakevenPrice && (
@@ -1185,7 +1374,39 @@ export function App() {
               Windows 로그인 시 자동실행
             </label>
             <label className="fixed-policy">
-              고정 정책: 10x · ISOLATED · 최소 비용차감 ROI 2%
+              <select
+                aria-label="거래 모드"
+                value={settings.tradingMode}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    tradingMode: event.target.value as 'PAPER' | 'LIVE_MANUAL',
+                  }))
+                }
+              >
+                <option value="PAPER">PAPER</option>
+                <option value="LIVE_MANUAL">LIVE_MANUAL</option>
+              </select>
+              운영 모드
+            </label>
+            <label className="fixed-policy">
+              <input
+                aria-label="기본 레버리지"
+                type="number"
+                min="1"
+                max="150"
+                value={settings.defaultLeverage}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    defaultLeverage: Number(event.target.value),
+                  }))
+                }
+              />
+              기본 레버리지 (1~150, 기본 10)
+            </label>
+            <label className="fixed-policy">
+              정책: 사용자 선택 1~150x · ISOLATED · 주문/레버리지 변경 API 없음
             </label>
             <button onClick={() => void saveSettings()}>설정 저장</button>
             <input
@@ -1326,7 +1547,7 @@ export function App() {
 
       <footer>
         <span>안전 경계</span>
-        <strong>10x · Isolated · 수동 주문 전용</strong>
+        <strong>1~150x 사용자 선택 · Isolated · 수동 주문 전용</strong>
         <p>주문 생성·수정·취소 API 없음</p>
       </footer>
     </main>

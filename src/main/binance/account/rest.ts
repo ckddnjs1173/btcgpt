@@ -9,6 +9,8 @@ const ALLOWED_PATHS = new Set([
   '/fapi/v1/symbolConfig',
   '/fapi/v1/commissionRate',
   '/fapi/v1/openOrders',
+  '/fapi/v1/leverageBracket',
+  '/fapi/v1/userTrades',
 ]);
 
 const positionSchema = z.array(
@@ -61,6 +63,34 @@ const openOrderSchema = z.array(
     updateTime: z.number(),
   }),
 );
+const leverageBracketSchema = z.array(
+  z.object({
+    symbol: z.literal('BTCUSDT'),
+    brackets: z.array(
+      z.object({
+        bracket: z.number().int().positive(),
+        initialLeverage: z.number().int().positive(),
+        notionalCap: z.number().nonnegative(),
+        notionalFloor: z.number().nonnegative(),
+        maintMarginRatio: z.number().nonnegative(),
+      }),
+    ),
+  }),
+);
+const userTradesSchema = z.array(
+  z.object({
+    symbol: z.literal('BTCUSDT'),
+    side: z.enum(['BUY', 'SELL']),
+    positionSide: z.enum(['BOTH', 'LONG', 'SHORT']),
+    price: numericStringSchema,
+    qty: numericStringSchema,
+    realizedPnl: numericStringSchema,
+    commission: numericStringSchema,
+    commissionAsset: z.string(),
+    maker: z.boolean(),
+    time: z.number(),
+  }),
+);
 
 export interface AccountCredentials {
   apiKey: string;
@@ -77,7 +107,7 @@ export interface AccountPosition {
   unrealizedPnl: number;
   isolatedMargin: number;
   liquidationPrice: number | null;
-  leverage: 10;
+  leverage: number;
   marginMode: 'ISOLATED';
   updatedAt: number;
 }
@@ -125,11 +155,10 @@ export class BinanceAccountClient {
       .find((item) => item.symbol === 'BTCUSDT');
     if (!configuration)
       throw new Error('BTCUSDT account configuration was not returned');
-    if (
-      configuration.leverage !== 10 ||
-      configuration.marginType.toLowerCase() !== 'isolated'
-    )
-      throw new Error('BTCUSDT must be configured as 10x isolated');
+    if (configuration.marginType.toLowerCase() !== 'isolated')
+      throw new Error('BTCUSDT must be configured as isolated margin');
+    if (configuration.leverage < 1 || configuration.leverage > 150)
+      throw new Error('BTCUSDT leverage is outside the supported 1-150 range');
     const activePositions = raw.filter(
       (position) =>
         position.symbol === 'BTCUSDT' && Number(position.positionAmt) !== 0,
@@ -158,7 +187,7 @@ export class BinanceAccountClient {
         Number(item.liquidationPrice) > 0
           ? Number(item.liquidationPrice)
           : null,
-      leverage: 10,
+      leverage: configuration.leverage,
       marginMode: 'ISOLATED',
       updatedAt: item.updateTime,
     };
@@ -208,5 +237,45 @@ export class BinanceAccountClient {
           ),
         updatedAt: order.updateTime,
       }));
+  }
+
+  async fetchLeverageBrackets() {
+    const result = leverageBracketSchema.parse(
+      await this.signedGet('/fapi/v1/leverageBracket', {
+        symbol: 'BTCUSDT',
+      }),
+    );
+    const now = Date.now();
+    return (
+      result.find((item) => item.symbol === 'BTCUSDT')?.brackets ?? []
+    ).map((item) => ({
+      bracket: item.bracket,
+      initialLeverage: item.initialLeverage,
+      notionalFloor: item.notionalFloor,
+      notionalCap: item.notionalCap,
+      maintenanceMarginRate: item.maintMarginRatio,
+      updatedAt: now,
+    }));
+  }
+
+  async fetchRecentTrades() {
+    const trades = userTradesSchema.parse(
+      await this.signedGet('/fapi/v1/userTrades', {
+        symbol: 'BTCUSDT',
+        limit: '50',
+      }),
+    );
+    return trades.map((trade, index) => ({
+      tradeId: `${trade.time}-${index}`,
+      side: trade.side,
+      positionSide: trade.positionSide,
+      price: Number(trade.price),
+      quantity: Number(trade.qty),
+      realizedPnl: Number(trade.realizedPnl),
+      commission: Number(trade.commission),
+      commissionAsset: trade.commissionAsset,
+      maker: trade.maker,
+      timestamp: trade.time,
+    }));
   }
 }

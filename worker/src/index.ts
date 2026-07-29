@@ -3,7 +3,7 @@ import {
   calculatePositionPlan,
   isStepAligned,
   signedFundingPayment,
-  validateRiskQuantity,
+  validateExactPositionSize,
 } from '../../src/shared/calculations/costs';
 
 const MAX_BODY_BYTES = 90_000;
@@ -30,7 +30,7 @@ export interface Env {
 
 const snapshotSchema = z
   .object({
-    schemaVersion: z.union([z.literal(2), z.literal(3)]),
+    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]),
     snapshotId: z.string().min(1).max(100),
     symbol: z.literal('BTCUSDT'),
     market: z.literal('BINANCE_USDM_PERPETUAL'),
@@ -54,14 +54,14 @@ const snapshotSchema = z
   .passthrough()
   .superRefine((snapshot, context) => {
     if (
-      snapshot.schemaVersion === 3 &&
+      snapshot.schemaVersion >= 3 &&
       (!snapshot.scalpContext ||
         !snapshot.timeframes ||
         !Object.hasOwn(snapshot.timeframes, '1m'))
     )
       context.addIssue({
         code: 'custom',
-        message: 'Schema version 3 requires scalpContext and 1m timeframe',
+        message: 'Schema version 3 or newer requires scalpContext and 1m timeframe',
       });
   });
 
@@ -160,7 +160,14 @@ const planSchema = z.object({
   entryOrderType: z.enum(['MAKER', 'TAKER']).default('TAKER'),
   exitOrderType: z.enum(['MAKER', 'TAKER']).default('TAKER'),
   expectedFundingPeriods: z.number().int().min(0).max(12).default(0),
-  leverage: z.literal(10),
+  leverage: z.number().int().min(1).max(150).default(10),
+  sizeMode: z.enum([
+    'MARGIN_USDT',
+    'QUANTITY_BTC',
+    'NOTIONAL_USDT',
+    'MAX_LOSS_USDT',
+  ]),
+  sizeValue: z.number().positive(),
   marginMode: z.literal('ISOLATED'),
 }).strict();
 
@@ -256,6 +263,25 @@ async function save(env: Env, raw: string, generatedAt: number): Promise<void> {
     .bind(raw, generatedAt, receivedAt)
     .run();
   if (!result.success) throw new Error('D1_WRITE_FAILED');
+  const snapshot = JSON.parse(raw) as { trading?: unknown };
+  if (snapshot.trading !== undefined) {
+    const tradingResult = await requireDatabase(env)
+      .prepare(
+        `INSERT INTO latest_trading_state
+          (id, payload, generated_at, received_at)
+         VALUES (1, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,
+           generated_at=excluded.generated_at, received_at=excluded.received_at
+         WHERE excluded.generated_at >= latest_trading_state.generated_at`,
+      )
+      .bind(
+        JSON.stringify(snapshot.trading),
+        generatedAt,
+        receivedAt,
+      )
+      .run();
+    if (!tradingResult.success) throw new Error('D1_TRADING_STATE_WRITE_FAILED');
+  }
 }
 
 async function load(env: Env) {
@@ -582,7 +608,16 @@ export async function handler(request: Request, env: Env): Promise<Response> {
         entrySlippageBps?: number | null;
         exitSlippageBps?: number | null;
       };
-      account?: { availableBalance?: number | null };
+      account?: {
+        availableBalance?: number | null;
+        leverageBrackets?: Array<{
+          initialLeverage: number;
+          notionalFloor: number;
+          notionalCap: number;
+          maintenanceMarginRate: number;
+          updatedAt: number;
+        }>;
+      };
       strategy?: {
         maxLossUsdt?: number | null;
         riskPercent?: number | null;
@@ -623,10 +658,47 @@ export async function handler(request: Request, env: Env): Promise<Response> {
       return validationFailure(['SLIPPAGE_INPUT_REQUIRED']);
     const entrySlippageRate = entrySlippageBps / 10_000;
     const exitSlippageRate = exitSlippageBps / 10_000;
-    const quantityResult = validateRiskQuantity({
+    const lossPerUnit =
+      Math.abs(plan.entry - plan.stop) +
+      plan.entry *
+        ((entryFeeRate ?? 0) +
+          Math.max(entrySlippageRate, exitSlippageRate)) +
+      plan.stop *
+        ((exitFeeRate ?? 0) +
+          Math.max(entrySlippageRate, exitSlippageRate));
+    const provisionalQuantity =
+      plan.sizeMode === 'MARGIN_USDT'
+        ? (plan.sizeValue * plan.leverage) / plan.entry
+        : plan.sizeMode === 'QUANTITY_BTC'
+          ? plan.sizeValue
+          : plan.sizeMode === 'NOTIONAL_USDT'
+            ? plan.sizeValue / plan.entry
+            : plan.sizeValue / lossPerUnit;
+    const provisionalNotional = provisionalQuantity * plan.entry;
+    const brackets = snapshot.account?.leverageBrackets ?? [];
+    const bracket = brackets.find(
+      (candidate) =>
+        provisionalNotional >= candidate.notionalFloor &&
+        provisionalNotional <= candidate.notionalCap,
+    );
+    if (!bracket) return validationFailure(['LEVERAGE_BRACKET_REQUIRED'], 409);
+    if (Date.now() - bracket.updatedAt > 5 * 60_000)
+      return validationFailure(['LEVERAGE_BRACKET_STALE'], 409);
+    const quantityResult = validateExactPositionSize({
+      side: plan.side,
       entry: plan.entry,
       stop: plan.stop,
-      maxLossUsdt: plan.maxLossUsdt ?? snapshot.strategy?.maxLossUsdt,
+      leverage: plan.leverage,
+      sizeMode: plan.sizeMode,
+      sizeValue: plan.sizeValue,
+      maximumLeverage: bracket.initialLeverage,
+      maximumNotional: bracket.notionalCap,
+      maintenanceMarginRate: bracket.maintenanceMarginRate,
+      maxLossUsdt:
+        plan.maxLossUsdt ??
+        (plan.sizeMode === 'MAX_LOSS_USDT'
+          ? plan.sizeValue
+          : snapshot.strategy?.maxLossUsdt),
       accountEquity: snapshot.account?.availableBalance,
       riskPercent: plan.riskPercent ?? snapshot.strategy?.riskPercent,
       availableMargin: snapshot.account?.availableBalance,
@@ -693,7 +765,19 @@ export async function handler(request: Request, env: Env): Promise<Response> {
         maxLoss: quantityResult.maxLoss,
         estimatedMaxLoss: quantityResult.estimatedMaxLoss,
         notional: quantity > 0 ? plan.entry * quantity : null,
-        initialMargin: quantity > 0 ? (plan.entry * quantity) / 10 : null,
+        initialMargin:
+          quantity > 0 ? (plan.entry * quantity) / plan.leverage : null,
+        requestedQuantity: quantityResult.requestedQuantity,
+        estimatedLiquidationPrice:
+          quantityResult.estimatedLiquidationPrice,
+        liquidationDistancePercent:
+          quantityResult.liquidationDistancePercent,
+        maximumAllowed: {
+          leverage: bracket.initialLeverage,
+          notional: bracket.notionalCap,
+          quantity: quantityResult.maximumQuantity,
+          margin: quantityResult.maximumMargin,
+        },
         targets,
         calculationSource: {
           snapshotId: (JSON.parse(stored.raw) as { snapshotId?: string })

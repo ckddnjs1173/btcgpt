@@ -10,7 +10,13 @@
 ## Non-negotiable product boundaries
 
 - Support only `BTCUSDT` USDⓈ-M perpetual futures.
-- Keep leverage fixed at 10 and isolated margin as the default.
+- Allow user-selected leverage from 1 to 150, defaulting to 10, with isolated
+  margin only.
+- Validate the selected leverage and notional against Binance's current
+  symbol limits and leverage brackets; block invalid plans without changing
+  user-entered margin, quantity, or notional.
+- Use maximum-loss limits to block plans and explain alternatives, never to
+  silently resize user-entered values.
 - Never implement order create, modify, cancel, withdrawal, or transfer
   requests.
 - Never call the OpenAI API.
@@ -43,6 +49,6 @@
 
 - Implement one Phase at a time.
 - Do not implement later-Phase features speculatively.
-- Run `npm run lint`, `npm run typecheck`, `npm test`, and the relevant build
-  command before declaring work complete.
+- Run the validation commands explicitly requested by the current user before
+  declaring work complete.
 - Keep `main` runnable and tested.
