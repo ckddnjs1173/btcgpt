@@ -1,6 +1,6 @@
 # BTC Futures Assistant 최종 개발 기획서
 
-> 문서 버전: 7.0
+> 문서 버전: 7.1
 > 기준일: 2026-08-06  
 > 프로젝트명: `btc-futures-assistant`  
 > 저장소: `ckddnjs1173/btcgpt`  
@@ -495,13 +495,17 @@ Renderer는 파일시스템, SQLite, `shell`, Binance 클라이언트, API Secre
 - `btcusdt@aggTrade`
 - `btcusdt@markPrice@1s`
 - `btcusdt@kline_1m`
+- `btcusdt@kline_3m`
 - `btcusdt@kline_5m`
 - `btcusdt@kline_15m`
+- `btcusdt@kline_30m`
 - `btcusdt@kline_1h`
 - `btcusdt@kline_4h`
 - `btcusdt@bookTicker`
-- `btcusdt@depth20@100ms`
+- `btcusdt@depth@100ms` diff stream
 - `btcusdt@forceOrder`
+
+오더북은 시작·재연결·update gap 발생 시 REST depth snapshot(limit 1000)을 다시 받은 후 `U/u/pu` update ID 규칙으로 diff stream을 적용한다. 동기화가 끝나기 전 book은 분석에 사용하지 않는다.
 
 공식 스트림 경로와 이벤트 스키마는 구현 시점 문서를 기준으로 한다.
 
@@ -543,23 +547,31 @@ Renderer는 파일시스템, SQLite, `shell`, Binance 클라이언트, API Secre
 - taker sell volume
 - buy ratio
 - sell ratio
-- delta
-- cumulative delta
+- 구간 delta
+- 앱 실행 이후 session CVD와 기준시각
+- 최근 4시간 rolling CVD
 - trade count
 - 평균 체결 크기
 - 초당 체결 건수와 초당 체결금액
 - 직전 동일 구간 대비 delta 변화
+- 구간 가격 변화 bps
+- delta 대비 가격 impact bps/BTC
+- 가격·delta 정렬 또는 divergence 상태
 - 매수·매도 체결 건수
 
 #### 호가
 
 - best bid·ask
 - spread와 spread bps
-- 상위 5·10·20단계 bid notional
-- 상위 5·10·20단계 ask notional
+- 상위 5·10·20·50·100단계 bid notional
+- 상위 5·10·20·50·100단계 ask notional
 - 단계별 imbalance
+- update ID·동기화 여부·보유 레벨 수
+- microprice
 - 예상 주문금액별 평균 체결가와 slippage
 - 5초·30초 imbalance 변화
+- 최대 bid·ask wall 가격·명목가치·지속률
+- wall 명목 변화·가격 이동과 wall 부근 실제 공격 체결량
 - 5초 bid 우세 비율
 - 상위 20단계 최대 bid·ask wall 가격과 notional
 - 현재 최대 wall의 5초 유지 비율
@@ -930,7 +942,7 @@ rawQuantity = maxLoss / riskPerBtc
 - OI 변화와 가격 방향의 조합 상태
 - 청산 source별 기준시각과 stale 여부
 
-이 필드는 객관값이며 LONG·SHORT 점수나 추천 신호를 포함하지 않는다.
+이 필드는 객관값이며 LONG·SHORT 점수나 추천 신호를 포함하지 않는다. Binance 공식 API·WebSocket에서 직접 검증 가능한 정보만 수집하며 화면 스크래핑, 출처 불명 파생값 또는 존재하지 않는 데이터를 만들지 않는다.
 
 ### 14.4 계정과 거래 생명주기
 
@@ -2035,7 +2047,7 @@ Secret과 네트워크 클라이언트를 Main에 격리하고 제한된 IPC만 
 - 시장 분석·신규 진입·포지션 관리 게이트 분리
 - update ID 기반 local order book 동기화와 gap 재동기화
 - depth 20·50·100, 벽 생성·취소·지속·흡수·가격 반응
-- session CVD, 구간별 CVD slope, delta divergence와 impact efficiency
+- 실제 앱 세션 CVD와 기준시각, 최근 4시간 CVD, 구간별 delta 변화, 가격·delta divergence와 impact efficiency
 - 1m·5m 상대 거래량과 taker buy ratio
 - OI·가격 결합 상태와 source별 청산 신선도
 - read-only account user stream 또는 동등한 저지연 경로와 REST fallback
