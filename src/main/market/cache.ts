@@ -48,6 +48,8 @@ export class MarketCache {
     { eventTime: number; receivedAt: number }
   >();
   private readonly trades: TradeEvent[] = [];
+  private sessionCvd = 0;
+  private sessionCvdStartedAt: number | null = null;
   private readonly liquidations: LiquidationEvent[] = [];
   private readonly depthSamples: DepthSample[] = [];
   private readonly openInterestSamples: OpenInterestSample[] = [];
@@ -249,6 +251,9 @@ export class MarketCache {
     )
       return;
     this.trades.push(event);
+    if (this.sessionCvdStartedAt === null)
+      this.sessionCvdStartedAt = event.eventTime;
+    this.sessionCvd += event.buyerIsMaker ? -event.quantity : event.quantity;
     this.pruneEvents(event.receivedAt);
     this.markSource('trades', event.eventTime, event.receivedAt);
   }
@@ -274,6 +279,13 @@ export class MarketCache {
 
   getTrades(windowMs: number, now = Date.now()): TradeEvent[] {
     return this.trades.filter((event) => event.eventTime >= now - windowMs);
+  }
+
+  getSessionCvd(): { value: number; startedAt: number | null } {
+    return {
+      value: this.sessionCvd,
+      startedAt: this.sessionCvdStartedAt,
+    };
   }
 
   getLiquidations(windowMs: number, now = Date.now()): LiquidationEvent[] {
