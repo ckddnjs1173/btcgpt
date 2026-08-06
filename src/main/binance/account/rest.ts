@@ -90,6 +90,8 @@ const userTradesSchema = z.array(
     commission: numericStringSchema,
     commissionAsset: z.string(),
     maker: z.boolean(),
+    id: z.number().int().nonnegative(),
+    orderId: z.number().int().nonnegative(),
     time: z.number(),
   }),
 );
@@ -295,8 +297,9 @@ export class BinanceAccountClient {
         limit: '50',
       }),
     );
-    return trades.map((trade, index) => ({
-      tradeId: `${trade.time}-${index}`,
+    return trades.map((trade) => ({
+      tradeId: String(trade.id),
+      orderId: String(trade.orderId),
       side: trade.side,
       positionSide: trade.positionSide,
       price: Number(trade.price),
