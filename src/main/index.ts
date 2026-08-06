@@ -11,6 +11,8 @@ import { registerIpcHandlers } from './ipc/register-handlers';
 import { logger } from './logging/logger';
 import { MarketDataService } from './market/service';
 import type { SnapshotOptions } from './market/snapshot';
+import { createCompactRelaySnapshot } from './market/compact-snapshot';
+import { generateSnapshot } from './market/snapshot';
 import { RelayUploader } from './relay/uploader';
 import { ContextUploader } from './relay/context-uploader';
 import { ExternalContextService } from './external/service';
@@ -147,6 +149,31 @@ void app.whenReady().then(() => {
       tradingState,
     };
   };
+  if (process.env.BTC_COMPACT_DIAGNOSTIC === '1') {
+    setTimeout(() => {
+      try {
+        const fullSnapshot = generateSnapshot(
+          marketData!.cache,
+          getSnapshotOptions(),
+        );
+        const fullBytes = Buffer.byteLength(
+          JSON.stringify(fullSnapshot),
+          'utf8',
+        );
+        const compact = createCompactRelaySnapshot(fullSnapshot);
+        logger.info(
+          {
+            fullBytes,
+            compactBytes: compact.byteLength,
+            sectionBytes: compact.sectionBytes,
+          },
+          'Compact snapshot diagnostic',
+        );
+      } catch {
+        logger.warn('Compact snapshot diagnostic unavailable');
+      }
+    }, 20_000);
+  }
   const startRelay = (baseUrl: string, uploadKey: string): RelayUploader => {
     relayUploader?.stop();
     const uploader = new RelayUploader(

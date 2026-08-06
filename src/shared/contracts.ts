@@ -7,6 +7,7 @@ export const IPC_CHANNELS = {
   readDbCheck: 'phase-zero:read-db-check',
   getMarketStatus: 'market:get-status',
   getLatestSnapshot: 'market:get-latest-snapshot',
+  getLatestCompactSnapshot: 'market:get-latest-compact-snapshot',
   configureAccount: 'account:configure',
   disconnectAccount: 'account:disconnect',
   getAccountStatus: 'account:get-status',
@@ -552,6 +553,7 @@ export interface RelayStatus {
   lastSuccessAt: number | null;
   consecutiveFailures: number;
   error: string | null;
+  lastPayloadBytes?: number | null;
 }
 
 export interface RelayConfigurationInput {
@@ -791,6 +793,7 @@ export interface DesktopApi {
   readDbCheck(): Promise<DatabaseCheck>;
   getMarketStatus(): Promise<MarketStatus>;
   getLatestSnapshot(): Promise<MarketSnapshot>;
+  getLatestCompactSnapshot?(): Promise<MarketSnapshot>;
   configureAccount(input: AccountConfigurationInput): Promise<ActionResult>;
   disconnectAccount(): Promise<ActionResult>;
   getAccountStatus(): Promise<AccountStatus>;

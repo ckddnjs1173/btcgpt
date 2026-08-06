@@ -947,8 +947,5 @@ export function generateSnapshot(
       sourceWarnings: snapshot.riskContext.sourceWarnings.slice(0, 5),
     };
   }
-  const size = new TextEncoder().encode(JSON.stringify(snapshot)).byteLength;
-  if (size > 90_000)
-    throw new Error(`Snapshot exceeds the 90000-byte limit: ${size}`);
   return snapshot;
 }

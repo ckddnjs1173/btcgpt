@@ -474,7 +474,13 @@ export async function handler(request: Request, env: Env): Promise<Response> {
       let entryAllowed = originalDecisionGates.entryAllowed === true;
       let positionManagementAvailable =
         originalDecisionGates.positionManagementAvailable === true;
-      let quality = String(originalDecisionGates.quality ?? 'RED');
+      const storedQuality = originalDecisionGates.quality;
+      let quality =
+        storedQuality === 'GREEN' ||
+        storedQuality === 'YELLOW' ||
+        storedQuality === 'RED'
+          ? storedQuality
+          : 'RED';
 
       if (ageMs > 30_000) {
         marketAnalysisAvailable = false;

@@ -16,7 +16,6 @@ import {
   type PhaseZeroStatus,
   type RelayStatus,
   type PositionCalculationResult,
-  type PositionCalculationInput,
   type LockedTradePlan,
   type TradingState,
   type PaperTrade,
@@ -40,6 +39,7 @@ import type { AppDatabase } from '../db/database';
 import { logger } from '../logging/logger';
 import type { MarketDataService } from '../market/service';
 import { generateSnapshot } from '../market/snapshot';
+import { createCompactRelaySnapshot } from '../market/compact-snapshot';
 import type { AccountService } from '../binance/account/service';
 import type { ExternalContextService } from '../external/service';
 import {
@@ -650,7 +650,7 @@ export function registerIpcHandlers({
     marketData.cache.status(),
   );
 
-  ipcMain.handle(IPC_CHANNELS.getLatestSnapshot, (): MarketSnapshot => {
+  const getLatestFullSnapshot = (): MarketSnapshot => {
     const accountStatus = accountService.getStatus();
     const settings = database.readUserSettings();
     return generateSnapshot(marketData.cache, {
@@ -671,7 +671,16 @@ export function registerIpcHandlers({
       defaultLeverage: settings.defaultLeverage,
       tradingState: getTradingState(),
     });
-  });
+  };
+  ipcMain.handle(
+    IPC_CHANNELS.getLatestSnapshot,
+    (): MarketSnapshot => getLatestFullSnapshot(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.getLatestCompactSnapshot,
+    (): MarketSnapshot =>
+      createCompactRelaySnapshot(getLatestFullSnapshot()).snapshot,
+  );
 
   logger.info('Restricted IPC handlers registered');
 }

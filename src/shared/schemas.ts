@@ -4,7 +4,7 @@ export const clipboardTextSchema = z
   .string()
   .trim()
   .min(1, '복사할 내용이 없습니다.')
-  .max(50_000, '복사할 내용이 너무 깁니다.');
+  .max(90_000, '복사할 내용이 너무 깁니다.');
 
 export const databaseCheckInputSchema = z.object({
   value: z

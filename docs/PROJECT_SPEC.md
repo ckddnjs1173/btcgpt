@@ -338,7 +338,7 @@ flowchart LR
 7. 객관적 지표·비용 계산
 8. 시장 데이터 신선도와 외부 컨텍스트 신선도를 독립 판정
 9. 시장 스냅샷과 외부 컨텍스트 생성
-10. 로컬 UI·클립보드·중계소가 동일 시장 스냅샷 사용
+10. 로컬 UI는 전체 시장 스냅샷을 사용하고, 클립보드·중계소는 같은 전체 스냅샷에서 결정론적으로 만든 90KB 미만 compact 스냅샷을 사용한다.
 11. Worker가 최신 외부 위험 요약을 시장 응답에 결합
 12. GPT Action 조회
 
@@ -2053,6 +2053,8 @@ Secret과 네트워크 클라이언트를 Main에 격리하고 제한된 IPC만 
 - read-only account user stream 또는 동등한 저지연 경로와 REST fallback
 - 보호주문 방향·수량·가격·잔여 커버리지 검증
 - 포지션별 체결·수수료·실현손익 귀속
+- 로컬 UI용 전체 snapshot과 GPT Relay용 compact snapshot 분리
+- compact snapshot의 실제 UTF-8 byte 검사와 section별 크기 진단
 
 완료조건:
 
@@ -2063,6 +2065,7 @@ Secret과 네트워크 클라이언트를 Main에 격리하고 제한된 IPC만 
 5. 현재 거래 실현손익에 과거 무관한 체결이 섞이지 않는다.
 6. 보호주문 커버리지가 side·quantity·trigger·remaining quantity 기준으로 계산된다.
 7. 프로그램은 방향 점수나 자동 주문을 만들지 않는다.
+8. 전체 snapshot 크기가 90KB를 넘어도 로컬 UI는 정상 동작하고 Relay compact snapshot만 90KB 미만으로 업로드된다.
 
 ### Phase 12 — 진입 전 감시부터 거래 종료까지
 

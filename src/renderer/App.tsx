@@ -212,16 +212,10 @@ export function App() {
   const copySnapshot = useCallback(async (): Promise<boolean> => {
     setBusy(true);
     try {
-      const latest = await window.desktopApi.getLatestSnapshot();
-      setSnapshot(latest);
+      if (!window.desktopApi.getLatestCompactSnapshot)
+        throw new Error('Compact snapshot API를 사용할 수 없습니다.');
+      const latest = await window.desktopApi.getLatestCompactSnapshot();
       const payload = JSON.stringify(latest);
-      if (new Blob([payload]).size > 90_000) {
-        setResult({
-          ok: false,
-          message: '스냅샷이 90,000바이트를 초과했습니다.',
-        });
-        return false;
-      }
       const copyResult = await window.desktopApi.copyText(payload);
       setResult(copyResult);
       return copyResult.ok;
@@ -722,7 +716,12 @@ export function App() {
                   {formatNumber(
                     timeframe === '1m'
                       ? snapshot.openInterest.localChanges['1m']
-                      : snapshot.openInterest.changes[timeframe] ?? null,
+                      : timeframe === '5m' ||
+                          timeframe === '15m' ||
+                          timeframe === '1h' ||
+                          timeframe === '4h'
+                        ? snapshot.openInterest.changes[timeframe] ?? null
+                        : null,
                     2,
                   )}
                   %
@@ -1150,6 +1149,9 @@ export function App() {
                 : '없음'}
             </span>
             <span>연속 실패 {relay.consecutiveFailures}회</span>
+            <span>
+              Compact snapshot {relay.lastPayloadBytes ?? '—'} bytes
+            </span>
             <button onClick={() => void disconnectRelay()}>
               중계 연결 해제 및 키 삭제
             </button>

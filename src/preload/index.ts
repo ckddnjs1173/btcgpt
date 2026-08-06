@@ -22,6 +22,8 @@ const desktopApi: DesktopApi = {
   readDbCheck: () => ipcRenderer.invoke(IPC_CHANNELS.readDbCheck),
   getMarketStatus: () => ipcRenderer.invoke(IPC_CHANNELS.getMarketStatus),
   getLatestSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.getLatestSnapshot),
+  getLatestCompactSnapshot: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.getLatestCompactSnapshot),
   configureAccount: (input: AccountConfigurationInput) =>
     ipcRenderer.invoke(IPC_CHANNELS.configureAccount, input),
   disconnectAccount: () => ipcRenderer.invoke(IPC_CHANNELS.disconnectAccount),

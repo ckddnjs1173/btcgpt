@@ -240,7 +240,12 @@ export class AccountService {
         logger.info('Binance read-only account stream connected');
       });
       socket.on('message', (data) => {
-        this.handleStreamMessage(String(data));
+        const message = Array.isArray(data)
+          ? Buffer.concat(data).toString('utf8')
+          : data instanceof ArrayBuffer
+            ? Buffer.from(data).toString('utf8')
+            : data.toString('utf8');
+        this.handleStreamMessage(message);
       });
       socket.on('error', () => {
         this.status = {

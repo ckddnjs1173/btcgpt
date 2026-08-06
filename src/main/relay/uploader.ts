@@ -1,6 +1,10 @@
 import { logger } from '../logging/logger';
 import type { MarketCache } from '../market/cache';
 import { generateSnapshot, type SnapshotOptions } from '../market/snapshot';
+import {
+  createCompactRelaySnapshot,
+  RELAY_SNAPSHOT_MAX_BYTES,
+} from '../market/compact-snapshot';
 import type { RelayStatus } from '../../shared/contracts';
 
 export interface RelayConfiguration {
@@ -28,6 +32,7 @@ export class RelayUploader {
       lastSuccessAt: null,
       consecutiveFailures: 0,
       error: null,
+      lastPayloadBytes: null,
     };
   }
 
@@ -92,9 +97,16 @@ export class RelayUploader {
     try {
       const snapshot = generateSnapshot(this.cache, this.getSnapshotOptions());
       snapshotId = snapshot.snapshotId;
-      const payload = JSON.stringify(snapshot);
-      if (new TextEncoder().encode(payload).byteLength > 90_000)
-        throw new Error('Relay payload exceeds 90,000 bytes');
+      const compact = createCompactRelaySnapshot(snapshot);
+      this.status.lastPayloadBytes = compact.byteLength;
+      if (compact.byteLength >= RELAY_SNAPSHOT_MAX_BYTES) {
+        logger.warn(
+          { snapshotId, sectionBytes: compact.sectionBytes },
+          'Relay compact snapshot exceeds byte limit',
+        );
+        throw new Error('Relay compact snapshot exceeds byte limit');
+      }
+      const payload = compact.json;
       let lastError: unknown = null;
       for (let attempt = 0; attempt < 3 && !this.stopping; attempt += 1) {
         try {
@@ -131,6 +143,7 @@ export class RelayUploader {
         lastSuccessAt: Date.now(),
         consecutiveFailures: 0,
         error: null,
+        lastPayloadBytes: compact.byteLength,
       };
     } catch (error) {
       this.status = {
