@@ -200,6 +200,12 @@ h1 {
   color: #ffabab;
 }
 
+.notice.warning {
+  border-color: rgba(247, 147, 26, 0.35);
+  background: rgba(247, 147, 26, 0.09);
+  color: #ffc978;
+}
+
 .readiness-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
