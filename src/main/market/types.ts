@@ -69,6 +69,9 @@ export interface DepthState {
   asks: Array<[number, number]>;
   eventTime: number | null;
   receivedAt: number | null;
+  synchronized: boolean;
+  lastUpdateId: number | null;
+  levelCount: number;
 }
 
 export interface DepthSample {
