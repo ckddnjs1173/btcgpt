@@ -476,6 +476,7 @@ export interface AccountStatus {
   }>;
   recentTrades: Array<{
     tradeId: string;
+    orderId: string;
     side: 'BUY' | 'SELL';
     positionSide: 'BOTH' | 'LONG' | 'SHORT';
     price: number;
@@ -665,6 +666,43 @@ export interface PaperTrade {
   updatedAt: number;
 }
 
+export type LiveTradeAttribution =
+  | 'OBSERVED_FROM_FLAT'
+  | 'INFERRED_FROM_RECENT_TRADES'
+  | 'OBSERVED_AFTER_CONNECT';
+
+export interface LiveTradeSession {
+  id: string;
+  planId: string | null;
+  status: 'OPEN' | 'PARTIALLY_CLOSED' | 'CLOSED';
+  side: 'LONG' | 'SHORT';
+  entryPrice: number;
+  initialQuantity: number;
+  peakQuantity: number;
+  remainingQuantity: number;
+  leverage: number;
+  isolatedMargin: number;
+  openedAt: number;
+  closedAt: number | null;
+  realizedGrossPnl: number;
+  feesPaid: number;
+  realizedNetPnl: number;
+  unrealizedPnl: number;
+  lastMarkPrice: number;
+  observedTradeIds: string[];
+  attribution: LiveTradeAttribution;
+  updatedAt: number;
+}
+
+export interface ProtectiveCoverage {
+  stopLossQuantity: number;
+  takeProfitQuantity: number;
+  stopLossCoverageRatio: number | null;
+  takeProfitCoverageRatio: number | null;
+  hasFullStopCoverage: boolean;
+  hasFullTakeProfitCoverage: boolean;
+}
+
 export interface PaperCloseInput {
   quantity?: number;
   exitPrice?: number;
@@ -708,13 +746,18 @@ export interface TradingState {
   activePlan: LockedTradePlan | null;
   activePaperTrade: PaperTrade | null;
   lastCompletedPaperTrade: PaperTrade | null;
+  activeLiveTrade: LiveTradeSession | null;
+  lastCompletedLiveTrade: LiveTradeSession | null;
   statistics: TradingStatistics;
   liveManual: {
     available: boolean;
     blockedReasons: string[];
     position: AccountStatus['position'];
     protectiveOrders: AccountStatus['openOrders'];
+    protectiveCoverage: ProtectiveCoverage;
     recentTrades: AccountStatus['recentTrades'];
+    currentTrade: LiveTradeSession | null;
+    lastCompletedTrade: LiveTradeSession | null;
     realizedPnl: number | null;
     planMatchesPosition: boolean | null;
   };
