@@ -453,7 +453,9 @@ export function generateSnapshot(
       const firstTradePrice = trades[0]?.price ?? null;
       const lastTradePrice = trades.at(-1)?.price ?? null;
       const priceChangeBps =
-        firstTradePrice !== null && lastTradePrice !== null && firstTradePrice > 0
+        firstTradePrice !== null &&
+        lastTradePrice !== null &&
+        firstTradePrice > 0
           ? ((lastTradePrice - firstTradePrice) / firstTradePrice) * 10_000
           : null;
       const deltaPriceRelation =
@@ -571,17 +573,28 @@ export function generateSnapshot(
         ? earliestDepth5s?.bidWallNotional
         : earliestDepth5s?.askWallNotional;
     const last =
-      side === 'bid' ? latestDepth?.bidWallNotional : latestDepth?.askWallNotional;
-    return first !== null && first !== undefined && last !== null && last !== undefined
+      side === 'bid'
+        ? latestDepth?.bidWallNotional
+        : latestDepth?.askWallNotional;
+    return first !== null &&
+      first !== undefined &&
+      last !== null &&
+      last !== undefined
       ? last - first
       : null;
   };
   const wallPriceMoveBps5s = (side: 'bid' | 'ask') => {
     const first =
-      side === 'bid' ? earliestDepth5s?.bidWallPrice : earliestDepth5s?.askWallPrice;
+      side === 'bid'
+        ? earliestDepth5s?.bidWallPrice
+        : earliestDepth5s?.askWallPrice;
     const last =
       side === 'bid' ? latestDepth?.bidWallPrice : latestDepth?.askWallPrice;
-    return first !== null && first !== undefined && last !== null && last !== undefined && first > 0
+    return first !== null &&
+      first !== undefined &&
+      last !== null &&
+      last !== undefined &&
+      first > 0
       ? ((last - first) / first) * 10_000
       : null;
   };
@@ -890,6 +903,8 @@ export function generateSnapshot(
       activePlan: null,
       activePaperTrade: null,
       lastCompletedPaperTrade: null,
+      activeLiveTrade: null,
+      lastCompletedLiveTrade: null,
       statistics: {
         closedTrades: 0,
         wins: 0,
@@ -907,7 +922,17 @@ export function generateSnapshot(
         blockedReasons: ['TRADING_STATE_UNAVAILABLE'],
         position: null,
         protectiveOrders: [],
+        protectiveCoverage: {
+          stopLossQuantity: 0,
+          takeProfitQuantity: 0,
+          stopLossCoverageRatio: null,
+          takeProfitCoverageRatio: null,
+          hasFullStopCoverage: false,
+          hasFullTakeProfitCoverage: false,
+        },
         recentTrades: [],
+        currentTrade: null,
+        lastCompletedTrade: null,
         realizedPnl: null,
         planMatchesPosition: null,
       },
