@@ -28,7 +28,9 @@ const SOURCE_CHANNELS: Record<string, MarketStreamChannel> = {
   liquidations: 'market',
   'candle:5m': 'market',
   'candle:1m': 'market',
+  'candle:3m': 'market',
   'candle:15m': 'market',
+  'candle:30m': 'market',
   'candle:1h': 'market',
   'candle:4h': 'market',
 };
