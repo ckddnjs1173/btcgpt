@@ -21,8 +21,16 @@
   requests.
 - Never call the OpenAI API.
 - Never invent a win rate or probability before validated statistics exist.
-- Block entry decisions when required data is stale.
-- Use only closed candles for new-entry triggers.
+- Split market analysis, new-entry, and position-management data gates. Stale
+  entry-only data must not automatically suppress management of an existing
+  position when mark, position, and protective-order data remain usable.
+- Use only closed candles for new-entry confirmation; live 1m/5m candles may
+  be timing evidence but never masquerade as confirmed closes.
+- Track only user-approved plans. Never generate a local LONG/SHORT signal.
+- Local alerts may report approved trigger, invalidation, data-quality, and
+  protective-coverage changes, but must never place an order.
+- Responses intended for Binance entry must put the validated input values
+  before explanatory analysis.
 - Do not allow averaging down a losing position.
 
 ## Security
