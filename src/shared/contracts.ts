@@ -172,6 +172,8 @@ export interface MarketSnapshot {
     orderBookLastUpdateId: number | null;
     orderBookLevelCount: number;
     microPrice: number | null;
+    sessionCvd: number;
+    sessionCvdStartedAt: number | null;
     rollingCvd4h: number;
     estimatedSlippage: Record<
       '0.01btc' | '0.1btc',
