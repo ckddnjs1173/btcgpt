@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import type { DatabaseCheck } from '../../shared/contracts';
 import type {
+  LiveTradeSession,
   LockedTradePlan,
   ManualPosition,
   ManualPositionInput,
@@ -16,7 +17,7 @@ import { manualPositionSchema } from '../../shared/schemas';
 import { userSettingsSchema } from '../../shared/schemas';
 import type { UserSettings } from '../../shared/contracts';
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const DEFAULT_USER_SETTINGS: UserSettings = {
   gptUrl: 'https://chatgpt.com/',
   makerFeeRate: null,
@@ -151,6 +152,15 @@ export class AppDatabase {
         closed_at INTEGER,
         updated_at INTEGER NOT NULL,
         FOREIGN KEY(plan_id) REFERENCES locked_trade_plans(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS live_trade_sessions (
+        id TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        opened_at INTEGER NOT NULL,
+        closed_at INTEGER,
+        updated_at INTEGER NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS paper_trade_events (
@@ -453,6 +463,58 @@ export class AppDatabase {
     }
   }
 
+  saveLiveTradeSession(trade: LiveTradeSession): LiveTradeSession {
+    this.database
+      .prepare(
+        `INSERT INTO live_trade_sessions
+          (id, status, payload, opened_at, closed_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET status=excluded.status,
+           payload=excluded.payload, closed_at=excluded.closed_at,
+           updated_at=excluded.updated_at`,
+      )
+      .run(
+        trade.id,
+        trade.status,
+        JSON.stringify(trade),
+        trade.openedAt,
+        trade.closedAt,
+        trade.updatedAt,
+      );
+    return trade;
+  }
+
+  readActiveLiveTrade(): LiveTradeSession | null {
+    const row = this.database
+      .prepare(
+        `SELECT payload FROM live_trade_sessions
+         WHERE status IN ('OPEN', 'PARTIALLY_CLOSED')
+         ORDER BY opened_at DESC LIMIT 1`,
+      )
+      .get() as { payload: string } | undefined;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.payload) as LiveTradeSession;
+    } catch {
+      return null;
+    }
+  }
+
+  readLatestLiveTrade(): LiveTradeSession | null {
+    const row = this.database
+      .prepare(
+        `SELECT payload FROM live_trade_sessions
+         ORDER BY opened_at DESC LIMIT 1`,
+      )
+      .get() as { payload: string } | undefined;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.payload) as LiveTradeSession;
+    } catch {
+      return null;
+    }
+  }
+
   addPaperTradeEvent(input: {
     tradeId: string;
     eventType: 'ENTRY' | 'PARTIAL_CLOSE' | 'CLOSE';
@@ -547,6 +609,7 @@ export class AppDatabase {
       DELETE FROM external_context_state;
       DELETE FROM paper_trade_events;
       DELETE FROM paper_trades;
+      DELETE FROM live_trade_sessions;
       DELETE FROM locked_trade_plans;
       COMMIT;
     `);
