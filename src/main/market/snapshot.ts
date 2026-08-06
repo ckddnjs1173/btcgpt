@@ -319,6 +319,13 @@ export function generateSnapshot(
   const degradedSources = Object.entries(sourceHealth)
     .filter(([, source]) => source.status !== 'NORMAL')
     .map(([source, state]) => `${source}:${state.status}`);
+  if (
+    options.accountStatus?.configured &&
+    options.accountStatus.stream.status !== 'CONNECTED'
+  )
+    degradedSources.push(
+      `account.userStream:${options.accountStatus.stream.status}`,
+    );
 
   const marketMissingFields: string[] = [];
   for (const [field, value] of [
@@ -342,6 +349,8 @@ export function generateSnapshot(
     entryMissingFields.push('openInterest.current');
   if (cache.depth.bids.length === 0 || cache.depth.asks.length === 0)
     entryMissingFields.push('orderFlow.depth');
+  if (!cache.depth.synchronized)
+    entryMissingFields.push('orderFlow.orderBookSynchronized');
   if (cache.productFilters === null) entryMissingFields.push('productFilters');
   for (const timeframe of ['1m', '5m', '15m', '1h'] as const)
     if (cache.getClosed(timeframe).length < 200)
@@ -384,8 +393,8 @@ export function generateSnapshot(
     positionManagementMissingFields.push('marketState.markPrice');
   if (
     hasOpenPosition &&
-    position.source === 'BINANCE' &&
-    (!options.accountStatus?.connected || accountAgeMs > 15_000)
+    position.source === 'BINANCE_READ_ONLY' &&
+    (!options.accountStatus?.connected || accountAgeMs > 45_000)
   )
     positionManagementMissingFields.push('account.position');
   const positionManagementAvailable =
@@ -478,6 +487,27 @@ export function generateSnapshot(
   const askNotional20 = cache.depth.asks
     .slice(0, 20)
     .reduce((sum, [price, quantity]) => sum + price * quantity, 0);
+  const bidNotional50 = cache.depth.bids
+    .slice(0, 50)
+    .reduce((sum, [price, quantity]) => sum + price * quantity, 0);
+  const askNotional50 = cache.depth.asks
+    .slice(0, 50)
+    .reduce((sum, [price, quantity]) => sum + price * quantity, 0);
+  const bestBid = cache.depth.bids[0] ?? null;
+  const bestAsk = cache.depth.asks[0] ?? null;
+  const topQuantity =
+    (bestBid?.[1] ?? 0) + (bestAsk?.[1] ?? 0);
+  const microPrice =
+    bestBid && bestAsk && topQuantity > 0
+      ? (bestAsk[0] * bestBid[1] + bestBid[0] * bestAsk[1]) / topQuantity
+      : null;
+  const rollingCvd4h = cache
+    .getTrades(4 * 60 * 60_000, generatedAt)
+    .reduce(
+      (sum, trade) =>
+        sum + (trade.buyerIsMaker ? -trade.quantity : trade.quantity),
+      0,
+    );
   const liquidationSummary = Object.fromEntries(
     Object.entries(LIQUIDATION_WINDOW_MS).map(([label, windowMs]) => {
       const events = cache.getLiquidations(windowMs, generatedAt);
@@ -633,8 +663,20 @@ export function generateSnapshot(
         cache.depth.asks,
         20,
       ),
+      orderBookImbalance50: orderBookImbalance(
+        cache.depth.bids,
+        cache.depth.asks,
+        50,
+      ),
       bidNotional20,
       askNotional20,
+      bidNotional50,
+      askNotional50,
+      orderBookSynchronized: cache.depth.synchronized,
+      orderBookLastUpdateId: cache.depth.lastUpdateId,
+      orderBookLevelCount: cache.depth.levelCount,
+      microPrice,
+      rollingCvd4h,
       estimatedSlippage: {
         '0.01btc': {
           buyBps:
@@ -682,6 +724,14 @@ export function generateSnapshot(
       lastUpdatedAt: options.accountStatus?.lastUpdatedAt ?? null,
       availableBalance:
         options.accountStatus?.balance?.availableBalance ?? null,
+      stream: options.accountStatus?.stream ?? {
+        status: 'DISCONNECTED',
+        lastEventAt: null,
+        lastAccountUpdateAt: null,
+        lastOrderTradeUpdateAt: null,
+        reconnectCount: 0,
+        error: null,
+      },
       commission: options.accountStatus?.commission ?? null,
       openOrders: options.accountStatus?.openOrders ?? [],
       recentTrades: options.accountStatus?.recentTrades ?? [],
