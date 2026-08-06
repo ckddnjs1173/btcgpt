@@ -11,7 +11,6 @@ import { registerIpcHandlers } from './ipc/register-handlers';
 import { logger } from './logging/logger';
 import { MarketDataService } from './market/service';
 import type { SnapshotOptions } from './market/snapshot';
-import type { TradingState } from '../shared/contracts';
 import { RelayUploader } from './relay/uploader';
 import { ContextUploader } from './relay/context-uploader';
 import { ExternalContextService } from './external/service';
@@ -19,6 +18,7 @@ import { AccountService } from './binance/account/service';
 import { CredentialStore } from './security/credential-store';
 import { RelayConfigurationStore } from './security/relay-configuration-store';
 import { NaverCredentialStore } from './security/naver-credential-store';
+import { buildTradingState } from './trading/build-state';
 
 if (started) {
   app.quit();
@@ -127,49 +127,7 @@ void app.whenReady().then(() => {
   const getSnapshotOptions = (): SnapshotOptions => {
     const accountStatus = accountService!.getStatus();
     const settings = database!.readUserSettings();
-    const activePlan = database!.readActiveLockedTradePlan(
-      settings.tradingMode,
-    );
-    const blockedReasons: string[] = [];
-    if (!accountStatus.connected) blockedReasons.push('ACCOUNT_NOT_CONNECTED');
-    if (!accountStatus.position) blockedReasons.push('NO_LIVE_POSITION');
-    if (
-      accountStatus.lastUpdatedAt === null ||
-      Date.now() - accountStatus.lastUpdatedAt > 60_000
-    )
-      blockedReasons.push('ACCOUNT_DATA_STALE');
-    const planMatchesPosition =
-      activePlan && accountStatus.position
-        ? activePlan.side === accountStatus.position.side &&
-          Math.abs(activePlan.quantity - accountStatus.position.quantity) <
-            1e-8 &&
-          activePlan.leverage === accountStatus.position.leverage
-        : null;
-    if (planMatchesPosition === false)
-      blockedReasons.push('LIVE_POSITION_DIFFERS_FROM_LOCKED_PLAN');
-    const tradingState: TradingState = {
-      mode: settings.tradingMode,
-      activePlan,
-      activePaperTrade: database!.readActivePaperTrade(),
-      statistics: database!.readTradingStatistics(),
-      liveManual: {
-        available: blockedReasons.length === 0,
-        blockedReasons,
-        position: accountStatus.position,
-        protectiveOrders: accountStatus.openOrders.filter(
-          (order) => order.protective,
-        ),
-        recentTrades: accountStatus.recentTrades,
-        realizedPnl:
-          accountStatus.recentTrades.length > 0
-            ? accountStatus.recentTrades.reduce(
-                (sum, trade) => sum + trade.realizedPnl - trade.commission,
-                0,
-              )
-            : null,
-        planMatchesPosition,
-      },
-    };
+    const tradingState = buildTradingState(database!, accountStatus);
     return {
       serverTime: Date.now() + marketData!.getServerOffsetMs(),
       position: accountStatus.connected
