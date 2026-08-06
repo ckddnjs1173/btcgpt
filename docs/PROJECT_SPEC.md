@@ -1,7 +1,7 @@
 # BTC Futures Assistant 최종 개발 기획서
 
-> 문서 버전: 6.0
-> 기준일: 2026-07-29  
+> 문서 버전: 7.0
+> 기준일: 2026-08-06  
 > 프로젝트명: `btc-futures-assistant`  
 > 저장소: `ckddnjs1173/btcgpt`  
 > 대상 환경: Windows 11  
@@ -97,6 +97,12 @@ Codex는 사용자가 `기획서 읽고 작업해`라고 요청하면 다음 순
 28. 프로그램은 단타 판단에 필요한 객관적 구조를 계산하지만 LONG·SHORT·진입 신호·셋업 점수를 만들지 않는다.
 29. 진행 중인 1m·5m 캔들은 타이밍 자료로 제공하되 마감 확인 자료와 명확히 구분한다.
 30. GPT는 단기 방향과 현재 행동을 분리해 판단하며, WAIT일 때도 객관적인 재분석 촉발 조건을 제시한다.
+31. 프로그램은 원본을 무제한 전달하지 않고, 공식 Binance 데이터 중 판단에 유용한 값을 검증·정규화·요약한다. 원본 응답은 Renderer·Worker·GPT로 전달하지 않는다.
+32. 시장 해석 가능 여부, 신규 진입 가능 여부와 기존 포지션 관리 가능 여부를 하나의 boolean으로 묶지 않는다.
+33. 신규 진입에 필요한 일부 데이터가 지연돼도 실제 포지션 관리에 필요한 가격·포지션·보호주문 데이터가 정상이면 포지션 관리를 계속한다.
+34. 프로그램은 LONG·SHORT를 결정하지 않지만 사용자가 승인한 거래계획의 객관적 트리거 충족·무효화·실제 포지션 전환을 추적할 수 있다.
+35. GPT는 진입 가능 시 Binance 입력값을 답변 최상단에 먼저 제시하고, 설명은 그 아래에 둔다.
+36. 자동주문 금지와 수동 실행 원칙은 거래 생명주기 추적·로컬 알림·결과 기록을 금지한다는 뜻이 아니다.
 
 ---
 
@@ -121,6 +127,11 @@ Codex는 사용자가 `기획서 읽고 작업해`라고 요청하면 다음 순
 - 실시간 경로와 분리된 외부 컨텍스트 수집·정규화·중복 제거
 - 중계소가 시장 조회 응답에 결합할 2KB 이하 `riskContext` 요약 생성
 - 연결과 데이터 오류 표시
+- 정규화된 로컬 오더북·체결 CVD·흡수·상대 거래량·OI 결합 상태 계산
+- 시장 분석·신규 진입·포지션 관리용 데이터 게이트의 독립 판정
+- 사용자가 승인한 계획의 감시·무효화·실제 진입 확인·종료 전환 추적
+- 실제 포지션별 체결·수수료·실현손익·보호주문 커버리지 집계
+- 방향 추천이 아닌 객관적 트리거·데이터 품질·계획 이탈 로컬 알림
 
 프로그램은 다음을 결정하지 않는다.
 
@@ -258,6 +269,35 @@ GPT는 요청할 때마다 최신 스냅샷을 조회한 후 다음을 담당한
 6. `WAIT_TRIGGER`이면 막연히 관망으로 끝내지 않고 롱·숏 재분석 촉발 가격과 체결·호가·OI 확인 조건을 제시한다.
 7. `ENTER_NOW` 또는 구체적 조건부 거래 계획을 제시할 때만 계산 API로 수량·비용·최대손실을 검증한다.
 8. 진행봉은 진입 타이밍에 사용할 수 있지만 마감봉 확인과 혼동하지 않는다.
+
+---
+
+### 6.8 진입 전부터 거래 종료까지
+
+1. 사용자가 GPT에 신규 진입 분석을 요청한다.
+2. GPT는 최신 snapshot을 읽고 `WAIT_TRIGGER`, `ENTER_LONG`, `ENTER_SHORT`, `NO_TRADE` 중 현재 행동을 정한다.
+3. `WAIT_TRIGGER`이면 GPT는 방향별 핵심 가격 트리거 최대 2개와 보조 확인 조건을 제공한다.
+4. 거래 계획이 검증되면 사용자가 앱에서 계획을 승인·고정할 수 있다. 앱은 방향을 만들지 않고 승인된 가격·수량·손절·목표·무효화 조건만 감시한다.
+5. 앱은 트리거 충족이나 무효화를 객관적 로컬 알림으로 표시한다. 알림은 주문을 생성하지 않는다.
+6. 사용자가 Binance에서 직접 주문한다.
+7. 읽기 전용 계정 스트림 또는 REST 복구 경로가 실제 포지션을 확인하면 상태가 `MANAGING`으로 전환된다.
+8. GPT는 실제 포지션·보호주문·현재 시장·고정 계획을 함께 읽고 `HOLD`, `PARTIAL_EXIT`, `EXIT`를 판단한다.
+9. 포지션이 0이 되면 앱은 해당 포지션에 귀속되는 체결·수수료·실현손익을 집계하고 `CLOSED`로 기록한다.
+10. 모든 주문·보호주문 입력과 체결 확인은 사용자가 Binance에서 직접 수행한다.
+
+거래 생명주기는 다음 상태를 사용한다.
+
+```ts
+type TradeLifecycleStatus =
+  | 'FLAT'
+  | 'WATCHING'
+  | 'ENTRY_READY'
+  | 'MANAGING'
+  | 'CLOSED'
+  | 'CANCELLED';
+```
+
+`WATCHING`과 `ENTRY_READY`는 사용자가 앱에서 승인한 고정 계획에만 적용한다. 프로그램이 자체적으로 매수·매도 계획을 생성해서는 안 된다.
 
 ---
 
@@ -582,51 +622,55 @@ Renderer는 파일시스템, SQLite, `shell`, Binance 클라이언트, API Secre
 - 화면에는 KST를 함께 표시할 수 있다.
 - 이벤트 시각, Binance 거래 시각, 로컬 수신 시각을 분리한다.
 - 서버시각 차이를 측정하고 signed API에 보정값을 사용한다.
-- 시스템 시각이 크게 어긋나면 계정 조회와 GPT 분석을 제한한다.
+- 시스템 시각이 크게 어긋나면 계정 조회와 신규 진입을 차단한다.
 
-### 11.2 데이터 상태
+### 11.2 데이터 상태와 분리 게이트
 
-```ts
-type DataStatus =
-  | 'INITIALIZING'
-  | 'NORMAL'
-  | 'DELAYED'
-  | 'STALE'
-  | 'DISCONNECTED'
-  | 'INSUFFICIENT_DATA';
-```
-
-전체 스냅샷에는 다음 값이 반드시 있어야 한다.
+각 소스 상태는 기존 `DataStatus`를 유지한다.
 
 ```ts
-type AnalysisGate = {
-  analysisAllowed: boolean;
-  overallStatus: DataStatus;
+type DataQuality = 'GREEN' | 'YELLOW' | 'RED';
+
+type DecisionGates = {
+  marketAnalysisAvailable: boolean;
+  entryAllowed: boolean;
+  positionManagementAvailable: boolean;
+  quality: DataQuality;
   generatedAt: number;
   publishedAt: number | null;
   ageMs: number;
-  reasons: string[];
+  criticalBlockers: string[];
+  degradedSources: string[];
   missingFields: string[];
 };
 ```
 
+- `marketAnalysisAvailable`: 현재 구조를 설명하고 WAIT 조건을 정리할 수 있는가.
+- `entryAllowed`: 신규 진입용 필수 가격·체결·호가·캔들·OI와 상품 필터가 충분히 최신인가.
+- `positionManagementAvailable`: 실제 mark price·포지션·보호주문을 확인해 기존 포지션을 관리할 수 있는가.
+- `GREEN`: 핵심 데이터가 모두 정상이다.
+- `YELLOW`: 일부 보조 데이터가 지연됐지만 허용된 분석 또는 포지션 관리는 가능하다.
+- `RED`: 해당 작업에 필요한 핵심 데이터가 없거나 오래됐다.
+
+기존 `analysisGate`는 schemaVersion 4 소비자와의 호환용으로 한 버전 동안 유지한다. schemaVersion 5의 GPT는 `decisionGates`를 우선한다.
+
 ### 11.3 신선도 기준
 
-기본값:
+| 데이터 | GREEN | YELLOW | 신규 진입 RED | 포지션 관리 RED |
+| --- | ---: | ---: | ---: | ---: |
+| mark·best bid/ask | 0~2초 | 2~5초 | 5초 초과 | 15초 초과 |
+| 동기화된 local depth | 0~1초 | 1~3초 | 3초 초과 | 보조 근거 제외 |
+| aggTrade·CVD | 0~3초 | 3~8초 | 8초 초과 | 보조 근거 제외 |
+| 1m·5m kline | 0~5초 | 5~15초 | 15초 초과 | 60초 초과 |
+| 현재 OI | 0~30초 | 30~90초 | 90초 초과 | 보조 근거 제외 |
+| account position | 0~3초 | 3~10초 | 실제 진입 확인 불가 | 15초 초과 |
+| open protective orders | 0~5초 | 5~15초 | 계획 검증 제한 | 30초 초과 |
+| relay snapshot | 0~8초 | 8~15초 | 15초 초과 | 30초 초과 |
 
-| 데이터 | 정상 | 지연 | 분석 금지 |
-| --- | ---: | ---: | ---: |
-| 마크가격 | 0~2초 | 2~5초 | 5초 초과 |
-| 최우선 호가·depth | 0~1초 | 1~3초 | 3초 초과 |
-| 캔들 스트림 | 0~5초 | 5~15초 | 15초 초과 |
-| 체결 스트림 | 0~3초 | 3~10초 | 10초 초과 |
-| 현재 OI | 0~30초 | 30~90초 | 90초 초과 |
-| OI·비율 통계 | 기대 주기 이내 | 기대 주기 2배 | 기대 주기 3배 초과 |
-| 중계 스냅샷 | 0~8초 | 8~15초 | 15초 초과 |
-
-핵심 데이터가 분석 금지 기준을 넘거나 초기 동기화가 끝나지 않았으면 `analysisAllowed=false`로 설정한다.
-
-GPT는 `analysisAllowed=false`인 경우 신규 진입 방향·가격·수량을 제안하지 않는다. 현재 포지션이 있으면 최신 데이터가 부족하다는 사실과 거래소의 기존 보호주문을 확인하라는 안내만 제공한다.
+- 신규 진입은 `entryAllowed=false`이면 가격·수량·TP·SL을 제시하지 않는다.
+- `entryAllowed=false`가 `positionManagementAvailable=false`를 자동 의미하지 않는다.
+- 실제 포지션이 있으면 보조 소스가 지연돼도 mark·position·보호주문이 유효한 동안 HOLD·EXIT 판단용 사실을 계속 제공한다.
+- 포지션 관리도 RED이면 GPT는 새로운 계산을 만들지 않고 Binance의 기존 보호주문과 실제 포지션을 직접 확인하도록 우선 안내한다.
 
 ### 11.4 캔들 일관성
 
@@ -634,35 +678,43 @@ GPT는 `analysisAllowed=false`인 경우 신규 진입 방향·가격·수량을
 - 동일한 open time은 upsert한다.
 - WebSocket 재연결 뒤 REST 캔들과 대조한다.
 - 누락 open time을 발견하면 REST로 복구한다.
-- 복구가 끝날 때까지 해당 시간봉 지표를 신뢰하지 않는다.
+- 복구가 끝날 때까지 해당 시간봉을 신규 진입 확정 근거로 사용하지 않는다.
 - EMA 200 등 필요한 표본이 부족하면 `null`과 `INSUFFICIENT_DATA`를 사용한다.
 
-### 11.5 재연결
+### 11.5 오더북과 체결 일관성
 
-- 지수 백오프
-- 무작위 지터
-- 연결별 최대 재시도 간격
-- 명시적인 연결 상태
+- depth snapshot과 update ID가 연속인 diff stream으로 로컬 오더북을 동기화한다.
+- update ID gap이 생기면 해당 book을 즉시 폐기하고 REST snapshot부터 재동기화한다.
+- depth 20·50·100의 명목가치·imbalance·spread·벽 거리와 지속시간을 계산한다.
+- 벽 생성·취소 속도, 실제 체결 흡수, 가격 반응을 구분한다.
+- 단일 호가벽은 방향 또는 진입 근거가 될 수 없다.
+- CVD는 세션 누적값과 15초·30초·1분·3분·5분 기울기를 분리한다.
+- rolling delta를 cumulative delta라는 이름으로 재사용하지 않는다.
+
+### 11.6 재연결
+
+- 지수 백오프와 무작위 지터
+- public market, local book, account stream의 독립 상태
 - 연결 복구 후 REST 재동기화
-- 중복 이벤트 제거
-- 구독 복원
-- 장시간 연결에 대비한 계획적 재연결
+- 중복 이벤트 제거와 구독 복원
+- account user stream 실패 시 짧은 REST fallback
+- 한 소스 장애가 다른 소스 상태를 덮어쓰지 않음
 
-### 11.6 숫자 처리
+### 11.7 숫자 처리
 
 - Binance 숫자 문자열은 파싱 전 검증한다.
 - 금액 계산은 부동소수점 오차를 통제한다.
-- 상품의 tick size, step size와 min notional을 `exchangeInfo`에서 적용한다.
+- tick size, step size, min notional과 leverage bracket을 적용한다.
 - 화면 표시용 반올림값으로 내부 계산하지 않는다.
 - 원본 단위와 표시 단위를 분리한다.
 
-### 11.7 외부 컨텍스트 상태
+### 11.8 외부 컨텍스트 상태
 
-- 외부 소스는 시장 데이터와 별도의 `ContextStatus`와 `sourceHealth`를 가진다.
-- 하나의 소스가 실패해도 다른 소스와 Binance 시장 수집은 계속된다.
-- 외부 컨텍스트가 오래됐다는 이유만으로 `analysisGate.analysisAllowed`를 false로 바꾸지 않는다.
-- 다만 GPT는 오래된 외부 정보로 뉴스 기반 단정을 하지 않고 최신 확인이 불가능하다고 명시한다.
-- 게시시각과 수집시각을 분리하며 미래 시각, 비정상 URL, 지나치게 긴 본문과 중복 항목을 거부한다.
+- 외부 소스는 시장 데이터와 별도 상태를 가진다.
+- 하나의 외부 소스 실패가 Binance 시장·계정 경로를 차단하지 않는다.
+- 외부 컨텍스트 stale은 `entryAllowed`를 자동으로 false로 만들지 않는다.
+- 단, 확인된 고위험 이벤트는 GPT가 이벤트 위험으로 반영한다.
+- 게시시각·수집시각·출처·신뢰등급·중복 사건 그룹을 유지한다.
 
 ---
 
@@ -821,211 +873,156 @@ rawQuantity = maxLoss / riskPerBtc
 
 ### 14.1 공통 원칙
 
-- JSON을 정식 원본 형식으로 사용한다.
-- 사람이 읽는 복사용 텍스트는 동일 JSON에서 생성한다.
-- `schemaVersion`으로 변경을 관리한다.
-- 모든 필드는 단위와 출처가 명확해야 한다.
-- 누락값은 `null`로 제공하고 이유를 상태 필드에 넣는다.
-- Secret, API key, 서명, 계정 식별자와 전체 잔고를 포함하지 않는다.
-- Action 응답은 텍스트 기반 JSON만 사용한다.
-- 전체 응답은 100,000자 미만이어야 한다.
-- 정상 목표 크기는 75,000자 이하, 절대 상한은 90,000자로 한다.
-- 상한 초과 시 오래된 선택 데이터부터 줄이고 핵심 데이터를 유지한다.
+- schemaVersion 5를 신규 기준으로 사용하고 4를 무중단 수용한다.
+- 원본 Binance 응답이 아니라 검증된 도메인 값과 파생값만 전달한다.
+- 누락값은 `null`과 source health 이유를 함께 제공한다.
+- Secret, 서명, 계정 식별자와 불필요한 전체 잔고를 포함하지 않는다.
+- 전체 Action 응답은 90KB 이하로 유지한다.
+- 핵심 최신값을 우선하고, 오래된 원시 배열부터 축약한다.
 
-### 14.2 스냅샷 개요
+### 14.2 schemaVersion 5 개요
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 5,
   "snapshotId": "uuid",
-  "symbol": "BTCUSDT",
-  "market": "BINANCE_USDM_PERPETUAL",
   "generatedAt": 0,
-  "generatedAtKst": "",
-  "binanceServerTime": 0,
-  "analysisGate": {
-    "analysisAllowed": false,
-    "overallStatus": "INITIALIZING",
-    "ageMs": 0,
-    "reasons": [],
+  "decisionGates": {
+    "marketAnalysisAvailable": false,
+    "entryAllowed": false,
+    "positionManagementAvailable": false,
+    "quality": "RED",
+    "criticalBlockers": [],
+    "degradedSources": [],
     "missingFields": []
   },
-  "strategy": {
-    "leverage": 10,
-    "marginMode": "ISOLATED",
-    "minimumNetMarginRoiPercent": 2,
-    "maxLossUsdt": null,
-    "riskPercent": null
-  },
   "marketState": {},
-  "orderFlow": {},
-  "openInterest": {},
-  "sentiment": {},
-  "liquidations": {},
-  "timeframes": {
-    "5m": {},
-    "15m": {},
-    "1h": {},
-    "4h": {}
+  "microstructure": {
+    "localBook": {},
+    "tradeFlow": {},
+    "relativeVolume": {},
+    "openInterestFlow": {},
+    "liquidationFlow": {}
   },
-  "position": {
-    "source": "NONE",
-    "side": "FLAT",
-    "updatedAt": null
+  "timeframes": {},
+  "account": {},
+  "position": {},
+  "tradeLifecycle": {
+    "status": "FLAT",
+    "approvedPlan": null,
+    "livePosition": null,
+    "protectiveCoverage": null,
+    "closedResult": null
   },
   "costSettings": {},
-  "riskContext": {
-    "status": "UNAVAILABLE",
-    "updatedAt": null,
-    "highRiskNews": false,
-    "nextMacroEvent": null,
-    "binanceCriticalNotice": false,
-    "optionsVolatilityState": null,
-    "sourceWarnings": []
-  },
+  "riskContext": {},
   "sourceHealth": {}
 }
 ```
 
-### 14.3 캔들 전달
+### 14.3 필수 미세구조
 
-각 시간봉은 다음을 포함한다.
+- 동기화된 local book의 update ID, depth 20·50·100, spread와 imbalance
+- bid·ask wall의 가격·거리·명목가치·지속시간·생성·취소 속도
+- 15초·30초·1분·3분·5분 buy/sell volume, delta, session CVD, CVD slope
+- 가격 변화 대비 delta, absorption과 가격 impact efficiency
+- 1m·5m 상대 거래량, volume percentile와 taker buy ratio
+- OI 변화와 가격 방향의 조합 상태
+- 청산 source별 기준시각과 stale 여부
 
-- 최근 마감봉 최대 120개
-- 진행 중인 캔들 1개
-- 마감봉 기준 지표
-- 진행봉 기준 보조 지표
-- 최근 pivot
-- 시간봉별 데이터 상태
+이 필드는 객관값이며 LONG·SHORT 점수나 추천 신호를 포함하지 않는다.
 
-캔들은 payload 크기를 줄이기 위해 문서화된 배열 형식을 사용할 수 있다.
+### 14.4 계정과 거래 생명주기
 
-```json
-{
-  "fields": [
-    "openTime",
-    "open",
-    "high",
-    "low",
-    "close",
-    "volume",
-    "takerBuyVolume",
-    "tradeCount"
-  ],
-  "closed": [
-    [0, 0, 0, 0, 0, 0, 0, 0]
-  ],
-  "live": [0, 0, 0, 0, 0, 0, 0, 0]
-}
-```
+- 실제 포지션의 side·quantity·entry·break-even·mark·liquidation·margin·leverage·PnL
+- 포지션 생명주기에 귀속된 실제 체결·수수료·실현손익
+- 보호주문의 side·type·trigger·quantity·remaining quantity·coverage ratio
+- 승인 계획 대비 실제 진입가·수량·레버리지·보호주문 이탈
+- position이 0이 된 시점의 비용 차감 종료 결과
+- 과거 50건 전체 합산을 현재 거래 손익으로 사용하지 않음
 
-### 14.4 source health
+### 14.5 source health
 
-각 데이터 소스별로 다음을 제공한다.
+모든 소스에 status, eventTime, receivedTime, ageMs, lastSuccess, consecutiveFailures, reconnectCount와 validationError를 제공한다.
 
-- status
-- event time
-- received time
-- age ms
-- last success
-- consecutive failures
-- reconnect count
-- validation error
+### 14.6 riskContext
 
-GPT가 단순한 전체 상태뿐 아니라 어떤 데이터가 불완전한지 판단할 수 있어야 한다.
-
-### 14.5 `riskContext` 계약
-
-`getLatestSnapshot`에는 실시간 판단을 방해하지 않는 2,048 bytes 이하의 요약만 결합한다.
-
-필수 필드:
-
-- 외부 컨텍스트 전체 상태와 갱신시각
-- 고위험 뉴스 존재 여부와 대표 사건 ID
-- 다음 주요 거시 이벤트명·시각·남은 시간
-- Binance 중요 공지 존재 여부
-- 옵션 변동성 이상 여부
-- 온체인 또는 mempool 이상 여부
-- Fear & Greed 최신값과 기준시각
-- 소스 누락·지연 경고
-
-긴 기사 목록과 원문은 시장 스냅샷에 넣지 않는다. 상세 자료는 `getExternalContext`에서만 제공한다.
-
-Worker는 `GET /v1/snapshot/latest` 응답 시 D1의 최신 `external_context_summary`를 읽어 `riskContext`를 결합한다. 외부 요약 결합 실패는 시장 스냅샷 자체를 실패시키지 않고 `riskContext.status=UNAVAILABLE`과 경고만 반환한다.
+시장 snapshot에는 2KB 이하 위험 요약만 포함한다. 긴 기사와 원문은 `getExternalContext`에서만 제공한다. 외부 컨텍스트 실패는 시장·계정 게이트를 덮어쓰지 않는다.
 
 ---
 
 ## 15. 전용 GPT 응답 계약
 
-전용 GPT의 Instructions에는 다음 규칙을 반영한다.
+### 15.1 Action 사용
 
-1. 시장 분석 요청마다 반드시 `getLatestSnapshot`을 먼저 호출한다.
-2. 이전 대화의 가격을 현재 가격으로 사용하지 않는다.
-3. 스냅샷 시각과 데이터 상태를 답변 첫 부분에 표시한다.
-4. `analysisAllowed=false`면 신규 진입 계획을 작성하지 않는다.
-5. 제공되지 않은 값은 추정하지 않는다.
-6. 프로그램이 제공한 사실과 GPT의 해석을 구분한다.
-7. 롱·숏·관망 중 하나를 최종 선택한다.
-8. 판단 근거와 반대 근거를 함께 제시한다.
-9. 거래가 가능할 때만 진입구간, 손절, 무효화 조건과 TP1~TP3를 제시한다.
-10. 수량 또는 비용 수치를 제시하기 전에 `validateTradePlan`을 호출한다.
-11. 검증 API 결과와 다른 수량·손익을 임의로 다시 만들지 않는다.
-12. 최대 손실 입력이 없으면 수량을 제시하지 않는다.
-13. 현재 포지션이 있으면 유지·부분익절·종료와 조건을 제시한다.
-14. 손실 중인 포지션의 단순 물타기를 권하지 않는다.
-15. 보장, 확정, 무조건과 같은 표현을 사용하지 않는다.
-16. 실제 주문은 사용자가 직접 해야 한다고 명시한다.
-17. 기본 `지금 분석`은 `getLatestSnapshot` 한 번으로 끝내고, `riskContext`가 고위험을 표시하거나 사용자가 요청한 경우에만 상세 외부 컨텍스트를 조회한다.
-18. `뉴스 포함 분석`은 `getExternalContext(INTRADAY)`를 호출하고 각 사건의 출처 URL·게시시각·신뢰등급을 표시한다.
-19. `2개월 전망` 같은 30~90일 요청은 `getExternalContext(MACRO)`와 1d·1w 마감봉을 사용한다.
-20. 외부 컨텍스트는 시장 구조의 보조 근거이며, stale 외부 정보가 정상 시장 스냅샷 분석을 차단하지 않는다.
-21. 동일 사건의 반복 보도량을 독립된 여러 근거로 세지 않는다.
-22. 공식 자료, 복수 매체 확인, 단일 매체, 미확인·소셜 정보를 구분한다.
-23. 장기 전망은 조건부 시나리오와 무효화 조건으로 작성하며 단일 가격 경로를 확정하지 않는다.
-24. 자동 수집에 없는 X·Reddit·Telegram 정보는 사용자가 명시적으로 요청했을 때만 웹 검색으로 확인하고 미확인 정보로 표시한다.
+1. 모든 현재 시장·진입·포지션 요청 전에 `getLatestSnapshot`을 호출한다.
+2. 현재 거래 상태가 필요하면 `getTradeLifecycle`을 호출한다.
+3. 뉴스 요청 또는 고위험 플래그가 있을 때만 `getExternalContext`를 추가 호출한다.
+4. 주문값·수량·비용·손익을 말하기 전에 `validateTradePlan`을 호출한다.
+5. 이전 대화의 가격과 수량을 최신값으로 재사용하지 않는다.
 
-기본 답변 형식:
+### 15.2 게이트 사용
+
+- `marketAnalysisAvailable=false`: 현재 방향 해석 대신 연결 복구를 안내한다.
+- `entryAllowed=false`: 신규 주문 입력값을 제시하지 않고 WAIT 또는 NO_TRADE 이유만 제시한다.
+- `positionManagementAvailable=true`: 신규 진입이 차단됐더라도 실제 보유 포지션 관리는 계속한다.
+- 포지션 관리도 차단되면 Binance의 실제 포지션·보호주문 직접 확인을 최우선으로 안내한다.
+
+### 15.3 값 우선 응답
+
+진입 가능 시 답변 최상단은 다음 순서를 고정한다.
 
 ```text
-데이터 기준
-- 스냅샷 시각:
-- 데이터 상태:
-- 현재가 / 마크가격:
-
-최종 판단
-- 롱 / 숏 / 관망:
-- 핵심 이유:
-
-근거
-- 상승 근거:
-- 하락 근거:
-- 시간봉 충돌:
-- 체결·OI·호가:
-
-거래 계획
-- 진입구간:
-- 손절가:
-- 무효화 조건:
-- TP1:
-- TP2:
-- TP3:
-- 비용 차감 손익비:
-- 비용 차감 예상 ROI:
-- 검증 수량:
-- 최대 예상 손실:
-
-현재 포지션
-- 유지 / 부분익절 / 종료:
-- 손절 이동:
-- 추가진입:
-
-취소조건과 위험요인
-- 거래 취소조건:
-- 반대 시나리오:
-- 주의사항:
+현재 행동: ENTER_LONG | ENTER_SHORT
+주문 유형: MARKET | LIMIT
+레버리지: 1~150x
+Size: 0.000 BTC
+Limit Price: 0.0 USDT | 해당 없음
+Take Profit: 0.0 USDT
+Stop Loss: 0.0 USDT
+TP/SL: 켜기
+Reduce-Only: 끄기
+버튼: Buy/Long | Sell/Short
 ```
 
-관망일 때는 억지로 진입가·손절가·목표가를 채우지 않는다. 다음 분석을 고려할 수 있는 조건만 제시한다.
+- MARKET이면 Limit Price를 `해당 없음`으로 표시한다.
+- 단일 TP 입력 화면에는 우선 TP를 1개만 제공하고, 복수 TP는 아래 관리 계획으로 분리한다.
+- 모든 가격과 수량은 tickSize·stepSize 정렬 후 계산 API 결과만 사용한다.
+- 사용자가 지정한 증거금·수량·명목가치는 임의로 바꾸지 않는다.
+- 고배율에서 손절 전에 청산 위험이 있으면 ENTER를 금지한다.
+
+대기 시:
+
+```text
+현재 행동: WAIT_TRIGGER
+롱 핵심 트리거: ...
+숏 핵심 트리거: ...
+다시 확인할 조건: ...
+```
+
+포지션 보유 시:
+
+```text
+현재 행동: HOLD | PARTIAL_EXIT | EXIT
+현재 포지션: LONG | SHORT
+현재 수량:
+손절 유지/이동:
+부분 종료 수량:
+종료 버튼: Close | Buy/Long | Sell/Short
+Reduce-Only: 켜기
+```
+
+값 블록 다음에만 데이터 시각, 핵심 근거, 반대 근거, 무효화·이벤트 위험을 짧게 설명한다.
+
+### 15.4 해석 규칙
+
+- 사실과 해석을 분리한다.
+- LONG_BIAS·SHORT_BIAS와 ENTER 여부를 분리한다.
+- WAIT을 억지 진입값으로 채우지 않는다.
+- 호가벽 하나만으로 진입하지 않는다.
+- 손실 중 물타기를 권하지 않는다.
+- 검증되지 않은 승률·확률·수익보장을 만들지 않는다.
+- 실제 주문과 보호주문은 사용자가 Binance에서 직접 입력·확인한다.
 
 ---
 
@@ -2030,6 +2027,58 @@ Secret과 네트워크 클라이언트를 Main에 격리하고 제한된 IPC만 
 
 ---
 
+### Phase 11 — 데이터 완전성·분리 게이트·계정 실시간화
+
+구현:
+
+- schemaVersion 5와 `decisionGates`
+- 시장 분석·신규 진입·포지션 관리 게이트 분리
+- update ID 기반 local order book 동기화와 gap 재동기화
+- depth 20·50·100, 벽 생성·취소·지속·흡수·가격 반응
+- session CVD, 구간별 CVD slope, delta divergence와 impact efficiency
+- 1m·5m 상대 거래량과 taker buy ratio
+- OI·가격 결합 상태와 source별 청산 신선도
+- read-only account user stream 또는 동등한 저지연 경로와 REST fallback
+- 보호주문 방향·수량·가격·잔여 커버리지 검증
+- 포지션별 체결·수수료·실현손익 귀속
+
+완료조건:
+
+1. 보조 소스 한 개가 지연돼도 포지션 관리 필수 데이터가 정상이면 관리가 계속된다.
+2. 신규 진입 필수 소스가 RED이면 주문 입력값을 제시하지 않는다.
+3. local book update gap은 자동 폐기·재동기화되고 불완전 book이 정상으로 노출되지 않는다.
+4. cumulativeDelta가 실제 session CVD이며 rolling delta와 구분된다.
+5. 현재 거래 실현손익에 과거 무관한 체결이 섞이지 않는다.
+6. 보호주문 커버리지가 side·quantity·trigger·remaining quantity 기준으로 계산된다.
+7. 프로그램은 방향 점수나 자동 주문을 만들지 않는다.
+
+### Phase 12 — 진입 전 감시부터 거래 종료까지
+
+구현:
+
+- 거래 상태 `FLAT | WATCHING | ENTRY_READY | MANAGING | CLOSED | CANCELLED`
+- GPT가 만든 계획을 사용자가 앱에서 명시적으로 승인·고정하는 UI
+- 승인 계획의 핵심 트리거·무효화·만료시각 저장
+- 객관적 트리거 충족·무효화 로컬 알림
+- 실제 Binance 포지션 감지 후 MANAGING 자동 전환
+- 실제 보호주문·계획 이탈·부분 종료·완전 종료 추적
+- 비용 차감 종료 결과와 계획 대비 결과 저장
+- Worker/D1 `trading_state_latest` 업로드·조회
+- GPT Action `getTradeLifecycle`
+- 값 우선 GPT 응답 형식
+
+완료조건:
+
+1. 프로그램이 방향을 생성하지 않고 사용자 승인 계획만 감시한다.
+2. 알림은 주문을 전송하지 않고 사용자가 Binance에서 직접 실행할 값을 표시한다.
+3. 실제 포지션이 생기면 계획·포지션·보호주문을 하나의 lifecycle로 묶는다.
+4. 부분 종료 뒤 remaining quantity와 보호주문 coverage가 갱신된다.
+5. 포지션 0 전환 뒤 해당 거래의 순손익과 비용이 CLOSED에 고정된다.
+6. GPT는 ENTER·HOLD·PARTIAL_EXIT·EXIT 값을 설명보다 먼저 출력한다.
+7. OpenAPI에는 주문 생성·수정·취소·레버리지 변경 operation이 없다.
+
+---
+
 ## 26. 테스트 전략
 
 ### 26.1 단위 테스트
@@ -2176,83 +2225,51 @@ tests/
 
 다음은 최종 제품 범위에 포함하지 않는다.
 
-- 자동매매
-- 반자동 주문 전송
+- 자동매매와 반자동 주문 전송
 - Binance 주문 생성·수정·취소
-- 출금·이체
-- OpenAI API 호출
-- 자동 GPT 채팅 전송
-- 거래 진입 알람
-- 프로그램 자체 롱·숏 신호
-- READY_LONG 같은 신호 상태기계
-- 프로그램 자체 진입·손절·TP 추천
-- 승률·확률 예측
-- 일일 손실 잠금
-- 연속 손절 잠금
-- 백테스트
-- 모의매매 성과검증
-- 거래일지
-- X·Reddit·Telegram 자동 수집
-- 유료 뉴스·소셜·온체인·ETF flow API
+- 레버리지 변경·출금·자산이체
+- OpenAI API 호출과 자동 GPT 채팅 전송
+- 프로그램 자체 LONG·SHORT 방향 결정과 독립 전략 점수
+- 검증되지 않은 승률·확률·가격 예언
+- 손실 포지션 자동 물타기
+- 실계정 주문을 흉내 내는 무승인 PAPER 자동 진입
 - 약관을 우회하는 스크래핑
-- 프로그램 자체 뉴스 방향 점수와 가격 예측
-- 다른 거래소
-- BTC 이외 코인
-- 모바일 앱
-- Telegram·문자·카카오 알림
-- 유료 서버
-- 유료 도메인
+- 유료 데이터·유료 서버·유료 도메인
+- 다른 거래소와 BTC 이외 코인
+- 모바일 앱과 Telegram·문자·카카오 원격주문
 
-이 기능들은 이 기획서의 누락이 아니라 의도적인 제외다. 사용자가 별도로 범위 변경을 승인하기 전에는 구현하지 않는다.
+다음은 허용 범위다.
+
+- 사용자가 승인한 GPT 계획의 로컬 감시·무효화·만료 알림
+- 실제 읽기 전용 포지션·보호주문·체결·손익 추적
+- 비용 차감 PAPER·LIVE_MANUAL 거래 기록과 표본 기반 통계
+- 연결·데이터 품질·보호주문 누락 경고
+- 사용자가 Binance에 직접 입력할 값을 GPT가 계산·제시하는 것
 
 ---
 
 ## 30. 최종 완료 기준
 
-다음이 모두 충족되면 제품의 큰 그림이 완성된 것으로 본다.
-
-1. Windows 11에서 설치·실행된다.
-2. BTCUSDT 5m·15m·1h·4h 데이터가 실시간 표시된다.
-3. 가격·mark·index·funding·OI·체결·호가·청산 정보가 수집된다.
-4. 캔들 누락과 재연결이 자동 복구된다.
-5. 데이터별 신선도가 관리된다.
-6. 오래된 데이터에서 GPT 분석이 차단된다.
-7. 차트와 객관적 지표가 표시된다.
-8. 수동 포지션과 읽기 전용 자동 포지션을 지원한다.
-9. 수수료·슬리피지·펀딩·순손익·수량이 검증된다.
-10. 로컬 프로그램이 5초 주기로 중계소를 갱신한다.
-11. 전용 GPT가 사용자 요청 시 최신 스냅샷을 직접 조회한다.
-12. GPT가 계획 계산 API로 수량과 비용을 검증한다.
-13. 중계 장애 시 복사·붙여넣기 방식이 작동한다.
-14. OpenAI API를 사용하지 않는다.
-15. Binance 주문 API가 존재하지 않는다.
-16. 모든 실제 주문은 사용자가 직접 실행한다.
-17. Secret이 Renderer·로그·GPT·Git에 노출되지 않는다.
-18. Cloudflare 무료 한도 안에서 운영된다.
-19. 사용자가 요청한 범위의 검증과 Windows 운영 빌드가 통과한다.
-20. 프로그램과 GPT의 역할이 중복되지 않는다.
-21. 1d·1w 마감봉이 중장기 참고자료로 제공된다.
-22. 무료 외부 컨텍스트 수집이 실시간 시장 경로와 격리된다.
-23. 시장 snapshot에 2KB 이하 `riskContext`가 결합된다.
-24. GPT가 `getExternalContext`로 INTRADAY·SWING·MACRO를 구분해 조회한다.
-25. 모든 외부 사건에 출처·시각·신뢰등급이 포함된다.
-26. 외부 컨텍스트 장애가 정상 실시간 시장 분석을 차단하지 않는다.
-27. 유료 API 없이 추가 운영비 0원 구조를 유지한다.
-28. 1m 마감봉과 진행봉이 단타 snapshot에 포함된다.
-29. 15초·30초·1분·3분·5분 체결 흐름이 객관값으로 제공된다.
-30. depth와 OI의 초단기 변화가 표본 부족 시 null 규칙을 지킨다.
-31. `scalpContext`가 차트 형태·속도를 재구성하되 프로그램 방향 신호를 포함하지 않는다.
-32. GPT가 단기 방향과 현재 행동을 분리해 답한다.
-33. WAIT_TRIGGER일 때 객관적 재분석 조건을 제시한다.
-34. 뉴스 장애가 기본 단타 분석을 차단하지 않는다.
-35. 시장 schemaVersion 2 클라이언트에서 3으로 무중단 전환된다.
-36. 시장 schemaVersion 4에 고정 계획, PAPER 상태와 LIVE_MANUAL 읽기 전용 상태가 포함된다.
-37. 규모 지정 방식은 `MARGIN_USDT`·`QUANTITY_BTC`·`NOTIONAL_USDT`·`MAX_LOSS_USDT`를 지원한다.
-38. 사용자 선택 1~150배·기본 10배와 Binance 실제 leverage bracket·명목가치 상한을 검증한다.
-39. 사용자 지정 증거금·BTC 수량·명목가치는 자동 변경하지 않고 위반 시 계획을 차단한다.
-40. PAPER 거래 계획·이벤트·비용 차감 종료 결과와 표본 기반 통계가 재시작 뒤에도 유지된다.
-41. LIVE_MANUAL에서 실제 포지션·최근 체결·레버리지·청산가·미실현손익·보호주문을 읽기 전용으로 확인한다.
-42. 앱·Worker·OpenAPI·GPT에 주문 생성·수정·취소와 레버리지 변경 operation이 존재하지 않는다.
+1. Windows 11 앱에서 BTCUSDT 공개 시장·읽기 전용 계정 데이터가 계속 갱신된다.
+2. schemaVersion 5의 `decisionGates`가 분석·신규 진입·포지션 관리를 독립 판정한다.
+3. mark·index·funding·OHLCV·상대 거래량·local book·aggTrade·CVD·OI·비율·청산이 source time과 함께 제공된다.
+4. local book과 캔들 gap이 자동 복구된다.
+5. 일부 보조 데이터 지연이 실제 포지션 관리를 불필요하게 차단하지 않는다.
+6. 신규 진입 필수 데이터가 RED이면 GPT가 주문값을 제시하지 않는다.
+7. 사용자가 승인한 계획이 WATCHING부터 CANCELLED 또는 CLOSED까지 영속된다.
+8. 실제 포지션·부분 종료·완전 종료가 lifecycle에 반영된다.
+9. 보호주문 coverage와 계획 이탈이 객관적으로 표시된다.
+10. 포지션별 체결·수수료·실현손익이 정확히 귀속된다.
+11. 1~150배 선택, Isolated, Binance bracket과 청산 안전거리가 검증된다.
+12. 사용자 지정 규모는 자동 변경되지 않는다.
+13. Worker·D1·OpenAPI가 snapshot과 lifecycle 최신 상태를 제공한다.
+14. GPT는 진입·관리 시 Binance 입력값을 답변 최상단에 표시한다.
+15. WAIT일 때는 방향별 핵심 트리거만 간결하게 제시한다.
+16. 외부 컨텍스트 장애가 정상 시장·계정 경로를 막지 않는다.
+17. 자동주문·주문 수정·취소·레버리지 변경·출금·이체 API가 존재하지 않는다.
+18. Secret이 Renderer·로그·GPT·Git에 노출되지 않는다.
+19. 모든 실제 주문과 보호주문은 사용자가 Binance에서 직접 입력·확인한다.
+20. 사용자가 명시적으로 요청한 운영 검증과 빌드가 통과해야 최종 완료로 선언한다.
 
 ---
 
