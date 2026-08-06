@@ -442,8 +442,10 @@ export function registerIpcHandlers({
       const snapshot = generateSnapshot(marketData.cache, {
         serverTime: Date.now() + marketData.getServerOffsetMs(),
       });
-      if (!snapshot.analysisGate.analysisAllowed)
-        throw new Error('STALE_OR_INCOMPLETE_MARKET_DATA');
+      if (!snapshot.decisionGates.entryAllowed)
+        throw new Error(
+          `ENTRY_BLOCKED:${snapshot.decisionGates.criticalBlockers.join(',')}`,
+        );
       const result = validatePositionPlan(input);
       if (
         !result.valid ||
@@ -619,15 +621,20 @@ export function registerIpcHandlers({
   );
 
   const getTradingState = (): TradingState => {
+    const now = Date.now();
     const settings = database.readUserSettings();
     const account = accountService.getStatus();
     const plan = database.readActiveLockedTradePlan(settings.tradingMode);
+    const paperTrade = database.readActivePaperTrade();
+    const latestPaperTrade = database.readLatestPaperTrade();
+    const lastCompletedPaperTrade =
+      latestPaperTrade?.status === 'CLOSED' ? latestPaperTrade : null;
     const blockedReasons: string[] = [];
     if (!account.connected) blockedReasons.push('ACCOUNT_NOT_CONNECTED');
     if (!account.position) blockedReasons.push('NO_LIVE_POSITION');
     if (
       account.lastUpdatedAt === null ||
-      Date.now() - account.lastUpdatedAt > 60_000
+      now - account.lastUpdatedAt > 15_000
     )
       blockedReasons.push('ACCOUNT_DATA_STALE');
     const protectiveOrders = account.openOrders.filter(
@@ -641,10 +648,52 @@ export function registerIpcHandlers({
         : null;
     if (planMatchesPosition === false)
       blockedReasons.push('LIVE_POSITION_DIFFERS_FROM_LOCKED_PLAN');
+
+    const lifecycleStage =
+      paperTrade || account.position
+        ? ('MANAGING' as const)
+        : plan?.status === 'ENTERED'
+          ? ('ENTRY_READY' as const)
+          : plan?.status === 'LOCKED'
+            ? ('WATCHING' as const)
+            : lastCompletedPaperTrade
+              ? ('CLOSED' as const)
+              : ('FLAT' as const);
+    const lifecycleStartedAt =
+      paperTrade?.openedAt ??
+      account.position?.updatedAt ??
+      plan?.lockedAt ??
+      lastCompletedPaperTrade?.openedAt ??
+      null;
+    const lifecycleUpdatedAt =
+      paperTrade?.updatedAt ??
+      account.position?.updatedAt ??
+      plan?.lockedAt ??
+      lastCompletedPaperTrade?.updatedAt ??
+      now;
+
     return {
       mode: settings.tradingMode,
+      lifecycle: {
+        stage: lifecycleStage,
+        mode: settings.tradingMode,
+        planId: plan?.id ?? paperTrade?.planId ?? null,
+        tradeId: paperTrade?.id ?? lastCompletedPaperTrade?.id ?? null,
+        positionSource: paperTrade
+          ? 'PAPER'
+          : account.position
+            ? 'BINANCE_READ_ONLY'
+            : 'NONE',
+        startedAt: lifecycleStartedAt,
+        updatedAt: lifecycleUpdatedAt,
+        blockedReasons:
+          lifecycleStage === 'MANAGING' && account.position
+            ? blockedReasons
+            : [],
+      },
       activePlan: plan,
-      activePaperTrade: database.readActivePaperTrade(),
+      activePaperTrade: paperTrade,
+      lastCompletedPaperTrade,
       statistics: database.readTradingStatistics(),
       liveManual: {
         available: blockedReasons.length === 0,
