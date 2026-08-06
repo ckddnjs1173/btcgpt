@@ -1,7 +1,7 @@
 import type { DataStatus } from '../../shared/contracts';
 
 export const SYMBOL = 'BTCUSDT' as const;
-export const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h'] as const;
+export const TIMEFRAMES = ['1m', '3m', '5m', '15m', '30m', '1h', '4h'] as const;
 export const REFERENCE_TIMEFRAMES = ['1d', '1w'] as const;
 export type CoreTimeframe = (typeof TIMEFRAMES)[number];
 export type ReferenceTimeframe = (typeof REFERENCE_TIMEFRAMES)[number];
