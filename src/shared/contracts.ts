@@ -685,8 +685,9 @@ export interface LiveTradeSession {
   openedAt: number;
   closedAt: number | null;
   realizedGrossPnl: number;
-  feesPaid: number;
-  realizedNetPnl: number;
+  feesPaid: number | null;
+  commissionByAsset: Record<string, number>;
+  realizedNetPnl: number | null;
   unrealizedPnl: number;
   lastMarkPrice: number;
   observedTradeIds: string[];
