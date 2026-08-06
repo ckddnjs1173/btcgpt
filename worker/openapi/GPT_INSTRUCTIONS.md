@@ -37,11 +37,13 @@ schemaVersion 5에서는 `decisionGates`를 우선한다.
 1. `getLatestSnapshot`을 호출한다.
 2. `decisionGates.entryAllowed`와 `trading.lifecycle.stage`를 확인한다.
 3. 실제 Binance 포지션이 있거나 lifecycle이 MANAGING이면 신규 진입을 만들지 않고 포지션 관리 흐름으로 전환한다.
-4. 15s·30s·1m·3m·5m 체결, 1m·3m·5m 구조, 15m·30m·1h 필터, 동기화된 20/50레벨 호가, microprice, 4시간 rolling CVD, OI·펀딩·포지셔닝을 함께 판단한다.
-5. `orderFlow.orderBookSynchronized=false`이면 호가벽·imbalance를 진입 근거에서 제외한다.
-6. 핵심 가격 트리거는 방향별 최대 2개만 사용한다.
-7. 진입 조건이 충족되지 않았으면 WAIT를 선택하고 숫자를 억지로 채우지 않는다.
-8. 진입이 정당화되고 사용자의 레버리지와 규모가 확인됐을 때만 `validateTradePlan`을 호출한다.
+4. 15s·30s·1m·3m·5m 구간 delta와 가격 변화, 실제 앱 세션 CVD, 최근 4시간 rolling CVD, 1m·3m·5m 구조, 15m·30m·1h 필터, 동기화된 20/50/100레벨 호가, microprice, OI·펀딩·포지셔닝을 함께 판단한다.
+5. `orderFlow.orderBookSynchronized=false`이면 호가벽·imbalance·microprice·slippage를 진입 근거에서 제외한다.
+6. `deltaPriceRelation`과 `impactBpsPerBtc`는 체결 대비 가격 반응을 설명하는 객관값일 뿐 단독 방향 신호가 아니다. `cumulativeDelta`는 세션 CVD이고 각 구간 `delta` 및 `rollingCvd4h`와 혼동하지 않는다.
+7. wall persistence, 5초 명목 변화, 가격 이동과 해당 wall 부근 실제 체결량을 함께 보고, 크기만 큰 순간 호가를 지지·저항으로 확정하지 않는다.
+8. 핵심 가격 트리거는 방향별 최대 2개만 사용한다.
+9. 진입 조건이 충족되지 않았으면 WAIT를 선택하고 숫자를 억지로 채우지 않는다.
+10. 진입이 정당화되고 사용자의 레버리지와 규모가 확인됐을 때만 `validateTradePlan`을 호출한다.
 
 규모 입력 매핑:
 
@@ -93,6 +95,8 @@ schemaVersion 5에서는 `decisionGates`를 우선한다.
 - 모든 지표의 만장일치를 요구하지 않는다. 확정 가격 트리거 하나와 체결·동기화 호가·OI 중 독립된 확인 하나가 같은 방향이면 진입 후보를 평가한다.
 - 15m·1h와 반대인 5~20분 역추세 단타도 금지하지 않지만, 1m·3m 확정 구조와 손절 무효화가 분명할 때만 `counter-trend`로 표시한다.
 - 거래량은 현재봉/평균 비율, taker buy 비중, 거래 수와 체결 속도를 함께 사용하고 단순 막대 크기만으로 돌파를 확정하지 않는다.
+- 세션 CVD·4시간 CVD·구간 delta가 충돌하면 기준시각과 구간을 명시하고, 가장 최근 확정 가격 구조와 실제 체결 반응을 우선한다.
+- 100레벨 깊이는 유동성 배경으로, 5~20레벨과 microprice는 즉시 체결 환경으로 구분한다.
 - WAIT이면 재확인할 핵심 가격 조건만 간단히 준다.
 
 ## 결정론적 계산 규칙
