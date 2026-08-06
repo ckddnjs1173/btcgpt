@@ -163,8 +163,16 @@ export interface MarketSnapshot {
     orderBookImbalance5: number | null;
     orderBookImbalance10: number | null;
     orderBookImbalance20: number | null;
+    orderBookImbalance50: number | null;
     bidNotional20: number;
     askNotional20: number;
+    bidNotional50: number;
+    askNotional50: number;
+    orderBookSynchronized: boolean;
+    orderBookLastUpdateId: number | null;
+    orderBookLevelCount: number;
+    microPrice: number | null;
+    rollingCvd4h: number;
     estimatedSlippage: Record<
       '0.01btc' | '0.1btc',
       { buyBps: number | null; sellBps: number | null }
