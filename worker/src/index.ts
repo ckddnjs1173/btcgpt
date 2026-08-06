@@ -30,7 +30,7 @@ export interface Env {
 
 const snapshotSchema = z
   .object({
-    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]),
+    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
     snapshotId: z.string().min(1).max(100),
     symbol: z.literal('BTCUSDT'),
     market: z.literal('BINANCE_USDM_PERPETUAL'),
@@ -50,6 +50,21 @@ const snapshotSchema = z
         ]),
       })
       .passthrough(),
+    decisionGates: z
+      .object({
+        marketAnalysisAvailable: z.boolean(),
+        entryAllowed: z.boolean(),
+        positionManagementAvailable: z.boolean(),
+        quality: z.enum(['GREEN', 'YELLOW', 'RED']),
+        generatedAt: z.number().int().positive(),
+        publishedAt: z.number().int().positive().nullable(),
+        ageMs: z.number(),
+        criticalBlockers: z.array(z.string()),
+        degradedSources: z.array(z.string()),
+        missingFields: z.array(z.string()),
+      })
+      .strict()
+      .optional(),
   })
   .passthrough()
   .superRefine((snapshot, context) => {
@@ -62,6 +77,11 @@ const snapshotSchema = z
       context.addIssue({
         code: 'custom',
         message: 'Schema version 3 or newer requires scalpContext and 1m timeframe',
+      });
+    if (snapshot.schemaVersion >= 5 && !snapshot.decisionGates)
+      context.addIssue({
+        code: 'custom',
+        message: 'Schema version 5 or newer requires decisionGates',
       });
   });
 
@@ -292,6 +312,16 @@ async function load(env: Env) {
     .first<{ raw: string; generatedAt: number; receivedAt: number }>();
 }
 
+async function loadTradingState(env: Env) {
+  return requireDatabase(env)
+    .prepare(
+      `SELECT payload AS raw, generated_at AS generatedAt,
+        received_at AS receivedAt
+       FROM latest_trading_state WHERE id = 1`,
+    )
+    .first<{ raw: string; generatedAt: number; receivedAt: number }>();
+}
+
 async function saveContext(
   env: Env,
   parsed: z.infer<typeof contextUploadSchema>,
@@ -420,12 +450,60 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     if (!stored) return json({ error: 'NOT_FOUND' }, 404);
     const ageMs = Date.now() - stored.generatedAt;
     const payload = JSON.parse(stored.raw) as Record<string, unknown>;
-    const originalGate = payload.analysisGate as Record<string, unknown>;
+    const originalGate =
+      (payload.analysisGate as Record<string, unknown> | undefined) ?? {};
     payload.analysisGate = {
       ...originalGate,
       ageMs,
       publishedAt: stored.receivedAt,
     };
+    const originalDecisionGates = payload.decisionGates as
+      | Record<string, unknown>
+      | undefined;
+    if (originalDecisionGates) {
+      const criticalBlockers = [
+        ...((originalDecisionGates.criticalBlockers as string[] | undefined) ??
+          []),
+      ];
+      const degradedSources = [
+        ...((originalDecisionGates.degradedSources as string[] | undefined) ??
+          []),
+      ];
+      let marketAnalysisAvailable =
+        originalDecisionGates.marketAnalysisAvailable === true;
+      let entryAllowed = originalDecisionGates.entryAllowed === true;
+      let positionManagementAvailable =
+        originalDecisionGates.positionManagementAvailable === true;
+      let quality = String(originalDecisionGates.quality ?? 'RED');
+
+      if (ageMs > 30_000) {
+        marketAnalysisAvailable = false;
+        entryAllowed = false;
+        positionManagementAvailable = false;
+        quality = 'RED';
+        criticalBlockers.push('RELAY_SNAPSHOT_STALE');
+      } else if (ageMs > MAX_SNAPSHOT_AGE_MS) {
+        marketAnalysisAvailable = false;
+        entryAllowed = false;
+        quality = positionManagementAvailable ? 'YELLOW' : 'RED';
+        criticalBlockers.push('RELAY_ENTRY_SNAPSHOT_STALE');
+      } else if (ageMs > 8_000) {
+        if (quality === 'GREEN') quality = 'YELLOW';
+        degradedSources.push('relay:DELAYED');
+      }
+
+      payload.decisionGates = {
+        ...originalDecisionGates,
+        marketAnalysisAvailable,
+        entryAllowed,
+        positionManagementAvailable,
+        quality,
+        publishedAt: stored.receivedAt,
+        ageMs,
+        criticalBlockers: [...new Set(criticalBlockers)],
+        degradedSources: [...new Set(degradedSources)],
+      };
+    }
     if (ageMs > MAX_SNAPSHOT_AGE_MS) {
       payload.analysisGate = {
         ...(payload.analysisGate as Record<string, unknown>),
@@ -486,6 +564,31 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     )
       return json({ error: 'RESPONSE_TOO_LARGE' }, 500);
     return json(responseBody);
+  }
+
+  if (
+    url.pathname === '/v1/trading-state/latest' &&
+    request.method === 'GET'
+  ) {
+    if (!authorized(request, env.ACTION_READ_KEY))
+      return json({ error: 'UNAUTHORIZED' }, 401);
+    let stored;
+    try {
+      stored = await loadTradingState(env);
+    } catch {
+      return json({ error: 'STORAGE_UNAVAILABLE' }, 503);
+    }
+    if (!stored) return json({ error: 'NOT_FOUND' }, 404);
+    const ageMs = Date.now() - stored.generatedAt;
+    const payload = JSON.parse(stored.raw) as Record<string, unknown>;
+    return json({
+      ...payload,
+      generatedAt: stored.generatedAt,
+      relayReceivedAt: stored.receivedAt,
+      ageMs,
+      relayStatus:
+        ageMs > 30_000 ? 'STALE' : ageMs > 15_000 ? 'DELAYED' : 'NORMAL',
+    });
   }
 
   if (url.pathname === '/v1/context/latest' && request.method === 'PUT') {
