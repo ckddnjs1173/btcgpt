@@ -307,7 +307,7 @@ export function generateSnapshot(
     updatedAt: null,
   };
   const hasOpenPosition =
-    position.side !== 'FLAT' || options.tradingState?.activePaperTrade !== null;
+    position.side !== 'FLAT' || options.tradingState?.activePaperTrade != null;
   const isUnavailable = (source: string): boolean => {
     const status = sourceHealth[source]?.status ?? 'INSUFFICIENT_DATA';
     return (
@@ -749,8 +749,19 @@ export function generateSnapshot(
     },
     trading: options.tradingState ?? {
       mode: 'PAPER',
+      lifecycle: {
+        stage: 'FLAT',
+        mode: 'PAPER',
+        planId: null,
+        tradeId: null,
+        positionSource: 'NONE',
+        startedAt: null,
+        updatedAt: generatedAt,
+        blockedReasons: ['TRADING_STATE_UNAVAILABLE'],
+      },
       activePlan: null,
       activePaperTrade: null,
+      lastCompletedPaperTrade: null,
       statistics: {
         closedTrades: 0,
         wins: 0,
