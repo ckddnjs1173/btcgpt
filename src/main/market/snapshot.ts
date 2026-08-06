@@ -301,31 +301,117 @@ export function generateSnapshot(
   const generatedAt = Date.now();
   const sourceHealth = cache.sourceHealth(generatedAt);
   const health = cache.health(generatedAt);
-  const missingFields: string[] = [];
+  const position = options.position ?? {
+    source: 'NONE' as const,
+    side: 'FLAT' as const,
+    updatedAt: null,
+  };
+  const hasOpenPosition =
+    position.side !== 'FLAT' || options.tradingState?.activePaperTrade !== null;
+  const isUnavailable = (source: string): boolean => {
+    const status = sourceHealth[source]?.status ?? 'INSUFFICIENT_DATA';
+    return (
+      status === 'STALE' ||
+      status === 'DISCONNECTED' ||
+      status === 'INSUFFICIENT_DATA'
+    );
+  };
+  const degradedSources = Object.entries(sourceHealth)
+    .filter(([, source]) => source.status !== 'NORMAL')
+    .map(([source, state]) => `${source}:${state.status}`);
+
+  const marketMissingFields: string[] = [];
   for (const [field, value] of [
     ['marketState.lastPrice', cache.state.lastPrice],
     ['marketState.markPrice', cache.state.markPrice],
-    ['marketState.indexPrice', cache.state.indexPrice],
     ['marketState.bidPrice', cache.state.bidPrice],
     ['marketState.askPrice', cache.state.askPrice],
-    ['openInterest.current', cache.state.openInterest],
   ] as const)
-    if (value === null) missingFields.push(field);
+    if (value === null) marketMissingFields.push(field);
+  if (cache.getClosed('1m').length < 20)
+    marketMissingFields.push('timeframes.1m.closed');
+  if (cache.getClosed('5m').length < 20)
+    marketMissingFields.push('timeframes.5m.closed');
+  if (cache.getTrades(60_000, generatedAt).length === 0)
+    marketMissingFields.push('orderFlow.trades');
+
+  const entryMissingFields = [...marketMissingFields];
+  if (cache.state.indexPrice === null)
+    entryMissingFields.push('marketState.indexPrice');
+  if (cache.state.openInterest === null)
+    entryMissingFields.push('openInterest.current');
   if (cache.depth.bids.length === 0 || cache.depth.asks.length === 0)
-    missingFields.push('orderFlow.depth');
-  if (cache.productFilters === null) missingFields.push('productFilters');
-  for (const timeframe of TIMEFRAMES)
-    if (cache.getClosed(timeframe).length < 250)
-      missingFields.push(`timeframes.${timeframe}.closed`);
+    entryMissingFields.push('orderFlow.depth');
+  if (cache.productFilters === null) entryMissingFields.push('productFilters');
+  for (const timeframe of ['1m', '5m', '15m', '1h'] as const)
+    if (cache.getClosed(timeframe).length < 200)
+      entryMissingFields.push(`timeframes.${timeframe}.closed`);
+
   const clockSkew = Math.abs((options.serverTime ?? generatedAt) - generatedAt);
-  if (clockSkew > 10_000) missingFields.push('binanceServerTime.clockSkew');
-  const analysisAllowed =
-    health.status === 'NORMAL' && missingFields.length === 0;
-  const reasons = [
-    health.status !== 'NORMAL' ? `DATA_${health.status}` : null,
-    missingFields.length ? 'REQUIRED_DATA_MISSING' : null,
+  if (clockSkew > 10_000) {
+    marketMissingFields.push('binanceServerTime.clockSkew');
+    entryMissingFields.push('binanceServerTime.clockSkew');
+  }
+
+  const marketCriticalSources = [
+    'market',
+    'bookTicker',
+    'trades',
+    'candle:1m',
+    'candle:5m',
+  ];
+  const entryCriticalSources = [
+    ...marketCriticalSources,
+    'depth',
+    'openInterest',
+    'candle:15m',
+    'candle:1h',
+  ];
+  const marketAnalysisAvailable =
+    marketMissingFields.length === 0 &&
+    !marketCriticalSources.some(isUnavailable);
+  const entryAllowed =
+    entryMissingFields.length === 0 &&
+    !entryCriticalSources.some(isUnavailable);
+
+  const accountAgeMs =
+    options.accountStatus?.lastUpdatedAt === null ||
+    options.accountStatus?.lastUpdatedAt === undefined
+      ? Number.POSITIVE_INFINITY
+      : generatedAt - options.accountStatus.lastUpdatedAt;
+  const positionManagementMissingFields: string[] = [];
+  if (cache.state.markPrice === null)
+    positionManagementMissingFields.push('marketState.markPrice');
+  if (
+    hasOpenPosition &&
+    position.source === 'BINANCE' &&
+    (!options.accountStatus?.connected || accountAgeMs > 15_000)
+  )
+    positionManagementMissingFields.push('account.position');
+  const positionManagementAvailable =
+    positionManagementMissingFields.length === 0 &&
+    (sourceHealth.market?.ageMs ?? Number.POSITIVE_INFINITY) <= 15_000;
+
+  const criticalBlockers = [
+    !marketAnalysisAvailable ? 'MARKET_ANALYSIS_DATA_UNAVAILABLE' : null,
+    !entryAllowed ? 'ENTRY_DATA_UNAVAILABLE' : null,
+    hasOpenPosition && !positionManagementAvailable
+      ? 'POSITION_MANAGEMENT_DATA_UNAVAILABLE'
+      : null,
     clockSkew > 10_000 ? 'SYSTEM_CLOCK_SKEW' : null,
   ].filter((reason): reason is string => reason !== null);
+  const quality =
+    entryAllowed && degradedSources.length === 0
+      ? ('GREEN' as const)
+      : marketAnalysisAvailable || positionManagementAvailable
+        ? ('YELLOW' as const)
+        : ('RED' as const);
+  const gateStatus: DataStatus =
+    quality === 'GREEN'
+      ? 'NORMAL'
+      : quality === 'YELLOW'
+        ? 'DELAYED'
+        : health.status;
 
   const orderFlowWindows = Object.fromEntries(
     Object.entries(WINDOW_MS).map(([label, windowMs]) => {
@@ -464,13 +550,8 @@ export function generateSnapshot(
       },
     ]),
   );
-  const position = options.position ?? {
-    source: 'NONE' as const,
-    side: 'FLAT' as const,
-    updatedAt: null,
-  };
   const snapshot: MarketSnapshot = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     snapshotId: randomUUID(),
     symbol: 'BTCUSDT',
     market: 'BINANCE_USDM_PERPETUAL',
@@ -481,14 +562,30 @@ export function generateSnapshot(
       timeStyle: 'medium',
     }).format(generatedAt),
     binanceServerTime: options.serverTime ?? generatedAt,
-    analysisGate: {
-      analysisAllowed,
-      overallStatus: health.status,
+    decisionGates: {
+      marketAnalysisAvailable,
+      entryAllowed,
+      positionManagementAvailable,
+      quality,
       generatedAt,
       publishedAt: options.publishedAt ?? null,
       ageMs: finiteAge(health.ageMs),
-      reasons,
-      missingFields,
+      criticalBlockers,
+      degradedSources,
+      missingFields: [...new Set([
+        ...marketMissingFields,
+        ...entryMissingFields,
+        ...positionManagementMissingFields,
+      ])],
+    },
+    analysisGate: {
+      analysisAllowed: entryAllowed,
+      overallStatus: gateStatus,
+      generatedAt,
+      publishedAt: options.publishedAt ?? null,
+      ageMs: finiteAge(health.ageMs),
+      reasons: criticalBlockers,
+      missingFields: entryMissingFields,
     },
     strategy: {
       leverage:
