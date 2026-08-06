@@ -81,6 +81,9 @@ export class MarketCache {
     asks: [],
     eventTime: null,
     receivedAt: null,
+    synchronized: false,
+    lastUpdateId: null,
+    levelCount: 0,
   };
   productFilters: ProductFilters | null = null;
   readonly sentiment: SentimentState = {
@@ -191,8 +194,23 @@ export class MarketCache {
     asks: Array<[number, number]>,
     eventTime: number,
     receivedAt = Date.now(),
+    synchronization: {
+      synchronized: boolean;
+      lastUpdateId: number | null;
+      levelCount: number;
+    } = {
+      synchronized: false,
+      lastUpdateId: null,
+      levelCount: Math.min(bids.length, asks.length),
+    },
   ): void {
-    Object.assign(this.depth, { bids, asks, eventTime, receivedAt });
+    Object.assign(this.depth, {
+      bids,
+      asks,
+      eventTime,
+      receivedAt,
+      ...synchronization,
+    });
     const wall = (levels: Array<[number, number]>) =>
       levels
         .slice(0, 20)
