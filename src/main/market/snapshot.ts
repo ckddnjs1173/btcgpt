@@ -424,6 +424,7 @@ export function generateSnapshot(
         ? 'DELAYED'
         : health.status;
 
+  const sessionCvd = cache.getSessionCvd();
   const orderFlowWindows = Object.fromEntries(
     Object.entries(WINDOW_MS).map(([label, windowMs]) => {
       const trades = cache.getTrades(windowMs, generatedAt);
@@ -459,7 +460,7 @@ export function generateSnapshot(
           buyRatio: total > 0 ? takerBuyVolume / total : null,
           sellRatio: total > 0 ? takerSellVolume / total : null,
           delta: takerBuyVolume - takerSellVolume,
-          cumulativeDelta: takerBuyVolume - takerSellVolume,
+          cumulativeDelta: sessionCvd.value,
           tradeCount: trades.length,
           buyTradeCount,
           sellTradeCount,
@@ -678,6 +679,8 @@ export function generateSnapshot(
       orderBookLastUpdateId: cache.depth.lastUpdateId,
       orderBookLevelCount: cache.depth.levelCount,
       microPrice,
+      sessionCvd: sessionCvd.value,
+      sessionCvdStartedAt: sessionCvd.startedAt,
       rollingCvd4h,
       estimatedSlippage: {
         '0.01btc': {
