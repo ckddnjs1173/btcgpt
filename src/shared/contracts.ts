@@ -206,6 +206,7 @@ export interface MarketSnapshot {
     connected: boolean;
     lastUpdatedAt: number | null;
     availableBalance: number | null;
+    stream: AccountStatus['stream'];
     commission: AccountStatus['commission'];
     openOrders: AccountStatus['openOrders'];
     recentTrades: AccountStatus['recentTrades'];
@@ -418,6 +419,14 @@ export interface AccountStatus {
   connected: boolean;
   lastUpdatedAt: number | null;
   error: string | null;
+  stream: {
+    status: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED';
+    lastEventAt: number | null;
+    lastAccountUpdateAt: number | null;
+    lastOrderTradeUpdateAt: number | null;
+    reconnectCount: number;
+    error: string | null;
+  };
   position: {
     source: 'BINANCE_READ_ONLY';
     side: 'LONG' | 'SHORT';
