@@ -661,10 +661,31 @@ export interface TradingStatistics {
   maxDrawdown: number | null;
 }
 
+export type TradeLifecycleStage =
+  | 'FLAT'
+  | 'WATCHING'
+  | 'ENTRY_READY'
+  | 'MANAGING'
+  | 'CLOSED'
+  | 'CANCELLED';
+
+export interface TradeLifecycle {
+  stage: TradeLifecycleStage;
+  mode: TradingMode;
+  planId: string | null;
+  tradeId: string | null;
+  positionSource: 'NONE' | 'PAPER' | 'BINANCE_READ_ONLY';
+  startedAt: number | null;
+  updatedAt: number;
+  blockedReasons: string[];
+}
+
 export interface TradingState {
   mode: TradingMode;
+  lifecycle: TradeLifecycle;
   activePlan: LockedTradePlan | null;
   activePaperTrade: PaperTrade | null;
+  lastCompletedPaperTrade: PaperTrade | null;
   statistics: TradingStatistics;
   liveManual: {
     available: boolean;
