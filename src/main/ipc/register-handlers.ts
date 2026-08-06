@@ -50,6 +50,7 @@ import {
   isStepAligned,
 } from '../../shared/calculations/costs';
 import { randomUUID } from 'node:crypto';
+import { buildTradingState } from '../trading/build-state';
 
 interface RegisterIpcHandlersOptions {
   database: AppDatabase;
@@ -620,98 +621,9 @@ export function registerIpcHandlers({
     (_event, rawInput: unknown): PaperTrade => closePaper(rawInput, true),
   );
 
-  const getTradingState = (): TradingState => {
-    const now = Date.now();
-    const settings = database.readUserSettings();
-    const account = accountService.getStatus();
-    const plan = database.readActiveLockedTradePlan(settings.tradingMode);
-    const paperTrade = database.readActivePaperTrade();
-    const latestPaperTrade = database.readLatestPaperTrade();
-    const lastCompletedPaperTrade =
-      latestPaperTrade?.status === 'CLOSED' ? latestPaperTrade : null;
-    const blockedReasons: string[] = [];
-    if (!account.connected) blockedReasons.push('ACCOUNT_NOT_CONNECTED');
-    if (!account.position) blockedReasons.push('NO_LIVE_POSITION');
-    if (
-      account.lastUpdatedAt === null ||
-      now - account.lastUpdatedAt > 15_000
-    )
-      blockedReasons.push('ACCOUNT_DATA_STALE');
-    const protectiveOrders = account.openOrders.filter(
-      (order) => order.protective,
-    );
-    const planMatchesPosition =
-      plan && account.position
-        ? plan.side === account.position.side &&
-          Math.abs(plan.quantity - account.position.quantity) < 1e-8 &&
-          plan.leverage === account.position.leverage
-        : null;
-    if (planMatchesPosition === false)
-      blockedReasons.push('LIVE_POSITION_DIFFERS_FROM_LOCKED_PLAN');
+  const getTradingState = (): TradingState =>
+    buildTradingState(database, accountService.getStatus());
 
-    const lifecycleStage =
-      paperTrade || account.position
-        ? ('MANAGING' as const)
-        : plan?.status === 'ENTERED'
-          ? ('ENTRY_READY' as const)
-          : plan?.status === 'LOCKED'
-            ? ('WATCHING' as const)
-            : lastCompletedPaperTrade
-              ? ('CLOSED' as const)
-              : ('FLAT' as const);
-    const lifecycleStartedAt =
-      paperTrade?.openedAt ??
-      account.position?.updatedAt ??
-      plan?.lockedAt ??
-      lastCompletedPaperTrade?.openedAt ??
-      null;
-    const lifecycleUpdatedAt =
-      paperTrade?.updatedAt ??
-      account.position?.updatedAt ??
-      plan?.lockedAt ??
-      lastCompletedPaperTrade?.updatedAt ??
-      now;
-
-    return {
-      mode: settings.tradingMode,
-      lifecycle: {
-        stage: lifecycleStage,
-        mode: settings.tradingMode,
-        planId: plan?.id ?? paperTrade?.planId ?? null,
-        tradeId: paperTrade?.id ?? lastCompletedPaperTrade?.id ?? null,
-        positionSource: paperTrade
-          ? 'PAPER'
-          : account.position
-            ? 'BINANCE_READ_ONLY'
-            : 'NONE',
-        startedAt: lifecycleStartedAt,
-        updatedAt: lifecycleUpdatedAt,
-        blockedReasons:
-          lifecycleStage === 'MANAGING' && account.position
-            ? blockedReasons
-            : [],
-      },
-      activePlan: plan,
-      activePaperTrade: paperTrade,
-      lastCompletedPaperTrade,
-      statistics: database.readTradingStatistics(),
-      liveManual: {
-        available: blockedReasons.length === 0,
-        blockedReasons,
-        position: account.position,
-        protectiveOrders,
-        recentTrades: account.recentTrades,
-        realizedPnl:
-          account.recentTrades.length > 0
-            ? account.recentTrades.reduce(
-                (sum, trade) => sum + trade.realizedPnl - trade.commission,
-                0,
-              )
-            : null,
-        planMatchesPosition,
-      },
-    };
-  };
   ipcMain.handle(
     IPC_CHANNELS.getTradingState,
     (): TradingState => getTradingState(),
