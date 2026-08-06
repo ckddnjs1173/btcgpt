@@ -14,9 +14,17 @@ import { MarketChart } from './MarketChart';
 
 type Timeframe = Extract<
   keyof MarketSnapshot['timeframes'],
-  '1m' | '5m' | '15m' | '1h' | '4h'
+  '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h'
 >;
-const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '1h', '4h'];
+const TIMEFRAMES: Timeframe[] = [
+  '1m',
+  '3m',
+  '5m',
+  '15m',
+  '30m',
+  '1h',
+  '4h',
+];
 const DEFAULT_SETTINGS: UserSettings = {
   gptUrl: 'https://chatgpt.com/',
   makerFeeRate: null,
@@ -68,20 +76,27 @@ function formatNumber(value: string | number | null, digits = 2): string {
 }
 
 function formatSnapshotText(snapshot: MarketSnapshot): string {
+  const gates = snapshot.decisionGates;
   return [
     '# BTC Futures Assistant · verified snapshot',
     `snapshotId: ${snapshot.snapshotId}`,
     `generatedAtKst: ${snapshot.generatedAtKst}`,
-    `analysisAllowed: ${snapshot.analysisGate.analysisAllowed}`,
-    `status: ${snapshot.analysisGate.overallStatus}`,
-    `reasons: ${snapshot.analysisGate.reasons.join(', ') || 'none'}`,
+    `marketAnalysisAvailable: ${gates.marketAnalysisAvailable}`,
+    `entryAllowed: ${gates.entryAllowed}`,
+    `positionManagementAvailable: ${gates.positionManagementAvailable}`,
+    `dataQuality: ${gates.quality}`,
+    `criticalBlockers: ${gates.criticalBlockers.join(', ') || 'none'}`,
+    `degradedSources: ${gates.degradedSources.join(', ') || 'none'}`,
     `last / mark / index: ${snapshot.marketState.lastPrice ?? 'null'} / ${snapshot.marketState.markPrice ?? 'null'} / ${snapshot.marketState.indexPrice ?? 'null'}`,
     `fundingRate: ${snapshot.marketState.fundingRate ?? 'null'}`,
     `openInterestBTC: ${snapshot.openInterest.current ?? 'null'}`,
+    `orderBookSynchronized: ${snapshot.orderFlow.orderBookSynchronized}`,
+    `accountStream: ${snapshot.account.stream.status}`,
     `positionSource: ${snapshot.position.source}`,
+    `lifecycle: ${snapshot.trading.lifecycle.stage}`,
     '',
     '이 자료는 객관 데이터와 계산값이며 거래 방향을 생성하지 않습니다.',
-    '실제 주문은 사용자가 Binance에서 직접 실행해야 합니다.',
+    '실제 주문과 TP/SL은 사용자가 Binance에서 직접 입력·확인해야 합니다.',
   ].join('\n');
 }
 
@@ -448,7 +463,7 @@ export function App() {
 
   const selectedTimeframe = snapshot?.timeframes?.[timeframe];
   const rows = selectedTimeframe?.closed ?? [];
-  const gate = snapshot?.analysisGate;
+  const gates = snapshot?.decisionGates;
   const current = rows.at(-1);
   const previous = rows.at(-2);
   const change =
@@ -517,7 +532,7 @@ export function App() {
           WebSocket <strong>{status?.dataStatus ?? 'INITIALIZING'}</strong>
         </span>
         <span>
-          계정{' '}
+          계정 REST{' '}
           <strong>
             {account?.connected
               ? 'NORMAL'
@@ -525,6 +540,10 @@ export function App() {
                 ? 'DISCONNECTED'
                 : 'OFF'}
           </strong>
+        </span>
+        <span>
+          계정 STREAM{' '}
+          <strong>{account?.stream.status ?? 'OFF'}</strong>
         </span>
         <span>
           중계{' '}
@@ -537,16 +556,27 @@ export function App() {
           </strong>
         </span>
         <span>
-          데이터 나이 <strong>{gate ? `${gate.ageMs}ms` : '—'}</strong>
+          데이터 나이 <strong>{gates ? `${gates.ageMs}ms` : '—'}</strong>
         </span>
       </section>
 
-      {gate && !gate.analysisAllowed && (
+      {gates && !gates.marketAnalysisAvailable && (
         <div className="notice error" role="alert">
-          분석 차단 ·{' '}
-          {gate.reasons.join(', ') || '필수 데이터가 준비되지 않았습니다.'}
+          시장 분석 차단 ·{' '}
+          {gates.criticalBlockers.join(', ') ||
+            '핵심 시장 데이터가 준비되지 않았습니다.'}
         </div>
       )}
+      {gates &&
+        gates.marketAnalysisAvailable &&
+        !gates.entryAllowed && (
+          <div className="notice warning" role="status">
+            시장 분석 가능 · 신규 진입만 대기 ·{' '}
+            {gates.criticalBlockers.join(', ') ||
+              gates.degradedSources.join(', ') ||
+              '필수 진입 데이터 준비 중'}
+          </div>
+        )}
       {result && (
         <div className={`notice ${result.ok ? 'success' : 'error'}`}>
           {result.message}
@@ -599,8 +629,32 @@ export function App() {
           </div>
           <dl className="runtime-list">
             <div>
-              <dt>분석 허용</dt>
-              <dd>{gate?.analysisAllowed ? 'YES' : 'NO'}</dd>
+              <dt>시장 분석</dt>
+              <dd>{gates?.marketAnalysisAvailable ? 'YES' : 'NO'}</dd>
+            </div>
+            <div>
+              <dt>신규 진입</dt>
+              <dd>{gates?.entryAllowed ? 'YES' : 'NO'}</dd>
+            </div>
+            <div>
+              <dt>포지션 관리</dt>
+              <dd>{gates?.positionManagementAvailable ? 'YES' : 'NO'}</dd>
+            </div>
+            <div>
+              <dt>품질 / 저하 소스</dt>
+              <dd>
+                {gates
+                  ? `${gates.quality} · ${gates.degradedSources.join(', ') || '없음'}`
+                  : '—'}
+              </dd>
+            </div>
+            <div>
+              <dt>호가 동기화</dt>
+              <dd>
+                {snapshot?.orderFlow.orderBookSynchronized
+                  ? `YES · ${snapshot.orderFlow.orderBookLevelCount} levels`
+                  : 'NO'}
+              </dd>
             </div>
             <div>
               <dt>스냅샷</dt>
@@ -883,6 +937,22 @@ export function App() {
                   </dd>
                 </div>
                 <div>
+                  <dt>호가 20 / 50 imbalance</dt>
+                  <dd>
+                    {formatNumber(snapshot.orderFlow.orderBookImbalance20, 4)}
+                    {' / '}
+                    {formatNumber(snapshot.orderFlow.orderBookImbalance50, 4)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Microprice / 4h rolling CVD</dt>
+                  <dd>
+                    {formatNumber(snapshot.orderFlow.microPrice, 2)}
+                    {' / '}
+                    {formatNumber(snapshot.orderFlow.rollingCvd4h, 4)} BTC
+                  </dd>
+                </div>
+                <div>
                   <dt>로컬 OI Δ 1m / 5m</dt>
                   <dd>
                     {formatNumber(localOiChanges['1m'], 4)}%
@@ -947,6 +1017,14 @@ export function App() {
           </p>
         </div>
         <div className="account-status">
+          <strong>
+            생명주기 {snapshot?.trading.lifecycle.stage ?? 'PRE_ENTRY'} · 소스{' '}
+            {snapshot?.trading.lifecycle.positionSource ?? 'NONE'}
+          </strong>
+          <span>
+            진입 {gates?.entryAllowed ? '가능' : '대기'} · 포지션 관리{' '}
+            {gates?.positionManagementAvailable ? '가능' : '차단'}
+          </span>
           <strong>
             {snapshot?.trading.activePlan
               ? `${snapshot.trading.activePlan.status} · ${snapshot.trading.activePlan.side} ${snapshot.trading.activePlan.quantity} BTC · ${snapshot.trading.activePlan.leverage}x`
