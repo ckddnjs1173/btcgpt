@@ -247,9 +247,11 @@ export interface MarketSnapshot {
     }
   >;
   timeframes: {
-    '5m': TimeframeSnapshot;
     '1m': TimeframeSnapshot;
+    '3m': TimeframeSnapshot;
+    '5m': TimeframeSnapshot;
     '15m': TimeframeSnapshot;
+    '30m': TimeframeSnapshot;
     '1h': TimeframeSnapshot;
     '4h': TimeframeSnapshot;
     '1d': TimeframeSnapshot;
@@ -384,7 +386,10 @@ export interface MarketStatus {
   lastSnapshotAt: number | null;
   markPrice: string | null;
   indexPrice: string | null;
-  timeframeCounts: Record<'1m' | '5m' | '15m' | '1h' | '4h', number>;
+  timeframeCounts: Record<
+    '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h',
+    number
+  >;
   dataStatus: DataStatus;
 }
 
