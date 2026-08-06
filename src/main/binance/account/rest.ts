@@ -77,6 +77,8 @@ const leverageBracketSchema = z.array(
     ),
   }),
 );
+const listenKeySchema = z.object({ listenKey: z.string().min(1) });
+
 const userTradesSchema = z.array(
   z.object({
     symbol: z.literal('BTCUSDT'),
@@ -119,6 +121,20 @@ export class BinanceAccountClient {
     private readonly serverOffsetMs = 0,
   ) {}
 
+  private async keyRequest(
+    method: 'POST' | 'PUT' | 'DELETE',
+    path: '/fapi/v1/listenKey',
+  ): Promise<unknown> {
+    const response = await this.fetcher(`${BASE_URL}${path}`, {
+      method,
+      headers: { 'X-MBX-APIKEY': this.credentials.apiKey },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok)
+      throw new Error(`Binance user stream API returned HTTP ${response.status}`);
+    return (await response.json()) as unknown;
+  }
+
   private async signedGet(
     path: string,
     parameters: Record<string, string> = {},
@@ -142,6 +158,20 @@ export class BinanceAccountClient {
     if (!response.ok)
       throw new Error(`Binance account API returned HTTP ${response.status}`);
     return (await response.json()) as unknown;
+  }
+
+  async startUserDataStream(): Promise<string> {
+    return listenKeySchema.parse(
+      await this.keyRequest('POST', '/fapi/v1/listenKey'),
+    ).listenKey;
+  }
+
+  async keepAliveUserDataStream(): Promise<void> {
+    await this.keyRequest('PUT', '/fapi/v1/listenKey');
+  }
+
+  async closeUserDataStream(): Promise<void> {
+    await this.keyRequest('DELETE', '/fapi/v1/listenKey');
   }
 
   async fetchPosition(): Promise<AccountPosition | null> {
