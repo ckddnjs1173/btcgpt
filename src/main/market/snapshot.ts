@@ -449,6 +449,21 @@ export function generateSnapshot(
         .filter((trade) => trade.buyerIsMaker)
         .reduce((sum, trade) => sum + trade.quantity, 0);
       const durationSeconds = windowMs / 1_000;
+      const delta = takerBuyVolume - takerSellVolume;
+      const firstTradePrice = trades[0]?.price ?? null;
+      const lastTradePrice = trades.at(-1)?.price ?? null;
+      const priceChangeBps =
+        firstTradePrice !== null && lastTradePrice !== null && firstTradePrice > 0
+          ? ((lastTradePrice - firstTradePrice) / firstTradePrice) * 10_000
+          : null;
+      const deltaPriceRelation =
+        priceChangeBps === null || Math.abs(priceChangeBps) < 0.01 || delta === 0
+          ? ('FLAT_OR_INSUFFICIENT' as const)
+          : priceChangeBps > 0 && delta < 0
+            ? ('PRICE_UP_DELTA_DOWN' as const)
+            : priceChangeBps < 0 && delta > 0
+              ? ('PRICE_DOWN_DELTA_UP' as const)
+              : ('ALIGNED' as const);
       return [
         label,
         {
@@ -459,7 +474,7 @@ export function generateSnapshot(
           takerSellVolume,
           buyRatio: total > 0 ? takerBuyVolume / total : null,
           sellRatio: total > 0 ? takerSellVolume / total : null,
-          delta: takerBuyVolume - takerSellVolume,
+          delta,
           cumulativeDelta: sessionCvd.value,
           tradeCount: trades.length,
           buyTradeCount,
@@ -473,10 +488,14 @@ export function generateSnapshot(
             ) / durationSeconds,
           deltaChangeFromPreviousWindow:
             previousTrades.length > 0
-              ? takerBuyVolume -
-                takerSellVolume -
-                (previousBuy - previousSell)
+              ? delta - (previousBuy - previousSell)
               : null,
+          priceChangeBps,
+          impactBpsPerBtc:
+            priceChangeBps !== null && Math.abs(delta) > 0
+              ? priceChangeBps / Math.abs(delta)
+              : null,
+          deltaPriceRelation,
         },
       ];
     }),
@@ -495,6 +514,12 @@ export function generateSnapshot(
     .reduce((sum, [price, quantity]) => sum + price * quantity, 0);
   const askNotional50 = cache.depth.asks
     .slice(0, 50)
+    .reduce((sum, [price, quantity]) => sum + price * quantity, 0);
+  const bidNotional100 = cache.depth.bids
+    .slice(0, 100)
+    .reduce((sum, [price, quantity]) => sum + price * quantity, 0);
+  const askNotional100 = cache.depth.asks
+    .slice(0, 100)
     .reduce((sum, [price, quantity]) => sum + price * quantity, 0);
   const bestBid = cache.depth.bids[0] ?? null;
   const bestAsk = cache.depth.asks[0] ?? null;
@@ -539,6 +564,41 @@ export function generateSnapshot(
   const depth5s = cache.getDepthSamples(5_000, generatedAt);
   const depth30s = cache.getDepthSamples(30_000, generatedAt);
   const latestDepth = depth30s.at(-1) ?? null;
+  const earliestDepth5s = depth5s[0] ?? null;
+  const wallNotionalChange5s = (side: 'bid' | 'ask') => {
+    const first =
+      side === 'bid'
+        ? earliestDepth5s?.bidWallNotional
+        : earliestDepth5s?.askWallNotional;
+    const last =
+      side === 'bid' ? latestDepth?.bidWallNotional : latestDepth?.askWallNotional;
+    return first !== null && first !== undefined && last !== null && last !== undefined
+      ? last - first
+      : null;
+  };
+  const wallPriceMoveBps5s = (side: 'bid' | 'ask') => {
+    const first =
+      side === 'bid' ? earliestDepth5s?.bidWallPrice : earliestDepth5s?.askWallPrice;
+    const last =
+      side === 'bid' ? latestDepth?.bidWallPrice : latestDepth?.askWallPrice;
+    return first !== null && first !== undefined && last !== null && last !== undefined && first > 0
+      ? ((last - first) / first) * 10_000
+      : null;
+  };
+  const recentTrades5s = cache.getTrades(5_000, generatedAt);
+  const wallTolerance = cache.productFilters?.tickSize ?? 0.1;
+  const wallAbsorbedVolume5s = (side: 'bid' | 'ask') => {
+    const wallPrice =
+      side === 'bid' ? latestDepth?.bidWallPrice : latestDepth?.askWallPrice;
+    if (wallPrice === null || wallPrice === undefined) return null;
+    return recentTrades5s
+      .filter(
+        (trade) =>
+          (side === 'bid' ? trade.buyerIsMaker : !trade.buyerIsMaker) &&
+          Math.abs(trade.price - wallPrice) <= wallTolerance * 1.5,
+      )
+      .reduce((sum, trade) => sum + trade.quantity, 0);
+  };
   const imbalanceChange = (
     samples: ReturnType<MarketCache['getDepthSamples']>,
   ) => {
@@ -671,10 +731,17 @@ export function generateSnapshot(
         cache.depth.asks,
         50,
       ),
+      orderBookImbalance100: orderBookImbalance(
+        cache.depth.bids,
+        cache.depth.asks,
+        100,
+      ),
       bidNotional20,
       askNotional20,
       bidNotional50,
       askNotional50,
+      bidNotional100,
+      askNotional100,
       orderBookSynchronized: cache.depth.synchronized,
       orderBookLastUpdateId: cache.depth.lastUpdateId,
       orderBookLevelCount: cache.depth.levelCount,
@@ -800,6 +867,12 @@ export function generateSnapshot(
         askWallNotional: latestDepth?.askWallNotional ?? null,
         bidWallPersistence5s: wallPersistence('bid', depth5s),
         askWallPersistence5s: wallPersistence('ask', depth5s),
+        bidWallNotionalChange5s: wallNotionalChange5s('bid'),
+        askWallNotionalChange5s: wallNotionalChange5s('ask'),
+        bidWallPriceMoveBps5s: wallPriceMoveBps5s('bid'),
+        askWallPriceMoveBps5s: wallPriceMoveBps5s('ask'),
+        bidWallAbsorbedSellVolume5s: wallAbsorbedVolume5s('bid'),
+        askWallAbsorbedBuyVolume5s: wallAbsorbedVolume5s('ask'),
       },
     },
     trading: options.tradingState ?? {
