@@ -37,6 +37,30 @@ export type DataStatus =
   | 'DISCONNECTED'
   | 'INSUFFICIENT_DATA';
 
+export type DataQuality = 'GREEN' | 'YELLOW' | 'RED';
+
+/**
+ * Task-specific data gates. A delayed optional source must not block every
+ * decision path: market explanation, new entry and open-position management
+ * have different minimum data requirements.
+ */
+export interface DecisionGates {
+  marketAnalysisAvailable: boolean;
+  entryAllowed: boolean;
+  positionManagementAvailable: boolean;
+  quality: DataQuality;
+  generatedAt: number;
+  publishedAt: number | null;
+  ageMs: number;
+  criticalBlockers: string[];
+  degradedSources: string[];
+  missingFields: string[];
+}
+
+/**
+ * schemaVersion 4 compatibility gate. schemaVersion 5 consumers must prefer
+ * decisionGates.
+ */
 export interface AnalysisGate {
   analysisAllowed: boolean;
   overallStatus: DataStatus;
@@ -88,6 +112,7 @@ export interface MarketSnapshot {
   generatedAt: number;
   generatedAtKst: string;
   binanceServerTime: number;
+  decisionGates: DecisionGates;
   analysisGate: AnalysisGate;
   strategy: {
     leverage: number;
