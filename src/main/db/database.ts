@@ -438,6 +438,21 @@ export class AppDatabase {
     }
   }
 
+  readLatestPaperTrade(): PaperTrade | null {
+    const row = this.database
+      .prepare(
+        `SELECT payload FROM paper_trades
+         ORDER BY opened_at DESC LIMIT 1`,
+      )
+      .get() as { payload: string } | undefined;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.payload) as PaperTrade;
+    } catch {
+      return null;
+    }
+  }
+
   addPaperTradeEvent(input: {
     tradeId: string;
     eventType: 'ENTRY' | 'PARTIAL_CLOSE' | 'CLOSE';
