@@ -158,16 +158,26 @@ export interface MarketSnapshot {
       tradesPerSecond: number;
       notionalPerSecond: number;
       deltaChangeFromPreviousWindow: number | null;
+      priceChangeBps: number | null;
+      impactBpsPerBtc: number | null;
+      deltaPriceRelation:
+        | 'ALIGNED'
+        | 'PRICE_UP_DELTA_DOWN'
+        | 'PRICE_DOWN_DELTA_UP'
+        | 'FLAT_OR_INSUFFICIENT';
     }
   > & {
     orderBookImbalance5: number | null;
     orderBookImbalance10: number | null;
     orderBookImbalance20: number | null;
     orderBookImbalance50: number | null;
+    orderBookImbalance100: number | null;
     bidNotional20: number;
     askNotional20: number;
     bidNotional50: number;
     askNotional50: number;
+    bidNotional100: number;
+    askNotional100: number;
     orderBookSynchronized: boolean;
     orderBookLastUpdateId: number | null;
     orderBookLevelCount: number;
@@ -296,6 +306,12 @@ export interface MarketSnapshot {
       askWallNotional: number | null;
       bidWallPersistence5s: number | null;
       askWallPersistence5s: number | null;
+      bidWallNotionalChange5s: number | null;
+      askWallNotionalChange5s: number | null;
+      bidWallPriceMoveBps5s: number | null;
+      askWallPriceMoveBps5s: number | null;
+      bidWallAbsorbedSellVolume5s: number | null;
+      askWallAbsorbedBuyVolume5s: number | null;
     };
   };
   trading: TradingState;
