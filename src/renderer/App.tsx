@@ -1058,14 +1058,68 @@ export function App() {
             </button>
           )}
           {settings.tradingMode === 'LIVE_MANUAL' && (
-            <span>
-              LIVE 판단{' '}
-              {snapshot?.trading.liveManual.available
-                ? '가능'
-                : `차단: ${snapshot?.trading.liveManual.blockedReasons.join(', ') || '준비 중'}`}
-              {' · '}보호주문{' '}
-              {snapshot?.trading.liveManual.protectiveOrders.length ?? 0}개
-            </span>
+            <>
+              <span>
+                LIVE 판단{' '}
+                {snapshot?.trading.liveManual.available
+                  ? '가능'
+                  : `차단: ${snapshot?.trading.liveManual.blockedReasons.join(', ') || '준비 중'}`}
+                {' · '}보호주문{' '}
+                {snapshot?.trading.liveManual.protectiveOrders.length ?? 0}개
+              </span>
+              {snapshot?.trading.liveManual.currentTrade && (
+                <span>
+                  실거래 {snapshot.trading.liveManual.currentTrade.status} ·{' '}
+                  {snapshot.trading.liveManual.currentTrade.side} · 잔여{' '}
+                  {formatNumber(
+                    snapshot.trading.liveManual.currentTrade.remainingQuantity,
+                    8,
+                  )}{' '}
+                  BTC · 순실현손익{' '}
+                  {snapshot.trading.liveManual.currentTrade.realizedNetPnl === null
+                    ? '통화 단위 확인 필요'
+                    : `${formatNumber(
+                        snapshot.trading.liveManual.currentTrade.realizedNetPnl,
+                      )} USDT`}
+                  {' · '}귀속{' '}
+                  {snapshot.trading.liveManual.currentTrade.attribution}
+                </span>
+              )}
+              <span>
+                손절 커버{' '}
+                {snapshot?.trading.liveManual.protectiveCoverage
+                  .stopLossCoverageRatio == null
+                  ? '해당 없음'
+                  : `${formatNumber(
+                      snapshot.trading.liveManual.protectiveCoverage
+                        .stopLossCoverageRatio * 100,
+                      1,
+                    )}%`}
+                {' · '}익절 커버{' '}
+                {snapshot?.trading.liveManual.protectiveCoverage
+                  .takeProfitCoverageRatio == null
+                  ? '해당 없음'
+                  : `${formatNumber(
+                      snapshot.trading.liveManual.protectiveCoverage
+                        .takeProfitCoverageRatio * 100,
+                      1,
+                    )}%`}
+              </span>
+              {!snapshot?.trading.liveManual.currentTrade &&
+                snapshot?.trading.liveManual.lastCompletedTrade && (
+                  <span>
+                    최근 실거래 종료 ·{' '}
+                    {snapshot.trading.liveManual.lastCompletedTrade.side} · 순손익{' '}
+                    {snapshot.trading.liveManual.lastCompletedTrade
+                      .realizedNetPnl === null
+                      ? '확정 불가'
+                      : `${formatNumber(
+                          snapshot.trading.liveManual.lastCompletedTrade
+                            .realizedNetPnl,
+                        )} USDT`}
+                  </span>
+                )}
+            </>
           )}
         </div>
       </section>
