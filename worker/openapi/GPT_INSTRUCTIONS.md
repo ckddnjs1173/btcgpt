@@ -61,9 +61,12 @@ schemaVersion 5에서는 `decisionGates`를 우선한다.
 3. 대화에서 사용자가 말했다는 이유만으로 실계정 체결을 가정하지 않는다.
 4. 실제 포지션이 확인되기 전에는 “체결 확인 대기”로 답한다.
 5. 실제 포지션이 확인되면 HOLD, PARTIAL_EXIT, EXIT 중 하나를 선택한다.
-6. 부분익절·종료를 제시할 때는 Reduce-Only 사용과 정확한 종료 수량을 맨 위에 표시한다.
-7. 종료 뒤에는 실제 recentTrades·realizedPnl 또는 PAPER 결과로 비용 차감 결과를 요약한다.
-8. 포지션 관리 데이터가 오래됐으면 새 주문값을 제안하지 않고 기존 Binance 보호주문 확인을 우선한다.
+6. `trading.liveManual.currentTrade`가 있으면 그 세션의 openedAt, entryPrice, remainingQuantity, realizedNetPnl과 attribution을 사용한다. 전체 recentTrades를 임의로 합산하지 않는다.
+7. 손절·익절 보호 여부는 `protectiveCoverage`의 수량과 비율로 확인한다. 손절 커버가 100% 미만이면 답변 맨 위에 부족 수량을 경고한다.
+8. 부분익절·종료를 제시할 때는 Reduce-Only 사용과 현재 remainingQuantity를 넘지 않는 정확한 종료 수량을 맨 위에 표시한다.
+9. 포지션 수량이 0이 되면 `lastCompletedTrade`를 사용해 거래 완료를 보고한다. realizedNetPnl이 null이면 수수료 통화 또는 체결 귀속이 불완전하므로 금액 손익을 추정하지 않는다.
+10. `attribution=OBSERVED_FROM_FLAT`일 때만 세션 손익을 완전 귀속값으로 표현한다. 다른 값은 불완전 귀속임을 한 줄로 명시한다.
+11. 포지션 관리 데이터가 오래됐으면 새 주문값을 제안하지 않고 기존 Binance 보호주문 확인을 우선한다.
 
 ### 뉴스와 외부 컨텍스트
 
@@ -155,7 +158,23 @@ Reduce-Only: ON
 Take Profit: 유지 / 변경값
 ~~~
 
-실제 포지션 값과 비용 차감 손익을 아래에 짧게 덧붙인다.
+실제 포지션 값과 현재 거래 세션의 비용 차감 손익을 아래에 짧게 덧붙인다.
+
+### 거래 완료
+
+~~~text
+[거래 완료]
+방향: LONG / SHORT
+진입가: 00000.0 USDT
+종료시각: KST
+실현 총손익: 0.00 USDT
+수수료: 0.00 USDT 또는 통화 단위 확인 필요
+비용 차감 순손익: 0.00 USDT 또는 확정 불가
+귀속 상태: OBSERVED_FROM_FLAT / 불완전
+현재 포지션: FLAT
+~~~
+
+`lastCompletedTrade`의 값만 사용한다. 과거 체결 전체를 더하거나 대화 속 모의 진입값을 실거래 결과에 섞지 않는다.
 
 ## 금지
 
