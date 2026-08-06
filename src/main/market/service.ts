@@ -17,6 +17,7 @@ import {
 import { logger } from '../logging/logger';
 import { percentageChange } from '../../shared/calculations/market';
 import { MarketCache, type MarketStreamChannel } from './cache';
+import { LocalOrderBook } from './local-order-book';
 import { normalizeRestCandle } from './normalize';
 import { REFERENCE_TIMEFRAMES, TIMEFRAMES } from './types';
 import type { Candle, Timeframe } from './types';
@@ -51,7 +52,7 @@ const STATISTICS_TIMEFRAMES = ['5m', '15m', '1h', '4h'] as const;
 const WS_URLS: Record<MarketStreamChannel, string> = {
   public:
     'wss://fstream.binance.com/public/stream?streams=' +
-    ['btcusdt@bookTicker', 'btcusdt@depth20@100ms'].join('/'),
+    ['btcusdt@bookTicker', 'btcusdt@depth@100ms'].join('/'),
   market:
     'wss://fstream.binance.com/market/stream?streams=' +
     [
@@ -112,8 +113,11 @@ const aggTradeSchema = z.object({
 const depthSchema = z.object({
   E: z.number(),
   s: z.literal('BTCUSDT').optional(),
-  b: z.array(z.tuple([numericStringSchema, numericStringSchema])).min(1),
-  a: z.array(z.tuple([numericStringSchema, numericStringSchema])).min(1),
+  U: z.number(),
+  u: z.number(),
+  pu: z.number(),
+  b: z.array(z.tuple([numericStringSchema, numericStringSchema])),
+  a: z.array(z.tuple([numericStringSchema, numericStringSchema])),
 });
 const forceOrderSchema = z.object({
   E: z.number(),
@@ -159,6 +163,8 @@ export class MarketDataService {
     market: 0,
   };
   private serverOffsetMs = 0;
+  private readonly localOrderBook = new LocalOrderBook();
+  private orderBookSyncPromise: Promise<void> | null = null;
 
   private readonly dependencies: MarketDataDependencies;
 
@@ -410,12 +416,32 @@ export class MarketDataService {
       'openInterest',
       oi.time,
     );
-    this.cache.updateDepth(
-      depth.bids.map(([price, quantity]) => [Number(price), Number(quantity)]),
-      depth.asks.map(([price, quantity]) => [Number(price), Number(quantity)]),
-      depth.T ?? depth.E ?? receivedAt,
-      receivedAt,
-    );
+    const localBook = this.localOrderBook.view(100);
+    if (localBook.synchronized) {
+      this.cache.updateDepth(
+        localBook.bids,
+        localBook.asks,
+        depth.T ?? depth.E ?? receivedAt,
+        receivedAt,
+        {
+          synchronized: true,
+          lastUpdateId: localBook.lastUpdateId,
+          levelCount: Math.min(localBook.bids.length, localBook.asks.length),
+        },
+      );
+    } else {
+      this.cache.updateDepth(
+        depth.bids.map(([price, quantity]) => [Number(price), Number(quantity)]),
+        depth.asks.map(([price, quantity]) => [Number(price), Number(quantity)]),
+        depth.T ?? depth.E ?? receivedAt,
+        receivedAt,
+        {
+          synchronized: false,
+          lastUpdateId: depth.lastUpdateId,
+          levelCount: Math.min(depth.bids.length, depth.asks.length),
+        },
+      );
+    }
     for (const trade of trades)
       this.cache.addTrade({
         id: trade.a,
@@ -500,6 +526,45 @@ export class MarketDataService {
     });
   }
 
+  private publishOrderBook(eventTime: number, receivedAt: number): void {
+    const book = this.localOrderBook.view(100);
+    if (!book.synchronized) return;
+    this.cache.updateDepth(book.bids, book.asks, eventTime, receivedAt, {
+      synchronized: true,
+      lastUpdateId: book.lastUpdateId,
+      levelCount: Math.min(book.bids.length, book.asks.length),
+    });
+  }
+
+  private synchronizeOrderBook(): Promise<void> {
+    if (this.orderBookSyncPromise) return this.orderBookSyncPromise;
+    this.orderBookSyncPromise = (async () => {
+      const snapshot = await this.dependencies.fetchOrderBook(1000);
+      const synchronized = this.localOrderBook.initialize({
+        lastUpdateId: snapshot.lastUpdateId,
+        bids: snapshot.bids.map(([price, quantity]) => [
+          Number(price),
+          Number(quantity),
+        ]),
+        asks: snapshot.asks.map(([price, quantity]) => [
+          Number(price),
+          Number(quantity),
+        ]),
+      });
+      if (!synchronized)
+        throw new Error('Binance depth snapshot did not overlap buffered events');
+      this.publishOrderBook(snapshot.T ?? snapshot.E ?? Date.now(), Date.now());
+    })()
+      .catch((error: unknown) => {
+        this.cache.recordValidationError('ORDER_BOOK_RESYNC_FAILED');
+        logger.warn({ error }, 'Binance local order book resync failed');
+      })
+      .finally(() => {
+        this.orderBookSyncPromise = null;
+      });
+    return this.orderBookSyncPromise;
+  }
+
   private connect(channel: MarketStreamChannel): void {
     if (this.stopping) return;
     const socket = this.dependencies.createSocket(WS_URLS[channel]);
@@ -508,6 +573,10 @@ export class MarketDataService {
       if (this.sockets[channel] !== socket) return;
       this.reconnectAttempts[channel] = 0;
       this.cache.setStreamConnected(channel, true);
+      if (channel === 'public') {
+        this.localOrderBook.reset();
+        void this.synchronizeOrderBook();
+      }
       this.plannedReconnectTimers[channel] = setTimeout(
         () => socket.close(1000, 'planned reconnect'),
         23 * 60 * 60_000,
@@ -533,6 +602,20 @@ export class MarketDataService {
       if (plannedReconnectTimer) clearTimeout(plannedReconnectTimer);
       this.plannedReconnectTimers[channel] = null;
       this.sockets[channel] = null;
+      if (channel === 'public') {
+        const current = this.localOrderBook.view(100);
+        this.cache.updateDepth(
+          current.bids,
+          current.asks,
+          Date.now(),
+          Date.now(),
+          {
+            synchronized: false,
+            lastUpdateId: current.lastUpdateId,
+            levelCount: Math.min(current.bids.length, current.asks.length),
+          },
+        );
+      }
       this.cache.setStreamConnected(
         channel,
         false,
@@ -647,14 +730,25 @@ export class MarketDataService {
       );
       return;
     }
-    if (envelope.stream.includes('@depth20')) {
+    if (envelope.stream.includes('@depth')) {
       const event = depthSchema.parse(envelope.data);
-      this.cache.updateDepth(
-        event.b.map(([price, quantity]) => [Number(price), Number(quantity)]),
-        event.a.map(([price, quantity]) => [Number(price), Number(quantity)]),
-        event.E,
-        receivedAt,
-      );
+      const result = this.localOrderBook.ingest({
+        eventTime: event.E,
+        firstUpdateId: event.U,
+        finalUpdateId: event.u,
+        previousFinalUpdateId: event.pu,
+        bids: event.b.map(([price, quantity]) => [
+          Number(price),
+          Number(quantity),
+        ]),
+        asks: event.a.map(([price, quantity]) => [
+          Number(price),
+          Number(quantity),
+        ]),
+      });
+      if (result === 'APPLIED') this.publishOrderBook(event.E, receivedAt);
+      else if (result === 'GAP' || result === 'BUFFERED')
+        void this.synchronizeOrderBook();
       return;
     }
     if (envelope.stream.includes('@forceOrder')) {
