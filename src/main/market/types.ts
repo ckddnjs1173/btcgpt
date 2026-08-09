@@ -39,6 +39,16 @@ export interface SourceHealth {
   validationError: string | null;
 }
 
+export interface WebSocketHealth {
+  status: 'CONNECTED' | 'DISCONNECTED';
+  connected: boolean;
+  lastConnectedAt: number | null;
+  lastEventAt: number | null;
+  reconnectCount: number;
+  consecutiveFailures: number;
+  errorCode: string | null;
+}
+
 export interface PublicMarketState {
   lastPrice: number | null;
   markPrice: number | null;

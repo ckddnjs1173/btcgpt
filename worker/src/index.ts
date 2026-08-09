@@ -31,6 +31,7 @@ export interface Env {
 const snapshotSchema = z
   .object({
     schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+    appVersion: z.string().max(30).optional(),
     snapshotId: z.string().min(1).max(100),
     symbol: z.literal('BTCUSDT'),
     market: z.literal('BINANCE_USDM_PERPETUAL'),
@@ -59,6 +60,8 @@ const snapshotSchema = z
         generatedAt: z.number().int().positive(),
         publishedAt: z.number().int().positive().nullable(),
         ageMs: z.number(),
+        marketDataAgeMs: z.number().optional(),
+        relayPublishAgeMs: z.number().nullable().optional(),
         criticalBlockers: z.array(z.string()),
         degradedSources: z.array(z.string()),
         missingFields: z.array(z.string()),
@@ -506,6 +509,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
         quality,
         publishedAt: stored.receivedAt,
         ageMs,
+        relayPublishAgeMs: ageMs,
         criticalBlockers: [...new Set(criticalBlockers)],
         degradedSources: [...new Set(degradedSources)],
       };

@@ -75,6 +75,23 @@ function formatNumber(value: string | number | null, digits = 2): string {
   }).format(Number(value));
 }
 
+function marketGateMessage(snapshot: MarketSnapshot): string {
+  const messages: string[] = [];
+  if (!snapshot.connections.marketWebSocket.connected)
+    messages.push('시장 WebSocket 연결 실패');
+  if (!snapshot.connections.publicWebSocket.connected)
+    messages.push('공개 호가 WebSocket 연결 실패');
+  if (!snapshot.orderFlow.orderBookSynchronized)
+    messages.push('호가장 재동기화 중');
+  if (
+    snapshot.decisionGates.degradedSources.some(
+      (source) => source.startsWith('candle:'),
+    )
+  )
+    messages.push('캔들 REST 초기화 또는 갱신 확인 필요');
+  return [...new Set(messages)].join(' · ');
+}
+
 function formatSnapshotText(snapshot: MarketSnapshot): string {
   const gates = snapshot.decisionGates;
   return [
@@ -487,6 +504,7 @@ export function App() {
           <div>
             <p className="eyebrow">LOCAL · READ ONLY · BTCUSDT</p>
             <h1>BTC Futures Assistant</h1>
+            <small>v{snapshot?.appVersion ?? '0.5.4'}</small>
           </div>
         </div>
         <div
@@ -523,7 +541,16 @@ export function App() {
           REST <strong>{sourceHealth?.market?.status ?? 'INITIALIZING'}</strong>
         </span>
         <span>
-          WebSocket <strong>{status?.dataStatus ?? 'INITIALIZING'}</strong>
+          시장 WS{' '}
+          <strong>
+            {snapshot?.connections.marketWebSocket.status ?? 'INITIALIZING'}
+          </strong>
+        </span>
+        <span>
+          공개 호가 WS{' '}
+          <strong>
+            {snapshot?.connections.publicWebSocket.status ?? 'INITIALIZING'}
+          </strong>
         </span>
         <span>
           계정 REST{' '}
@@ -550,14 +577,16 @@ export function App() {
           </strong>
         </span>
         <span>
-          데이터 나이 <strong>{gates ? `${gates.ageMs}ms` : '—'}</strong>
+          시장 데이터 나이{' '}
+          <strong>{gates ? `${gates.marketDataAgeMs}ms` : '—'}</strong>
         </span>
       </section>
 
       {gates && !gates.marketAnalysisAvailable && (
         <div className="notice error" role="alert">
           시장 분석 차단 ·{' '}
-          {gates.criticalBlockers.join(', ') ||
+          {marketGateMessage(snapshot) ||
+            gates.criticalBlockers.join(', ') ||
             '핵심 시장 데이터가 준비되지 않았습니다.'}
         </div>
       )}
@@ -565,8 +594,10 @@ export function App() {
         gates.marketAnalysisAvailable &&
         !gates.entryAllowed && (
           <div className="notice warning" role="status">
-            시장 분석 가능 · 신규 진입만 대기 ·{' '}
-            {gates.criticalBlockers.join(', ') ||
+            시장 분석 가능 · 신규 진입만 차단 · 포지션 관리{' '}
+            {gates.positionManagementAvailable ? '가능' : '확인 필요'} ·{' '}
+            {marketGateMessage(snapshot) ||
+              gates.criticalBlockers.join(', ') ||
               gates.degradedSources.join(', ') ||
               '필수 진입 데이터 준비 중'}
           </div>

@@ -53,6 +53,8 @@ export interface DecisionGates {
   generatedAt: number;
   publishedAt: number | null;
   ageMs: number;
+  marketDataAgeMs: number;
+  relayPublishAgeMs: number | null;
   criticalBlockers: string[];
   degradedSources: string[];
   missingFields: string[];
@@ -107,6 +109,7 @@ export interface TimeframeSnapshot {
 
 export interface MarketSnapshot {
   schemaVersion: number;
+  appVersion: string;
   snapshotId: string;
   symbol: 'BTCUSDT';
   market: 'BINANCE_USDM_PERPETUAL';
@@ -259,6 +262,10 @@ export interface MarketSnapshot {
       validationError: string | null;
     }
   >;
+  connections: {
+    publicWebSocket: WebSocketConnectionHealth;
+    marketWebSocket: WebSocketConnectionHealth;
+  };
   timeframes: {
     '1m': TimeframeSnapshot;
     '3m': TimeframeSnapshot;
@@ -368,6 +375,16 @@ export interface ExternalSourceHealth {
   ageMs: number | null;
   consecutiveFailures: number;
   error: string | null;
+}
+
+export interface WebSocketConnectionHealth {
+  status: 'CONNECTED' | 'DISCONNECTED';
+  connected: boolean;
+  lastConnectedAt: number | null;
+  lastEventAt: number | null;
+  reconnectCount: number;
+  consecutiveFailures: number;
+  errorCode: string | null;
 }
 
 export interface RiskContext {

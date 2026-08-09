@@ -18,6 +18,74 @@
       }
     },
     "schemas": {
+      "WebSocketConnectionHealth": {
+        "type": "object",
+        "required": ["status", "connected", "lastConnectedAt", "lastEventAt", "reconnectCount", "consecutiveFailures", "errorCode"],
+        "properties": {
+          "status": { "type": "string", "enum": ["CONNECTED", "DISCONNECTED"] },
+          "connected": { "type": "boolean" },
+          "lastConnectedAt": { "type": ["integer", "null"] },
+          "lastEventAt": { "type": ["integer", "null"] },
+          "reconnectCount": { "type": "integer", "minimum": 0 },
+          "consecutiveFailures": { "type": "integer", "minimum": 0 },
+          "errorCode": { "type": ["string", "null"] }
+        }
+      },
+      "DecisionGates": {
+        "type": "object",
+        "required": ["marketAnalysisAvailable", "entryAllowed", "positionManagementAvailable", "quality", "generatedAt", "publishedAt", "ageMs", "marketDataAgeMs", "relayPublishAgeMs", "criticalBlockers", "degradedSources", "missingFields"],
+        "properties": {
+          "marketAnalysisAvailable": { "type": "boolean" },
+          "entryAllowed": { "type": "boolean" },
+          "positionManagementAvailable": { "type": "boolean" },
+          "quality": { "type": "string", "enum": ["GREEN", "YELLOW", "RED"] },
+          "generatedAt": { "type": "integer" },
+          "publishedAt": { "type": ["integer", "null"] },
+          "ageMs": { "type": "number" },
+          "marketDataAgeMs": { "type": "number" },
+          "relayPublishAgeMs": { "type": ["number", "null"] },
+          "criticalBlockers": { "type": "array", "items": { "type": "string" } },
+          "degradedSources": { "type": "array", "items": { "type": "string" } },
+          "missingFields": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "SourceHealth": {
+        "type": "object",
+        "required": ["status", "eventTime", "receivedTime", "ageMs", "lastSuccess", "consecutiveFailures", "reconnectCount", "validationError"],
+        "properties": {
+          "status": { "type": "string", "enum": ["INITIALIZING", "NORMAL", "DELAYED", "STALE", "DISCONNECTED", "INSUFFICIENT_DATA"] },
+          "eventTime": { "type": ["integer", "null"] },
+          "receivedTime": { "type": ["integer", "null"] },
+          "ageMs": { "type": "number" },
+          "lastSuccess": { "type": ["integer", "null"] },
+          "consecutiveFailures": { "type": "integer", "minimum": 0 },
+          "reconnectCount": { "type": "integer", "minimum": 0 },
+          "validationError": { "type": ["string", "null"] }
+        }
+      },
+      "MarketSnapshot": {
+        "type": "object",
+        "required": ["schemaVersion", "appVersion", "generatedAt", "decisionGates", "connections", "sourceHealth"],
+        "properties": {
+          "schemaVersion": { "type": "integer", "const": 5 },
+          "appVersion": { "type": "string", "const": "0.5.4" },
+          "generatedAt": { "type": "integer" },
+          "decisionGates": { "$ref": "#/components/schemas/DecisionGates" },
+          "connections": {
+            "type": "object",
+            "required": ["publicWebSocket", "marketWebSocket"],
+            "properties": {
+              "publicWebSocket": { "$ref": "#/components/schemas/WebSocketConnectionHealth" },
+              "marketWebSocket": { "$ref": "#/components/schemas/WebSocketConnectionHealth" }
+            }
+          },
+          "sourceHealth": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/components/schemas/SourceHealth" }
+          }
+        },
+        "additionalProperties": true
+      },
       "TradePlan": {
         "type": "object",
         "additionalProperties": false,
@@ -128,7 +196,12 @@
         "x-openai-isConsequential": false,
         "responses": {
           "200": {
-            "description": "Latest snapshot"
+            "description": "Latest snapshot",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MarketSnapshot" }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized"

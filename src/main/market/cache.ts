@@ -14,26 +14,12 @@ import {
   type SourceHealth,
   type Timeframe,
   type TradeEvent,
+  type WebSocketHealth,
 } from './types';
 
 const MAX_CANDLES = 500;
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1_000;
 export type MarketStreamChannel = 'public' | 'market';
-
-const SOURCE_CHANNELS: Record<string, MarketStreamChannel> = {
-  market: 'market',
-  depth: 'public',
-  bookTicker: 'public',
-  trades: 'market',
-  liquidations: 'market',
-  'candle:5m': 'market',
-  'candle:1m': 'market',
-  'candle:3m': 'market',
-  'candle:15m': 'market',
-  'candle:30m': 'market',
-  'candle:1h': 'market',
-  'candle:4h': 'market',
-};
 
 export class MarketCache {
   private readonly closed = new Map<Timeframe, Map<number, Candle>>(
@@ -65,22 +51,28 @@ export class MarketCache {
     MarketStreamChannel,
     {
       connected: boolean;
+      lastConnectedAt: number | null;
+      lastEventAt: number | null;
       reconnectCount: number;
       consecutiveFailures: number;
-      message: string | null;
+      errorCode: string | null;
     }
   > = {
     public: {
       connected: false,
+      lastConnectedAt: null,
+      lastEventAt: null,
       reconnectCount: 0,
       consecutiveFailures: 0,
-      message: null,
+      errorCode: null,
     },
     market: {
       connected: false,
+      lastConnectedAt: null,
+      lastEventAt: null,
       reconnectCount: 0,
       consecutiveFailures: 0,
-      message: null,
+      errorCode: null,
     },
   };
 
@@ -120,6 +112,7 @@ export class MarketCache {
   };
 
   upsertCandle(candle: Candle): void {
+    this.clearSourceError(`candle:${candle.timeframe}`);
     this.markSource(
       `candle:${candle.timeframe}`,
       candle.eventTime ?? candle.receivedAt,
@@ -157,19 +150,44 @@ export class MarketCache {
   setStreamConnected(
     channel: MarketStreamChannel,
     connected: boolean,
-    message: string | null = null,
+    errorCode: string | null = null,
   ): void {
     const state = this.streamStates[channel];
     if (connected && !state.connected) state.reconnectCount += 1;
     state.connected = connected;
-    state.message = message;
     if (connected) {
-      this.lastEventAt = Date.now();
+      state.lastConnectedAt = Date.now();
       state.consecutiveFailures = 0;
-      this.validationError = null;
+      state.errorCode = null;
     } else {
       state.consecutiveFailures += 1;
+      state.errorCode = errorCode;
     }
+  }
+
+  markStreamEvent(channel: MarketStreamChannel, receivedAt: number): void {
+    this.streamStates[channel].lastEventAt = receivedAt;
+    this.lastEventAt = receivedAt;
+  }
+
+  connectionHealth(): Record<MarketStreamChannel, WebSocketHealth> {
+    return Object.fromEntries(
+      (['public', 'market'] as const).map((channel) => {
+        const state = this.streamStates[channel];
+        return [
+          channel,
+          {
+            status: state.connected ? 'CONNECTED' : 'DISCONNECTED',
+            connected: state.connected,
+            lastConnectedAt: state.lastConnectedAt,
+            lastEventAt: state.lastEventAt,
+            reconnectCount: Math.max(0, state.reconnectCount - 1),
+            consecutiveFailures: state.consecutiveFailures,
+            errorCode: state.errorCode,
+          },
+        ];
+      }),
+    ) as Record<MarketStreamChannel, WebSocketHealth>;
   }
 
   updateState(
@@ -265,6 +283,7 @@ export class MarketCache {
     this.sessionCvd += event.buyerIsMaker ? -event.quantity : event.quantity;
     this.pruneEvents(event.receivedAt);
     this.markSource('trades', event.eventTime, event.receivedAt);
+    this.clearSourceError('trades');
   }
 
   addLiquidation(event: LiquidationEvent): void {
@@ -339,29 +358,27 @@ export class MarketCache {
       openInterest: [30_000, 90_000],
       liquidations: [60_000, 300_000],
       statistics: [300_000, 900_000],
-      'candle:5m': [5_000, 15_000],
-      'candle:1m': [5_000, 15_000],
-      'candle:3m': [5_000, 15_000],
-      'candle:15m': [5_000, 15_000],
-      'candle:30m': [5_000, 15_000],
-      'candle:1h': [5_000, 15_000],
-      'candle:4h': [5_000, 15_000],
+      'candle:5m': [20_000, 45_000],
+      'candle:1m': [20_000, 45_000],
+      'candle:3m': [20_000, 45_000],
+      'candle:15m': [20_000, 45_000],
+      'candle:30m': [20_000, 45_000],
+      'candle:1h': [20_000, 45_000],
+      'candle:4h': [20_000, 45_000],
+      'candle:1d': [12 * 60 * 60_000, 36 * 60 * 60_000],
+      'candle:1w': [12 * 60 * 60_000, 36 * 60 * 60_000],
     };
-    return Object.fromEntries(
+    const sources: Record<string, SourceHealth> = Object.fromEntries(
       Object.entries(thresholds).map(([source, [delayed, stale]]) => {
         const time = this.sourceTimes.get(source);
-        const channel = SOURCE_CHANNELS[source];
-        const streamState = channel
-          ? this.streamStates[channel]
-          : null;
         const ageMs = time ? now - time.receivedAt : Number.POSITIVE_INFINITY;
         const sourceError = this.sourceErrors.get(source);
-        const status: DataStatus = streamState && !streamState.connected
-          ? 'DISCONNECTED'
-          : !time
+        const status: DataStatus = !time
             ? 'INSUFFICIENT_DATA'
             : ageMs > stale
               ? 'STALE'
+              : sourceError
+                ? 'DELAYED'
               : ageMs > delayed
                 ? 'DELAYED'
                 : 'NORMAL';
@@ -374,18 +391,46 @@ export class MarketCache {
             receivedTime: time?.receivedAt ?? null,
             lastSuccess: time?.receivedAt ?? null,
             ageMs,
-            reconnectCount: streamState
-              ? Math.max(0, streamState.reconnectCount - 1)
-              : 0,
-            consecutiveFailures:
-              (streamState?.consecutiveFailures ?? 0) +
-              (sourceError?.consecutiveFailures ?? 0),
+            reconnectCount: 0,
+            consecutiveFailures: sourceError?.consecutiveFailures ?? 0,
             validationError: sourceError?.validationError ?? null,
-            message: streamState?.message ?? this.message,
+            message: this.message,
           },
         ];
       }),
     );
+    for (const [source, sourceError] of this.sourceErrors) {
+      if (sources[source]) continue;
+      sources[source] = {
+        status: 'DELAYED',
+        lastEventAt: null,
+        eventTime: null,
+        receivedTime: null,
+        lastSuccess: null,
+        ageMs: Number.POSITIVE_INFINITY,
+        reconnectCount: 0,
+        consecutiveFailures: sourceError.consecutiveFailures,
+        validationError: sourceError.validationError,
+        message: this.message,
+      };
+    }
+    for (const channel of ['public', 'market'] as const) {
+      const stream = this.streamStates[channel];
+      const eventTime = stream.lastEventAt ?? stream.lastConnectedAt;
+      sources[`websocket:${channel}`] = {
+        status: stream.connected ? 'NORMAL' : 'DISCONNECTED',
+        lastEventAt: eventTime,
+        eventTime,
+        receivedTime: stream.lastEventAt,
+        lastSuccess: stream.lastConnectedAt,
+        ageMs: eventTime === null ? Number.POSITIVE_INFINITY : now - eventTime,
+        reconnectCount: Math.max(0, stream.reconnectCount - 1),
+        consecutiveFailures: stream.consecutiveFailures,
+        validationError: stream.errorCode,
+        message: stream.errorCode,
+      };
+    }
+    return sources;
   }
 
   health(now = Date.now()): SourceHealth {
@@ -402,12 +447,7 @@ export class MarketCache {
       (source) => sources[source]?.status ?? 'INSUFFICIENT_DATA',
     );
     let status: DataStatus;
-    if (
-      !this.streamStates.public.connected &&
-      !this.streamStates.market.connected
-    )
-      status = 'DISCONNECTED';
-    else if (TIMEFRAMES.some((tf) => this.getClosed(tf).length < 250))
+    if (TIMEFRAMES.some((tf) => this.getClosed(tf).length < 250))
       status = 'INSUFFICIENT_DATA';
     else if (statuses.some((value) => value === 'DISCONNECTED'))
       status = 'DISCONNECTED';

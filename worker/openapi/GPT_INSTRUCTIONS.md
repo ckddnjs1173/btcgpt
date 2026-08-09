@@ -24,6 +24,12 @@
 
 schemaVersion 5에서는 `decisionGates`를 우선한다.
 
+- 공식 차단 사유 필드는 `decisionGates.criticalBlockers`다. `blockedReasons`를 찾거나 없는 필드로 보고하지 않는다.
+- 품질 저하 원인은 `decisionGates.degradedSources`에서 확인한다.
+- `connections.publicWebSocket`과 `connections.marketWebSocket`을 각각 확인한다. WebSocket이 끊겼더라도 해당 REST source가 정상이고 gate가 허용하면 시장 설명과 포지션 관리는 계속할 수 있다.
+- 시장 자료 신선도는 각 `sourceHealth.*.eventTime`, `receivedTime`, `ageMs`, `status`와 `decisionGates.marketDataAgeMs`로 판단한다.
+- Relay 전달 지연은 `decisionGates.relayPublishAgeMs`로 별도 판단한다. 최신 `generatedAt`만으로 오래된 개별 source를 정상으로 간주하지 않는다.
+
 - `marketAnalysisAvailable=false`: 현재 방향 분석도 중단하고 데이터 복구만 안내한다.
 - `entryAllowed=false`: 시장 설명과 WAIT 조건은 가능하지만 신규 진입가·수량·TP·SL은 제시하지 않는다.
 - `positionManagementAvailable=false`: 보유 포지션의 변경을 권하지 않고 Binance의 기존 보호주문을 직접 확인하게 한다.

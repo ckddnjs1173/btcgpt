@@ -69,6 +69,7 @@ const PERIODS_PER_YEAR: Record<Timeframe, number> = {
 };
 
 export interface SnapshotOptions {
+  appVersion?: string;
   serverTime?: number;
   position?: AccountStatus['position'] | ManualPosition | null;
   accountStatus?: AccountStatus | null;
@@ -302,6 +303,7 @@ export function generateSnapshot(
 ): MarketSnapshot {
   const generatedAt = Date.now();
   const sourceHealth = cache.sourceHealth(generatedAt);
+  const connections = cache.connectionHealth();
   const health = cache.health(generatedAt);
   const position = options.position ?? {
     source: 'NONE' as const,
@@ -658,6 +660,7 @@ export function generateSnapshot(
   );
   const snapshot: MarketSnapshot = {
     schemaVersion: 5,
+    appVersion: options.appVersion ?? '0.5.4',
     snapshotId: randomUUID(),
     symbol: 'BTCUSDT',
     market: 'BINANCE_USDM_PERPETUAL',
@@ -676,6 +679,11 @@ export function generateSnapshot(
       generatedAt,
       publishedAt: options.publishedAt ?? null,
       ageMs: finiteAge(health.ageMs),
+      marketDataAgeMs: finiteAge(health.ageMs),
+      relayPublishAgeMs:
+        options.publishedAt === null || options.publishedAt === undefined
+          ? null
+          : Math.max(0, generatedAt - options.publishedAt),
       criticalBlockers,
       degradedSources,
       missingFields: [...new Set([
@@ -830,6 +838,10 @@ export function generateSnapshot(
     },
     productFilters: cache.productFilters,
     sourceHealth: sourceHealthSnapshot,
+    connections: {
+      publicWebSocket: connections.public,
+      marketWebSocket: connections.market,
+    },
     timeframes: Object.fromEntries(
       [...TIMEFRAMES, ...REFERENCE_TIMEFRAMES].map((timeframe) => [
         timeframe,

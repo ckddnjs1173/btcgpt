@@ -160,6 +160,8 @@ export class MarketDataService {
     market: null,
   };
   private stopping = false;
+  private started = false;
+  private runGeneration = 0;
   private readonly reconnectTimers: Record<
     MarketStreamChannel,
     NodeJS.Timeout | null
@@ -203,51 +205,42 @@ export class MarketDataService {
     return this.serverOffsetMs;
   }
 
-  async start(): Promise<void> {
+  start(): Promise<void> {
+    if (this.started) return Promise.resolve();
+    this.started = true;
     this.stopping = false;
+    const runId = ++this.runGeneration;
     for (const timeframe of [...TIMEFRAMES, ...REFERENCE_TIMEFRAMES]) {
       for (const candle of this.database.readClosedCandles(timeframe))
         this.cache.upsertCandle(candle);
     }
-    await this.bootstrap();
-    await this.refreshReferenceCandles();
-    for (const channel of STREAM_CHANNELS) this.connect(channel);
+    for (const channel of STREAM_CHANNELS) this.connect(channel, runId);
     this.pollTimer = setInterval(() => {
-      void this.refreshFast().catch((error: unknown) => {
-        this.cache.recordValidationError('REST_REFRESH_FAILED');
-        logger.warn({ error }, 'Public REST refresh failed');
-      });
+      void this.refreshFast(runId);
     }, 5_000);
     this.candlePollTimer = setInterval(() => {
-      void this.refreshCandles().catch((error: unknown) => {
-        this.cache.recordValidationError('CANDLE_REST_REFRESH_FAILED');
-        logger.warn({ error }, 'Candle REST refresh failed');
-      });
+      void this.refreshCandles(runId);
     }, 15_000);
     this.statisticsTimer = setInterval(() => {
-      void this.refreshStatistics().catch((error: unknown) => {
-        logger.warn({ error }, 'Market statistics refresh failed');
-      });
+      void this.refreshStatistics(runId);
     }, 5 * 60_000);
     this.serverTimeTimer = setInterval(() => {
-      void this.refreshServerTime().catch((error: unknown) => {
-        logger.warn({ error }, 'Binance server-time refresh failed');
-      });
+      void this.runOptionalTask(runId, 'serverTime', () => this.refreshServerTime(runId));
     }, 5 * 60_000);
     this.exchangeInfoTimer = setInterval(() => {
-      void this.refreshExchangeInfo().catch((error: unknown) => {
-        logger.warn({ error }, 'Binance exchange-info refresh failed');
-      });
+      void this.runOptionalTask(runId, 'exchangeInfo', () => this.refreshExchangeInfo(runId));
     }, 5 * 60_000);
     this.referenceCandleTimer = setInterval(() => {
-      void this.refreshReferenceCandles().catch((error: unknown) => {
-        logger.warn({ error }, 'Reference candle refresh failed');
-      });
+      void this.refreshReferenceCandles(runId);
     }, 6 * 60 * 60_000);
+    this.bootstrap(runId);
+    return Promise.resolve();
   }
 
   stop(): void {
     this.stopping = true;
+    this.started = false;
+    this.runGeneration += 1;
     this.cancelOrderBookSyncRetry();
     for (const timer of [
       this.pollTimer,
@@ -267,8 +260,12 @@ export class MarketDataService {
       this.plannedReconnectTimers[channel] = null;
       this.sockets[channel]?.close();
       this.sockets[channel] = null;
-      this.cache.setStreamConnected(channel, false, 'service stopped');
+      this.cache.setStreamConnected(channel, false, 'SERVICE_STOPPED');
     }
+  }
+
+  private isRunActive(runId: number): boolean {
+    return !this.stopping && this.started && this.runGeneration === runId;
   }
 
   ingestRecordedMessage(raw: string, receivedAt = Date.now()): void {
@@ -282,59 +279,93 @@ export class MarketDataService {
     }
   }
 
-  private async bootstrap(): Promise<void> {
+  private bootstrap(runId: number): void {
     const operations: Array<{
       name: string;
+      source: string;
       run: () => Promise<void>;
       validationError?: string;
     }> = [
       {
         name: 'Binance server time',
-        run: () => this.refreshServerTime(),
+        source: 'serverTime',
+        run: () => this.refreshServerTime(runId),
+        validationError: 'SERVER_TIME_BOOTSTRAP_FAILED',
       },
       {
         name: 'Binance exchange info',
-        run: () => this.refreshExchangeInfo(),
+        source: 'exchangeInfo',
+        run: () => this.refreshExchangeInfo(runId),
         validationError: 'EXCHANGE_INFO_BOOTSTRAP_FAILED',
       },
       ...TIMEFRAMES.map((timeframe) => ({
         name: `${timeframe} candle recovery`,
-        run: () => this.recoverTimeframe(timeframe),
+        source: `candle:${timeframe}`,
+        run: () => this.recoverTimeframe(timeframe, runId),
         validationError: `CANDLE_BOOTSTRAP_FAILED_${timeframe}`,
       })),
       {
         name: 'public market state',
-        run: () => this.refreshFast(),
+        source: 'market',
+        run: () => this.refreshFast(runId),
         validationError: 'MARKET_BOOTSTRAP_FAILED',
       },
       {
         name: 'market statistics',
-        run: () => this.refreshStatistics(),
+        source: 'statistics',
+        run: () => this.refreshStatistics(runId),
       },
+      ...REFERENCE_TIMEFRAMES.map((timeframe) => ({
+        name: `${timeframe} reference candle recovery`,
+        source: `candle:${timeframe}`,
+        run: () => this.refreshReferenceTimeframe(timeframe, runId),
+        validationError: `CANDLE_BOOTSTRAP_FAILED_${timeframe}`,
+      })),
     ];
-    await Promise.all(
-      operations.map(async ({ name, run, validationError }) => {
-        try {
-          await run();
-        } catch (error) {
-          if (validationError)
-            this.cache.recordValidationError(validationError);
-          logger.warn({ error, operation: name }, 'Market bootstrap operation failed');
-        }
-      }),
-    );
+    for (const { name, source, run, validationError } of operations)
+      void run().catch((error: unknown) => {
+        if (!this.isRunActive(runId)) return;
+        if (validationError)
+          this.cache.recordSourceError(source, validationError);
+        logger.warn(
+          { operation: name, ...safeErrorDetails(error) },
+          'Market bootstrap operation failed',
+        );
+      });
   }
 
-  private async refreshServerTime(): Promise<void> {
+  private async runOptionalTask(
+    runId: number,
+    source: string,
+    task: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      await task();
+      if (!this.isRunActive(runId)) return;
+      this.cache.clearSourceError(source);
+    } catch (error) {
+      if (!this.isRunActive(runId)) return;
+      this.cache.recordSourceError(source, `${source.toUpperCase()}_REST_FAILED`);
+      logger.warn(
+        { source, ...safeErrorDetails(error) },
+        'Optional market REST source failed',
+      );
+    }
+  }
+
+  private async refreshServerTime(runId: number): Promise<void> {
     const localStart = Date.now();
     const time = await this.dependencies.fetchServerTime();
+    if (!this.isRunActive(runId)) return;
     const localEnd = Date.now();
     this.serverOffsetMs =
       time.serverTime - Math.round((localStart + localEnd) / 2);
+    this.cache.clearSourceError('serverTime');
   }
 
-  private async refreshExchangeInfo(): Promise<void> {
+  private async refreshExchangeInfo(runId: number): Promise<void> {
     const exchange = await this.dependencies.fetchExchangeInfo();
+    if (!this.isRunActive(runId)) return;
     const localEnd = Date.now();
     const product = exchange.symbols.find(
       (item) =>
@@ -369,27 +400,34 @@ export class MarketDataService {
       minNotional: Number(notional.notional),
       updatedAt: localEnd,
     });
+    this.cache.clearSourceError('exchangeInfo');
   }
 
   private async recoverTimeframe(
     timeframe: (typeof TIMEFRAMES)[number],
+    runId: number,
   ): Promise<void> {
     const tuples = await this.dependencies.fetchKlines(
       'BTCUSDT',
       timeframe,
       251,
     );
+    if (!this.isRunActive(runId)) return;
     this.applyRestCandles(timeframe, tuples);
     const recovered = tuples
       .map((tuple) => normalizeRestCandle(timeframe, tuple))
       .filter((candle) => candle.isClosed);
     const gaps = detectCandleGaps(recovered, timeframe);
     if (gaps.length > 0) {
-      this.cache.recordValidationError(`CANDLE_GAP_${timeframe}`);
+      this.cache.recordSourceError(
+        `candle:${timeframe}`,
+        `CANDLE_GAP_${timeframe}`,
+      );
       throw new Error(
         `REST recovery left ${gaps.length} ${timeframe} candle gaps`,
       );
     }
+    this.cache.clearSourceError(`candle:${timeframe}`);
   }
 
   private applyRestCandles(
@@ -403,122 +441,180 @@ export class MarketDataService {
     }
   }
 
-  private async refreshFast(): Promise<void> {
+  private async refreshFast(runId: number): Promise<void> {
     const localBook = this.localOrderBook.view(100);
-    const [markResult, tickerResult, oiResult, depthResult, tradesResult] =
-      await Promise.allSettled([
-      this.dependencies.fetchMarkPrice(),
-      this.dependencies.fetchTicker24h(),
-      this.dependencies.fetchOpenInterest(),
-      localBook.synchronized
-        ? Promise.resolve(null)
-        : this.dependencies.fetchOrderBook(),
-      this.dependencies.fetchAggregateTrades(100),
-    ]);
-    const receivedAt = Date.now();
-    if (markResult.status === 'fulfilled') {
-      const mark = markResult.value;
-      this.cache.updateState(
-        {
-          markPrice: Number(mark.markPrice),
-          indexPrice: Number(mark.indexPrice),
-          fundingRate: Number(mark.lastFundingRate),
-          nextFundingTime: mark.nextFundingTime,
-        },
-        receivedAt,
-      );
-    } else this.cache.recordSourceError('market', 'MARK_PRICE_REST_FAILED');
-    if (tickerResult.status === 'fulfilled') {
-      const ticker = tickerResult.value;
-      this.cache.updateState(
-        {
-          lastPrice: Number(ticker.lastPrice),
-          bidPrice: ticker.bidPrice === undefined ? undefined : Number(ticker.bidPrice),
-          askPrice: ticker.askPrice === undefined ? undefined : Number(ticker.askPrice),
-          priceChangePercent24h: Number(ticker.priceChangePercent),
-          highPrice24h: Number(ticker.highPrice),
-          lowPrice24h: Number(ticker.lowPrice),
-          volume24h: Number(ticker.volume),
-          quoteVolume24h: Number(ticker.quoteVolume),
-        },
-        receivedAt,
-      );
-    } else this.cache.recordSourceError('market', 'TICKER_REST_FAILED');
-    if (
-      markResult.status === 'fulfilled' &&
-      tickerResult.status === 'fulfilled'
-    )
-      this.cache.clearSourceError('market');
-    if (oiResult.status === 'fulfilled') {
-      const oi = oiResult.value;
-      this.cache.updateState(
-        { openInterest: Number(oi.openInterest) },
-        receivedAt,
-        'openInterest',
-        oi.time,
-      );
-      this.cache.clearSourceError('openInterest');
-    } else this.cache.recordSourceError('openInterest', 'OPEN_INTEREST_REST_FAILED');
-    const currentLocalBook = this.localOrderBook.view(100);
-    if (
-      !currentLocalBook.synchronized &&
-      depthResult.status === 'fulfilled' &&
-      depthResult.value
-    ) {
-      const depth = depthResult.value;
-      this.cache.updateDepth(
-        depth.bids.map(([price, quantity]) => [Number(price), Number(quantity)]),
-        depth.asks.map(([price, quantity]) => [Number(price), Number(quantity)]),
-        depth.T ?? depth.E ?? receivedAt,
-        receivedAt,
-        {
-          synchronized: false,
-          lastUpdateId: depth.lastUpdateId,
-          levelCount: Math.min(depth.bids.length, depth.asks.length),
-        },
-      );
-    } else if (
-      !currentLocalBook.synchronized &&
-      depthResult.status === 'rejected'
-    ) {
-      this.cache.recordSourceError('depth', 'FALLBACK_DEPTH_REST_FAILED');
-    }
-    if (tradesResult.status === 'fulfilled') {
-      for (const trade of tradesResult.value)
-        this.cache.addTrade({
-          id: trade.a,
-          eventTime: trade.T,
+    const markTask = this.dependencies.fetchMarkPrice().then(
+      (mark) => {
+        if (!this.isRunActive(runId)) return;
+        const receivedAt = Date.now();
+        this.cache.updateState(
+          {
+            markPrice: Number(mark.markPrice),
+            indexPrice: Number(mark.indexPrice),
+            fundingRate: Number(mark.lastFundingRate),
+            nextFundingTime: mark.nextFundingTime,
+          },
           receivedAt,
-          price: Number(trade.p),
-          quantity: Number(trade.q),
-          buyerIsMaker: trade.m,
-        });
-      this.cache.clearSourceError('trades');
-    } else
-      this.cache.recordSourceError('trades', 'AGGREGATE_TRADES_REST_FAILED');
+          'market',
+          receivedAt,
+        );
+        this.cache.clearSourceError('market:markRest');
+      },
+      () => {
+        if (this.isRunActive(runId))
+          this.cache.recordSourceError('market:markRest', 'MARK_PRICE_REST_FAILED');
+      },
+    );
+    const tickerTask = this.dependencies.fetchTicker24h().then(
+      (ticker) => {
+        if (!this.isRunActive(runId)) return;
+        const receivedAt = Date.now();
+        this.cache.updateState(
+          {
+            lastPrice: Number(ticker.lastPrice),
+            priceChangePercent24h: Number(ticker.priceChangePercent),
+            highPrice24h: Number(ticker.highPrice),
+            lowPrice24h: Number(ticker.lowPrice),
+            volume24h: Number(ticker.volume),
+            quoteVolume24h: Number(ticker.quoteVolume),
+          },
+          receivedAt,
+          'market',
+          receivedAt,
+        );
+        if (ticker.bidPrice !== undefined && ticker.askPrice !== undefined)
+          this.cache.updateState(
+            {
+              bidPrice: Number(ticker.bidPrice),
+              askPrice: Number(ticker.askPrice),
+            },
+            receivedAt,
+            'bookTicker',
+            receivedAt,
+          );
+        this.cache.clearSourceError('market:tickerRest');
+      },
+      () => {
+        if (this.isRunActive(runId))
+          this.cache.recordSourceError('market:tickerRest', 'TICKER_REST_FAILED');
+      },
+    );
+    const oiTask = this.dependencies.fetchOpenInterest().then(
+      (oi) => {
+        if (!this.isRunActive(runId)) return;
+        this.cache.updateState(
+          { openInterest: Number(oi.openInterest) },
+          Date.now(),
+          'openInterest',
+          oi.time,
+        );
+        this.cache.clearSourceError('openInterest');
+      },
+      () => {
+        if (this.isRunActive(runId))
+          this.cache.recordSourceError(
+            'openInterest',
+            'OPEN_INTEREST_REST_FAILED',
+          );
+      },
+    );
+    const depthTask = localBook.synchronized
+      ? Promise.resolve()
+      : this.dependencies.fetchOrderBook().then(
+          (depth) => {
+            if (
+              !this.isRunActive(runId) ||
+              this.localOrderBook.view(1).synchronized
+            )
+              return;
+            const receivedAt = Date.now();
+            this.cache.updateDepth(
+              depth.bids.map(([price, quantity]) => [
+                Number(price),
+                Number(quantity),
+              ]),
+              depth.asks.map(([price, quantity]) => [
+                Number(price),
+                Number(quantity),
+              ]),
+              depth.T ?? depth.E ?? receivedAt,
+              receivedAt,
+              {
+                synchronized: false,
+                lastUpdateId: depth.lastUpdateId,
+                levelCount: Math.min(depth.bids.length, depth.asks.length),
+              },
+            );
+          },
+          () => {
+            if (this.isRunActive(runId))
+              this.cache.recordSourceError('depth', 'FALLBACK_DEPTH_REST_FAILED');
+          },
+        );
+    const tradesTask = this.dependencies.fetchAggregateTrades(100).then(
+      (trades) => {
+        if (!this.isRunActive(runId)) return;
+        const receivedAt = Date.now();
+        for (const trade of trades)
+          this.cache.addTrade({
+            id: trade.a,
+            eventTime: trade.T,
+            receivedAt,
+            price: Number(trade.p),
+            quantity: Number(trade.q),
+            buyerIsMaker: trade.m,
+          });
+        this.cache.clearSourceError('trades');
+      },
+      () => {
+        if (this.isRunActive(runId))
+          this.cache.recordSourceError('trades', 'AGGREGATE_TRADES_REST_FAILED');
+      },
+    );
+    await Promise.allSettled([
+      markTask,
+      tickerTask,
+      oiTask,
+      depthTask,
+      tradesTask,
+    ]);
   }
 
-  private async refreshCandles(): Promise<void> {
-    await Promise.all(
+  private async refreshCandles(runId: number): Promise<void> {
+    await Promise.allSettled(
       TIMEFRAMES.map(async (timeframe) => {
+        try {
         const tuples = await this.dependencies.fetchKlines(
           'BTCUSDT',
           timeframe,
           3,
         );
+        if (!this.isRunActive(runId)) return;
         this.applyRestCandles(timeframe, tuples);
         const gaps = detectCandleGaps(
           this.cache.getClosed(timeframe).slice(-251),
           timeframe,
         );
-        if (gaps.length > 0) await this.recoverTimeframe(timeframe);
+        if (gaps.length > 0) await this.recoverTimeframe(timeframe, runId);
+        this.cache.clearSourceError(`candle:${timeframe}`);
+        } catch (error) {
+          if (!this.isRunActive(runId)) return;
+          this.cache.recordSourceError(
+            `candle:${timeframe}`,
+            `CANDLE_REST_REFRESH_FAILED_${timeframe}`,
+          );
+          logger.warn(
+            { timeframe, ...safeErrorDetails(error) },
+            'Candle REST refresh failed',
+          );
+        }
       }),
     );
   }
 
-  private async refreshStatistics(): Promise<void> {
+  private async refreshStatistics(runId: number): Promise<void> {
     const [global, topAccount, topPosition, taker, ...oiHistories] =
-      await Promise.all([
+      await Promise.allSettled([
         this.dependencies.fetchRatioHistory(
           '/futures/data/globalLongShortAccountRatio',
         ),
@@ -535,40 +631,57 @@ export class MarketDataService {
           this.dependencies.fetchOpenInterestHistory(timeframe, 2),
         ),
       ]);
-    const openInterestChanges = Object.fromEntries(
-      STATISTICS_TIMEFRAMES.map((timeframe, index) => {
-        const history = oiHistories[index] ?? [];
-        return [
-          timeframe,
-          history.length >= 2
-            ? percentageChange(
-                Number(history.at(-1)?.sumOpenInterest),
-                Number(history.at(-2)?.sumOpenInterest),
-              )
-            : null,
-        ];
-      }),
-    );
+    if (!this.isRunActive(runId)) return;
     const optionalNumber = (value: string | undefined): number | null => {
       if (value === undefined) return null;
       const parsed = Number(value);
       return Number.isFinite(parsed) ? parsed : null;
     };
-    this.cache.updateSentiment({
-      globalLongShortAccountRatio: optionalNumber(
-        global.at(-1)?.longShortRatio,
-      ),
-      topLongShortAccountRatio: optionalNumber(
-        topAccount.at(-1)?.longShortRatio,
-      ),
-      topLongShortPositionRatio: optionalNumber(
-        topPosition.at(-1)?.longShortRatio,
-      ),
-      takerBuySellRatio: optionalNumber(
-        taker.at(-1)?.buySellRatio ?? taker.at(-1)?.longShortRatio,
-      ),
-      openInterestChanges,
-    });
+    const sentiment: Parameters<MarketCache['updateSentiment']>[0] = {};
+    const applyRatio = (
+      result: typeof global,
+      field:
+        | 'globalLongShortAccountRatio'
+        | 'topLongShortAccountRatio'
+        | 'topLongShortPositionRatio'
+        | 'takerBuySellRatio',
+      source: string,
+    ): void => {
+      if (result.status === 'fulfilled') {
+        const latest = result.value.at(-1);
+        sentiment[field] = optionalNumber(
+          field === 'takerBuySellRatio'
+            ? latest?.buySellRatio ?? latest?.longShortRatio
+            : latest?.longShortRatio,
+        );
+        this.cache.clearSourceError(source);
+      } else this.cache.recordSourceError(source, `${source.toUpperCase()}_FAILED`);
+    };
+    applyRatio(global, 'globalLongShortAccountRatio', 'statistics:globalRatio');
+    applyRatio(topAccount, 'topLongShortAccountRatio', 'statistics:topAccount');
+    applyRatio(topPosition, 'topLongShortPositionRatio', 'statistics:topPosition');
+    applyRatio(taker, 'takerBuySellRatio', 'statistics:takerRatio');
+    const openInterestChanges: NonNullable<
+      Parameters<MarketCache['updateSentiment']>[0]['openInterestChanges']
+    > = {};
+    STATISTICS_TIMEFRAMES.forEach((timeframe, index) => {
+        const result = oiHistories[index];
+        const history = result?.status === 'fulfilled' ? result.value : [];
+        const source = `statistics:oi:${timeframe}`;
+        if (result?.status === 'fulfilled') {
+          this.cache.clearSourceError(source);
+          openInterestChanges[timeframe] = history.length >= 2
+            ? percentageChange(
+                Number(history.at(-1)?.sumOpenInterest),
+                Number(history.at(-2)?.sumOpenInterest),
+              )
+            : null;
+        } else
+          this.cache.recordSourceError(source, `OI_HISTORY_FAILED_${timeframe}`);
+      });
+    if (Object.keys(openInterestChanges).length > 0)
+      sentiment.openInterestChanges = openInterestChanges;
+    if (Object.keys(sentiment).length > 0) this.cache.updateSentiment(sentiment);
   }
 
   private publishOrderBook(eventTime: number, receivedAt: number): void {
@@ -659,12 +772,23 @@ export class MarketDataService {
     return this.orderBookSyncPromise;
   }
 
-  private connect(channel: MarketStreamChannel): void {
-    if (this.stopping) return;
-    const socket = this.dependencies.createSocket(WS_URLS[channel]);
+  private connect(channel: MarketStreamChannel, runId: number): void {
+    if (!this.isRunActive(runId)) return;
+    let socket: WebSocket;
+    try {
+      socket = this.dependencies.createSocket(WS_URLS[channel]);
+    } catch (error) {
+      this.cache.setStreamConnected(channel, false, 'SOCKET_CREATE_FAILED');
+      logger.warn(
+        { channel, ...safeErrorDetails(error) },
+        'Binance WebSocket creation failed',
+      );
+      this.scheduleReconnect(channel, runId);
+      return;
+    }
     this.sockets[channel] = socket;
     socket.addEventListener('open', () => {
-      if (this.sockets[channel] !== socket) return;
+      if (!this.isRunActive(runId) || this.sockets[channel] !== socket) return;
       this.reconnectAttempts[channel] = 0;
       this.cache.setStreamConnected(channel, true);
       if (channel === 'public') {
@@ -680,53 +804,86 @@ export class MarketDataService {
       logger.info({ channel }, 'Binance WebSocket connected');
     });
     socket.addEventListener('message', (event) => {
+      if (!this.isRunActive(runId) || this.sockets[channel] !== socket) return;
+      const receivedAt = Date.now();
       try {
-        this.ingestRecordedMessage(String(event.data), Date.now());
+        this.handleMessage(String(event.data), receivedAt);
+        this.cache.markStreamEvent(channel, receivedAt);
       } catch (error) {
         logger.warn(
-          { channel, error },
+          { channel, ...safeErrorDetails(error) },
           'Binance WebSocket schema validation failed',
         );
       }
     });
     socket.addEventListener('error', () => {
-      logger.warn({ channel }, 'Binance WebSocket error');
+      this.failSocket(channel, socket, runId, 'SOCKET_ERROR');
     });
     socket.addEventListener('close', () => {
-      if (this.sockets[channel] !== socket) return;
-      const plannedReconnectTimer = this.plannedReconnectTimers[channel];
-      if (plannedReconnectTimer) clearTimeout(plannedReconnectTimer);
-      this.plannedReconnectTimers[channel] = null;
-      this.sockets[channel] = null;
-      if (channel === 'public') {
-        this.cancelOrderBookSyncRetry();
-        this.orderBookSyncAttempt = 0;
-        this.cache.markDepthUnsynchronized();
-      }
-      this.cache.setStreamConnected(
-        channel,
-        false,
-        `${channel} WebSocket disconnected`,
-      );
-      this.scheduleReconnect(channel);
+      this.failSocket(channel, socket, runId, 'SOCKET_CLOSED', false);
     });
   }
 
-  private async refreshReferenceCandles(): Promise<void> {
-    await Promise.all(
+  private failSocket(
+    channel: MarketStreamChannel,
+    socket: WebSocket,
+    runId: number,
+    errorCode: string,
+    closeSocket = true,
+  ): void {
+    if (!this.isRunActive(runId) || this.sockets[channel] !== socket) return;
+    const planned = this.plannedReconnectTimers[channel];
+    if (planned) clearTimeout(planned);
+    this.plannedReconnectTimers[channel] = null;
+    this.sockets[channel] = null;
+    if (channel === 'public') {
+      this.cancelOrderBookSyncRetry();
+      this.orderBookSyncAttempt = 0;
+      this.cache.markDepthUnsynchronized();
+    }
+    this.cache.setStreamConnected(channel, false, errorCode);
+    logger.warn({ channel, errorCode }, 'Binance WebSocket disconnected');
+    if (closeSocket)
+      try {
+        socket.close();
+      } catch {
+        // The reconnect timer below is authoritative even if close throws.
+      }
+    this.scheduleReconnect(channel, runId);
+  }
+
+  private async refreshReferenceTimeframe(
+    timeframe: (typeof REFERENCE_TIMEFRAMES)[number],
+    runId: number,
+  ): Promise<void> {
+    const tuples = await this.dependencies.fetchKlines('BTCUSDT', timeframe, 251);
+    if (!this.isRunActive(runId)) return;
+    this.applyRestCandles(timeframe, tuples);
+    this.cache.clearSourceError(`candle:${timeframe}`);
+  }
+
+  private async refreshReferenceCandles(runId: number): Promise<void> {
+    await Promise.allSettled(
       REFERENCE_TIMEFRAMES.map(async (timeframe) => {
-        const tuples = await this.dependencies.fetchKlines(
-          'BTCUSDT',
-          timeframe,
-          251,
-        );
-        this.applyRestCandles(timeframe, tuples);
+        try {
+          await this.refreshReferenceTimeframe(timeframe, runId);
+        } catch (error) {
+          if (!this.isRunActive(runId)) return;
+          this.cache.recordSourceError(
+            `candle:${timeframe}`,
+            `REFERENCE_CANDLE_REST_FAILED_${timeframe}`,
+          );
+          logger.warn(
+            { timeframe, ...safeErrorDetails(error) },
+            'Reference candle REST refresh failed',
+          );
+        }
       }),
     );
   }
 
-  private scheduleReconnect(channel: MarketStreamChannel): void {
-    if (this.stopping || this.reconnectTimers[channel]) return;
+  private scheduleReconnect(channel: MarketStreamChannel, runId: number): void {
+    if (!this.isRunActive(runId) || this.reconnectTimers[channel]) return;
     const base = Math.min(
       30_000,
       1_000 * 2 ** this.reconnectAttempts[channel],
@@ -735,15 +892,9 @@ export class MarketDataService {
     this.reconnectAttempts[channel] += 1;
     this.reconnectTimers[channel] = setTimeout(() => {
       this.reconnectTimers[channel] = null;
-      if (channel === 'public') {
-        this.connect(channel);
-        return;
-      }
-      void Promise.all(TIMEFRAMES.map((tf) => this.recoverTimeframe(tf)))
-        .catch((error: unknown) => {
-          logger.warn({ channel, error }, 'REST gap recovery failed');
-        })
-        .finally(() => this.connect(channel));
+      if (!this.isRunActive(runId)) return;
+      this.connect(channel, runId);
+      if (channel === 'market') void this.refreshCandles(runId);
     }, delay);
   }
 
@@ -787,6 +938,7 @@ export class MarketDataService {
         'market',
         event.E,
       );
+      this.cache.clearSourceError('market');
       return;
     }
     if (envelope.stream.includes('@bookTicker')) {
@@ -797,6 +949,7 @@ export class MarketDataService {
         'bookTicker',
         event.E,
       );
+      this.cache.clearSourceError('bookTicker');
       return;
     }
     if (envelope.stream.includes('@aggTrade')) {

@@ -131,6 +131,7 @@ void app.whenReady().then(() => {
     const settings = database!.readUserSettings();
     const tradingState = buildTradingState(database!, accountStatus);
     return {
+      appVersion: app.getVersion(),
       serverTime: Date.now() + marketData!.getServerOffsetMs(),
       position: accountStatus.connected
         ? accountStatus.position
@@ -235,7 +236,16 @@ void app.whenReady().then(() => {
   });
   if (process.env.BTC_E2E_DISABLE_MARKET !== '1')
     void marketData.start().catch((error: unknown) => {
-      logger.error({ error }, 'Market data service failed to start');
+      logger.error(
+        {
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+          errorMessage:
+            error instanceof Error
+              ? error.message.slice(0, 300)
+              : 'Unknown startup error',
+        },
+        'Market data service failed to start',
+      );
     });
   externalContext.start();
   const environmentRelay =

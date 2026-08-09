@@ -442,6 +442,7 @@ export function registerIpcHandlers({
     (_event, rawInput: unknown): LockedTradePlan => {
       const input = lockTradePlanInputSchema.parse(rawInput);
       const snapshot = generateSnapshot(marketData.cache, {
+        appVersion: app.getVersion(),
         serverTime: Date.now() + marketData.getServerOffsetMs(),
       });
       if (!snapshot.decisionGates.entryAllowed)
@@ -655,6 +656,7 @@ export function registerIpcHandlers({
     const accountStatus = accountService.getStatus();
     const settings = database.readUserSettings();
     return generateSnapshot(marketData.cache, {
+      appVersion: app.getVersion(),
       serverTime: Date.now() + marketData.getServerOffsetMs(),
       position: accountStatus.connected
         ? accountStatus.position
