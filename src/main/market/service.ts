@@ -694,20 +694,42 @@ export class MarketDataService {
     });
   }
 
+  private completeOrderBookSynchronization(
+    eventTime: number,
+    receivedAt: number,
+  ): void {
+    this.publishOrderBook(eventTime, receivedAt);
+    this.orderBookSyncAttempt = 0;
+    this.cancelOrderBookSyncRetry();
+    this.cache.clearSourceError('depth');
+    logger.info(
+      {
+        ...this.localOrderBook.diagnostics(),
+        attempt: 0,
+        nextRetryMs: 0,
+        errorCode: null,
+      },
+      'Binance local order book synchronized',
+    );
+  }
+
   private cancelOrderBookSyncRetry(): void {
     if (this.orderBookSyncTimer) clearTimeout(this.orderBookSyncTimer);
     this.orderBookSyncTimer = null;
   }
 
-  private markOrderBookUnsynchronized(): void {
-    this.cache.markDepthUnsynchronized();
+  private markOrderBookUnsynchronized(
+    syncState: ReturnType<LocalOrderBook['view']>['syncState'],
+  ): void {
+    this.cache.markDepthUnsynchronized(syncState);
   }
 
   private scheduleOrderBookSync(socket: WebSocket, delayMs = 0): void {
     if (this.stopping || this.sockets.public !== socket) return;
-    this.markOrderBookUnsynchronized();
     if (this.orderBookSyncPromise || this.orderBookSyncTimer) return;
     if (delayMs > 0) {
+      this.localOrderBook.markRetryScheduled();
+      this.markOrderBookUnsynchronized('RETRY_SCHEDULED');
       this.orderBookSyncTimer = setTimeout(() => {
         this.orderBookSyncTimer = null;
         if (!this.stopping && this.sockets.public === socket)
@@ -715,7 +737,48 @@ export class MarketDataService {
       }, delayMs);
       return;
     }
+    this.localOrderBook.markFetchingSnapshot();
+    this.markOrderBookUnsynchronized('FETCHING_SNAPSHOT');
     void this.synchronizeOrderBook(socket);
+  }
+
+  private orderBookErrorCode(error: unknown): string {
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      typeof error.code === 'string' &&
+      /^[A-Z0-9_]{1,100}$/.test(error.code)
+    )
+      return error.code;
+    return 'DEPTH_SNAPSHOT_REQUEST_FAILED';
+  }
+
+  private orderBookRetryDetails(
+    errorCode: string,
+  ): { attempt: number; nextRetryMs: number } {
+    const attempt = this.orderBookSyncAttempt + 1;
+    const base = Math.min(
+      ORDER_BOOK_RETRY_MAX_MS,
+      1_000 * 2 ** this.orderBookSyncAttempt,
+    );
+    const nextRetryMs = Math.min(
+      ORDER_BOOK_RETRY_MAX_MS,
+      Math.round(base * (0.8 + Math.random() * 0.4)),
+    );
+    this.orderBookSyncAttempt = attempt;
+    this.localOrderBook.markRetryScheduled();
+    this.markOrderBookUnsynchronized('RETRY_SCHEDULED');
+    this.cache.recordSourceError('depth', errorCode);
+    logger.warn(
+      {
+        ...this.localOrderBook.diagnostics(),
+        attempt,
+        nextRetryMs,
+        errorCode,
+      },
+      'Binance local order book resync retry scheduled',
+    );
+    return { attempt, nextRetryMs };
   }
 
   private synchronizeOrderBook(socket: WebSocket): Promise<void> {
@@ -724,7 +787,7 @@ export class MarketDataService {
     this.orderBookSyncPromise = (async () => {
       const snapshot = await this.dependencies.fetchOrderBook(1000);
       if (this.stopping || this.sockets.public !== socket) return;
-      const synchronized = this.localOrderBook.initialize({
+      const result = this.localOrderBook.initialize({
         lastUpdateId: snapshot.lastUpdateId,
         bids: snapshot.bids.map(([price, quantity]) => [
           Number(price),
@@ -735,34 +798,34 @@ export class MarketDataService {
           Number(quantity),
         ]),
       });
-      if (!synchronized)
-        throw new Error('Binance depth snapshot did not overlap buffered events');
+      if (result === 'SNAPSHOT_STALE') {
+        const error = new Error('Depth snapshot is older than buffered events');
+        Object.assign(error, { code: 'DEPTH_SNAPSHOT_STALE' });
+        throw error;
+      }
+      if (result === 'WAITING_FOR_BRIDGE') {
+        this.markOrderBookUnsynchronized('WAITING_FOR_BRIDGE');
+        logger.info(
+          {
+            ...this.localOrderBook.diagnostics(),
+            attempt: this.orderBookSyncAttempt,
+            nextRetryMs: 0,
+            errorCode: null,
+          },
+          'Binance local order book waiting for bridge event',
+        );
+        return;
+      }
       if (this.stopping || this.sockets.public !== socket) return;
-      this.publishOrderBook(snapshot.T ?? snapshot.E ?? Date.now(), Date.now());
-      this.orderBookSyncAttempt = 0;
-      this.cancelOrderBookSyncRetry();
-      this.cache.clearSourceError('depth');
+      this.completeOrderBookSynchronization(
+        snapshot.T ?? snapshot.E ?? Date.now(),
+        Date.now(),
+      );
     })()
       .catch((error: unknown) => {
         if (this.stopping || this.sockets.public !== socket) return;
-        this.markOrderBookUnsynchronized();
-        this.cache.recordSourceError('depth', 'ORDER_BOOK_RESYNC_FAILED');
-        const attempt = this.orderBookSyncAttempt + 1;
-        const base = Math.min(
-          ORDER_BOOK_RETRY_MAX_MS,
-          1_000 * 2 ** this.orderBookSyncAttempt,
-        );
-        const nextRetryMs = Math.min(
-          ORDER_BOOK_RETRY_MAX_MS,
-          Math.round(base * (0.8 + Math.random() * 0.4)),
-        );
-        this.orderBookSyncAttempt = attempt;
-        const details = safeErrorDetails(error);
-        logger.warn(
-          { ...details, attempt, nextRetryMs },
-          'Binance local order book resync failed',
-        );
-        pendingRetryMs = nextRetryMs;
+        const errorCode = this.orderBookErrorCode(error);
+        pendingRetryMs = this.orderBookRetryDetails(errorCode).nextRetryMs;
       })
       .finally(() => {
         this.orderBookSyncPromise = null;
@@ -987,9 +1050,26 @@ export class MarketDataService {
         ]),
       });
       if (result === 'APPLIED') this.publishOrderBook(event.E, receivedAt);
-      else if (result === 'GAP' || result === 'BUFFERED') {
+      else if (result === 'SYNCHRONIZED')
+        this.completeOrderBookSynchronization(event.E, receivedAt);
+      else if (result === 'GAP' || result === 'SNAPSHOT_STALE') {
         const socket = this.sockets.public;
-        if (socket) this.scheduleOrderBookSync(socket);
+        if (socket) {
+          const errorCode =
+            result === 'GAP'
+              ? 'DEPTH_UPDATE_ID_GAP'
+              : 'DEPTH_SNAPSHOT_STALE';
+          const retry = this.orderBookRetryDetails(errorCode);
+          this.scheduleOrderBookSync(socket, retry.nextRetryMs);
+        }
+      } else if (result === 'BUFFERED') {
+        const socket = this.sockets.public;
+        if (
+          socket &&
+          this.localOrderBook.view(1).syncState === 'FETCHING_SNAPSHOT' &&
+          !this.orderBookSyncPromise
+        )
+          this.scheduleOrderBookSync(socket);
       }
       return;
     }

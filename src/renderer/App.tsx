@@ -82,7 +82,11 @@ function marketGateMessage(snapshot: MarketSnapshot): string {
   if (!snapshot.connections.publicWebSocket.connected)
     messages.push('공개 호가 WebSocket 연결 실패');
   if (!snapshot.orderFlow.orderBookSynchronized)
-    messages.push('호가장 재동기화 중');
+    messages.push(
+      snapshot.orderFlow.orderBookSyncState === 'WAITING_FOR_BRIDGE'
+        ? '호가장 연결 이벤트 대기 중'
+        : '호가장 재동기화 중',
+    );
   if (
     snapshot.decisionGates.degradedSources.some(
       (source) => source.startsWith('candle:'),
@@ -108,6 +112,7 @@ function formatSnapshotText(snapshot: MarketSnapshot): string {
     `fundingRate: ${snapshot.marketState.fundingRate ?? 'null'}`,
     `openInterestBTC: ${snapshot.openInterest.current ?? 'null'}`,
     `orderBookSynchronized: ${snapshot.orderFlow.orderBookSynchronized}`,
+    `orderBookSyncState: ${snapshot.orderFlow.orderBookSyncState}`,
     `accountStream: ${snapshot.account.stream.status}`,
     `positionSource: ${snapshot.position.source}`,
     `lifecycle: ${snapshot.trading.lifecycle.stage}`,
@@ -678,7 +683,7 @@ export function App() {
               <dd>
                 {snapshot?.orderFlow.orderBookSynchronized
                   ? `YES · ${snapshot.orderFlow.orderBookLevelCount} levels`
-                  : 'NO'}
+                  : `NO · ${snapshot?.orderFlow.orderBookSyncState ?? 'FETCHING_SNAPSHOT'}`}
               </dd>
             </div>
             <div>

@@ -1,4 +1,5 @@
 import type { DataStatus } from '../../shared/contracts';
+import type { OrderBookSyncState } from './local-order-book';
 
 export const SYMBOL = 'BTCUSDT' as const;
 export const TIMEFRAMES = ['1m', '3m', '5m', '15m', '30m', '1h', '4h'] as const;
@@ -80,6 +81,7 @@ export interface DepthState {
   eventTime: number | null;
   receivedAt: number | null;
   synchronized: boolean;
+  syncState: OrderBookSyncState;
   lastUpdateId: number | null;
   levelCount: number;
 }

@@ -82,6 +82,7 @@ export class MarketCache {
     eventTime: null,
     receivedAt: null,
     synchronized: false,
+    syncState: 'FETCHING_SNAPSHOT',
     lastUpdateId: null,
     levelCount: 0,
   };
@@ -236,6 +237,9 @@ export class MarketCache {
       eventTime,
       receivedAt,
       ...synchronization,
+      syncState: synchronization.synchronized
+        ? 'SYNCHRONIZED'
+        : this.depth.syncState,
     });
     const wall = (levels: Array<[number, number]>) =>
       levels
@@ -267,8 +271,11 @@ export class MarketCache {
     if (synchronization.synchronized) this.clearSourceError('depth');
   }
 
-  markDepthUnsynchronized(): void {
+  markDepthUnsynchronized(
+    syncState: DepthState['syncState'] = 'FETCHING_SNAPSHOT',
+  ): void {
     this.depth.synchronized = false;
+    this.depth.syncState = syncState;
   }
 
   addTrade(event: TradeEvent): void {

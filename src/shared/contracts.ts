@@ -183,6 +183,11 @@ export interface MarketSnapshot {
     bidNotional100: number;
     askNotional100: number;
     orderBookSynchronized: boolean;
+    orderBookSyncState:
+      | 'FETCHING_SNAPSHOT'
+      | 'WAITING_FOR_BRIDGE'
+      | 'SYNCHRONIZED'
+      | 'RETRY_SCHEDULED';
     orderBookLastUpdateId: number | null;
     orderBookLevelCount: number;
     microPrice: number | null;

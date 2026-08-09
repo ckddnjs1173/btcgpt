@@ -65,10 +65,10 @@
       },
       "MarketSnapshot": {
         "type": "object",
-        "required": ["schemaVersion", "appVersion", "generatedAt", "decisionGates", "connections", "sourceHealth"],
+        "required": ["schemaVersion", "appVersion", "generatedAt", "decisionGates", "connections", "orderFlow", "sourceHealth"],
         "properties": {
           "schemaVersion": { "type": "integer", "const": 5 },
-          "appVersion": { "type": "string", "const": "0.5.4" },
+          "appVersion": { "type": "string", "const": "0.5.5" },
           "generatedAt": { "type": "integer" },
           "decisionGates": { "$ref": "#/components/schemas/DecisionGates" },
           "connections": {
@@ -78,6 +78,19 @@
               "publicWebSocket": { "$ref": "#/components/schemas/WebSocketConnectionHealth" },
               "marketWebSocket": { "$ref": "#/components/schemas/WebSocketConnectionHealth" }
             }
+          },
+          "orderFlow": {
+            "type": "object",
+            "required": ["orderBookSynchronized", "orderBookSyncState", "orderBookLevelCount"],
+            "properties": {
+              "orderBookSynchronized": { "type": "boolean" },
+              "orderBookSyncState": {
+                "type": "string",
+                "enum": ["FETCHING_SNAPSHOT", "WAITING_FOR_BRIDGE", "SYNCHRONIZED", "RETRY_SCHEDULED"]
+              },
+              "orderBookLevelCount": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": true
           },
           "sourceHealth": {
             "type": "object",

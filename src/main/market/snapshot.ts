@@ -764,6 +764,7 @@ export function generateSnapshot(
       bidNotional100,
       askNotional100,
       orderBookSynchronized: cache.depth.synchronized,
+      orderBookSyncState: cache.depth.syncState,
       orderBookLastUpdateId: cache.depth.lastUpdateId,
       orderBookLevelCount: cache.depth.levelCount,
       microPrice,
