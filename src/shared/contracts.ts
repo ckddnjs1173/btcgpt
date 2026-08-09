@@ -784,6 +784,25 @@ export interface TradingState {
   };
 }
 
+export type RelaySanitizedTrade = Omit<
+  AccountStatus['recentTrades'][number],
+  'orderId'
+>;
+
+export type RelayCompactSnapshot = Omit<
+  MarketSnapshot,
+  'account' | 'trading'
+> & {
+  account: Omit<MarketSnapshot['account'], 'recentTrades'> & {
+    recentTrades: RelaySanitizedTrade[];
+  };
+  trading: Omit<TradingState, 'liveManual'> & {
+    liveManual: Omit<TradingState['liveManual'], 'recentTrades'> & {
+      recentTrades: RelaySanitizedTrade[];
+    };
+  };
+};
+
 export interface DesktopApi {
   getPhaseZeroStatus(): Promise<PhaseZeroStatus>;
   testNotification(): Promise<ActionResult>;
@@ -793,7 +812,7 @@ export interface DesktopApi {
   readDbCheck(): Promise<DatabaseCheck>;
   getMarketStatus(): Promise<MarketStatus>;
   getLatestSnapshot(): Promise<MarketSnapshot>;
-  getLatestCompactSnapshot?(): Promise<MarketSnapshot>;
+  getLatestCompactSnapshot?(): Promise<RelayCompactSnapshot>;
   configureAccount(input: AccountConfigurationInput): Promise<ActionResult>;
   disconnectAccount(): Promise<ActionResult>;
   getAccountStatus(): Promise<AccountStatus>;

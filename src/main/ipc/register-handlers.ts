@@ -11,6 +11,7 @@ import {
   type ActionResult,
   type AccountStatus,
   type MarketSnapshot,
+  type RelayCompactSnapshot,
   type MarketStatus,
   type ManualPosition,
   type PhaseZeroStatus,
@@ -678,7 +679,7 @@ export function registerIpcHandlers({
   );
   ipcMain.handle(
     IPC_CHANNELS.getLatestCompactSnapshot,
-    (): MarketSnapshot =>
+    (): RelayCompactSnapshot =>
       createCompactRelaySnapshot(getLatestFullSnapshot()).snapshot,
   );
 

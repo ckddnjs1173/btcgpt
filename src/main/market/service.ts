@@ -49,6 +49,7 @@ type MarketDataDependencies = typeof DEFAULT_DEPENDENCIES;
 
 const STREAM_CHANNELS = ['public', 'market'] as const;
 const STATISTICS_TIMEFRAMES = ['5m', '15m', '1h', '4h'] as const;
+const ORDER_BOOK_RETRY_MAX_MS = 30_000;
 const WS_URLS: Record<MarketStreamChannel, string> = {
   public:
     'wss://fstream.binance.com/public/stream?streams=' +
@@ -131,6 +132,27 @@ const forceOrderSchema = z.object({
   }),
 });
 
+function safeErrorDetails(error: unknown): {
+  errorName: string;
+  errorMessage: string;
+  httpStatus?: number;
+  errorCode?: string | number;
+} {
+  if (!(error instanceof Error))
+    return { errorName: 'UnknownError', errorMessage: 'Unknown error' };
+  const candidate = error as Error & { status?: unknown; code?: unknown };
+  return {
+    errorName: error.name,
+    errorMessage: error.message.slice(0, 300),
+    ...(typeof candidate.status === 'number'
+      ? { httpStatus: candidate.status }
+      : {}),
+    ...(typeof candidate.code === 'string' || typeof candidate.code === 'number'
+      ? { errorCode: candidate.code }
+      : {}),
+  };
+}
+
 export class MarketDataService {
   readonly cache = new MarketCache();
   private readonly sockets: Record<MarketStreamChannel, WebSocket | null> = {
@@ -165,6 +187,8 @@ export class MarketDataService {
   private serverOffsetMs = 0;
   private readonly localOrderBook = new LocalOrderBook();
   private orderBookSyncPromise: Promise<void> | null = null;
+  private orderBookSyncTimer: NodeJS.Timeout | null = null;
+  private orderBookSyncAttempt = 0;
 
   private readonly dependencies: MarketDataDependencies;
 
@@ -224,6 +248,7 @@ export class MarketDataService {
 
   stop(): void {
     this.stopping = true;
+    this.cancelOrderBookSyncRetry();
     for (const timer of [
       this.pollTimer,
       this.candlePollTimer,
@@ -379,57 +404,68 @@ export class MarketDataService {
   }
 
   private async refreshFast(): Promise<void> {
-    const [mark, ticker, oi, depth, trades] = await Promise.all([
+    const localBook = this.localOrderBook.view(100);
+    const [markResult, tickerResult, oiResult, depthResult, tradesResult] =
+      await Promise.allSettled([
       this.dependencies.fetchMarkPrice(),
       this.dependencies.fetchTicker24h(),
       this.dependencies.fetchOpenInterest(),
-      this.dependencies.fetchOrderBook(),
+      localBook.synchronized
+        ? Promise.resolve(null)
+        : this.dependencies.fetchOrderBook(),
       this.dependencies.fetchAggregateTrades(100),
     ]);
     const receivedAt = Date.now();
-    this.cache.updateState(
-      {
-        lastPrice: Number(ticker.lastPrice),
-        markPrice: Number(mark.markPrice),
-        indexPrice: Number(mark.indexPrice),
-        fundingRate: Number(mark.lastFundingRate),
-        nextFundingTime: mark.nextFundingTime,
-        bidPrice:
-          ticker.bidPrice !== undefined
-            ? Number(ticker.bidPrice)
-            : Number(depth.bids[0]?.[0]),
-        askPrice:
-          ticker.askPrice !== undefined
-            ? Number(ticker.askPrice)
-            : Number(depth.asks[0]?.[0]),
-        priceChangePercent24h: Number(ticker.priceChangePercent),
-        highPrice24h: Number(ticker.highPrice),
-        lowPrice24h: Number(ticker.lowPrice),
-        volume24h: Number(ticker.volume),
-        quoteVolume24h: Number(ticker.quoteVolume),
-      },
-      receivedAt,
-    );
-    this.cache.updateState(
-      { openInterest: Number(oi.openInterest) },
-      receivedAt,
-      'openInterest',
-      oi.time,
-    );
-    const localBook = this.localOrderBook.view(100);
-    if (localBook.synchronized) {
-      this.cache.updateDepth(
-        localBook.bids,
-        localBook.asks,
-        depth.T ?? depth.E ?? receivedAt,
-        receivedAt,
+    if (markResult.status === 'fulfilled') {
+      const mark = markResult.value;
+      this.cache.updateState(
         {
-          synchronized: true,
-          lastUpdateId: localBook.lastUpdateId,
-          levelCount: Math.min(localBook.bids.length, localBook.asks.length),
+          markPrice: Number(mark.markPrice),
+          indexPrice: Number(mark.indexPrice),
+          fundingRate: Number(mark.lastFundingRate),
+          nextFundingTime: mark.nextFundingTime,
         },
+        receivedAt,
       );
-    } else {
+    } else this.cache.recordSourceError('market', 'MARK_PRICE_REST_FAILED');
+    if (tickerResult.status === 'fulfilled') {
+      const ticker = tickerResult.value;
+      this.cache.updateState(
+        {
+          lastPrice: Number(ticker.lastPrice),
+          bidPrice: ticker.bidPrice === undefined ? undefined : Number(ticker.bidPrice),
+          askPrice: ticker.askPrice === undefined ? undefined : Number(ticker.askPrice),
+          priceChangePercent24h: Number(ticker.priceChangePercent),
+          highPrice24h: Number(ticker.highPrice),
+          lowPrice24h: Number(ticker.lowPrice),
+          volume24h: Number(ticker.volume),
+          quoteVolume24h: Number(ticker.quoteVolume),
+        },
+        receivedAt,
+      );
+    } else this.cache.recordSourceError('market', 'TICKER_REST_FAILED');
+    if (
+      markResult.status === 'fulfilled' &&
+      tickerResult.status === 'fulfilled'
+    )
+      this.cache.clearSourceError('market');
+    if (oiResult.status === 'fulfilled') {
+      const oi = oiResult.value;
+      this.cache.updateState(
+        { openInterest: Number(oi.openInterest) },
+        receivedAt,
+        'openInterest',
+        oi.time,
+      );
+      this.cache.clearSourceError('openInterest');
+    } else this.cache.recordSourceError('openInterest', 'OPEN_INTEREST_REST_FAILED');
+    const currentLocalBook = this.localOrderBook.view(100);
+    if (
+      !currentLocalBook.synchronized &&
+      depthResult.status === 'fulfilled' &&
+      depthResult.value
+    ) {
+      const depth = depthResult.value;
       this.cache.updateDepth(
         depth.bids.map(([price, quantity]) => [Number(price), Number(quantity)]),
         depth.asks.map(([price, quantity]) => [Number(price), Number(quantity)]),
@@ -441,16 +477,25 @@ export class MarketDataService {
           levelCount: Math.min(depth.bids.length, depth.asks.length),
         },
       );
+    } else if (
+      !currentLocalBook.synchronized &&
+      depthResult.status === 'rejected'
+    ) {
+      this.cache.recordSourceError('depth', 'FALLBACK_DEPTH_REST_FAILED');
     }
-    for (const trade of trades)
-      this.cache.addTrade({
-        id: trade.a,
-        eventTime: trade.T,
-        receivedAt,
-        price: Number(trade.p),
-        quantity: Number(trade.q),
-        buyerIsMaker: trade.m,
-      });
+    if (tradesResult.status === 'fulfilled') {
+      for (const trade of tradesResult.value)
+        this.cache.addTrade({
+          id: trade.a,
+          eventTime: trade.T,
+          receivedAt,
+          price: Number(trade.p),
+          quantity: Number(trade.q),
+          buyerIsMaker: trade.m,
+        });
+      this.cache.clearSourceError('trades');
+    } else
+      this.cache.recordSourceError('trades', 'AGGREGATE_TRADES_REST_FAILED');
   }
 
   private async refreshCandles(): Promise<void> {
@@ -536,10 +581,36 @@ export class MarketDataService {
     });
   }
 
-  private synchronizeOrderBook(): Promise<void> {
+  private cancelOrderBookSyncRetry(): void {
+    if (this.orderBookSyncTimer) clearTimeout(this.orderBookSyncTimer);
+    this.orderBookSyncTimer = null;
+  }
+
+  private markOrderBookUnsynchronized(): void {
+    this.cache.markDepthUnsynchronized();
+  }
+
+  private scheduleOrderBookSync(socket: WebSocket, delayMs = 0): void {
+    if (this.stopping || this.sockets.public !== socket) return;
+    this.markOrderBookUnsynchronized();
+    if (this.orderBookSyncPromise || this.orderBookSyncTimer) return;
+    if (delayMs > 0) {
+      this.orderBookSyncTimer = setTimeout(() => {
+        this.orderBookSyncTimer = null;
+        if (!this.stopping && this.sockets.public === socket)
+          void this.synchronizeOrderBook(socket);
+      }, delayMs);
+      return;
+    }
+    void this.synchronizeOrderBook(socket);
+  }
+
+  private synchronizeOrderBook(socket: WebSocket): Promise<void> {
     if (this.orderBookSyncPromise) return this.orderBookSyncPromise;
+    let pendingRetryMs: number | null = null;
     this.orderBookSyncPromise = (async () => {
       const snapshot = await this.dependencies.fetchOrderBook(1000);
+      if (this.stopping || this.sockets.public !== socket) return;
       const synchronized = this.localOrderBook.initialize({
         lastUpdateId: snapshot.lastUpdateId,
         bids: snapshot.bids.map(([price, quantity]) => [
@@ -553,14 +624,37 @@ export class MarketDataService {
       });
       if (!synchronized)
         throw new Error('Binance depth snapshot did not overlap buffered events');
+      if (this.stopping || this.sockets.public !== socket) return;
       this.publishOrderBook(snapshot.T ?? snapshot.E ?? Date.now(), Date.now());
+      this.orderBookSyncAttempt = 0;
+      this.cancelOrderBookSyncRetry();
+      this.cache.clearSourceError('depth');
     })()
       .catch((error: unknown) => {
-        this.cache.recordValidationError('ORDER_BOOK_RESYNC_FAILED');
-        logger.warn({ error }, 'Binance local order book resync failed');
+        if (this.stopping || this.sockets.public !== socket) return;
+        this.markOrderBookUnsynchronized();
+        this.cache.recordSourceError('depth', 'ORDER_BOOK_RESYNC_FAILED');
+        const attempt = this.orderBookSyncAttempt + 1;
+        const base = Math.min(
+          ORDER_BOOK_RETRY_MAX_MS,
+          1_000 * 2 ** this.orderBookSyncAttempt,
+        );
+        const nextRetryMs = Math.min(
+          ORDER_BOOK_RETRY_MAX_MS,
+          Math.round(base * (0.8 + Math.random() * 0.4)),
+        );
+        this.orderBookSyncAttempt = attempt;
+        const details = safeErrorDetails(error);
+        logger.warn(
+          { ...details, attempt, nextRetryMs },
+          'Binance local order book resync failed',
+        );
+        pendingRetryMs = nextRetryMs;
       })
       .finally(() => {
         this.orderBookSyncPromise = null;
+        if (pendingRetryMs !== null)
+          this.scheduleOrderBookSync(socket, pendingRetryMs);
       });
     return this.orderBookSyncPromise;
   }
@@ -575,7 +669,9 @@ export class MarketDataService {
       this.cache.setStreamConnected(channel, true);
       if (channel === 'public') {
         this.localOrderBook.reset();
-        void this.synchronizeOrderBook();
+        this.orderBookSyncAttempt = 0;
+        this.cancelOrderBookSyncRetry();
+        this.scheduleOrderBookSync(socket);
       }
       this.plannedReconnectTimers[channel] = setTimeout(
         () => socket.close(1000, 'planned reconnect'),
@@ -603,18 +699,9 @@ export class MarketDataService {
       this.plannedReconnectTimers[channel] = null;
       this.sockets[channel] = null;
       if (channel === 'public') {
-        const current = this.localOrderBook.view(100);
-        this.cache.updateDepth(
-          current.bids,
-          current.asks,
-          Date.now(),
-          Date.now(),
-          {
-            synchronized: false,
-            lastUpdateId: current.lastUpdateId,
-            levelCount: Math.min(current.bids.length, current.asks.length),
-          },
-        );
+        this.cancelOrderBookSyncRetry();
+        this.orderBookSyncAttempt = 0;
+        this.cache.markDepthUnsynchronized();
       }
       this.cache.setStreamConnected(
         channel,
@@ -747,8 +834,10 @@ export class MarketDataService {
         ]),
       });
       if (result === 'APPLIED') this.publishOrderBook(event.E, receivedAt);
-      else if (result === 'GAP' || result === 'BUFFERED')
-        void this.synchronizeOrderBook();
+      else if (result === 'GAP' || result === 'BUFFERED') {
+        const socket = this.sockets.public;
+        if (socket) this.scheduleOrderBookSync(socket);
+      }
       return;
     }
     if (envelope.stream.includes('@forceOrder')) {

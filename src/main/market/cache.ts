@@ -57,6 +57,10 @@ export class MarketCache {
   private message: string | null = null;
   private validationError: string | null = null;
   private consecutiveFailures = 0;
+  private readonly sourceErrors = new Map<
+    string,
+    { validationError: string; consecutiveFailures: number }
+  >();
   private readonly streamStates: Record<
     MarketStreamChannel,
     {
@@ -242,6 +246,11 @@ export class MarketCache {
     });
     this.pruneSamples(receivedAt);
     this.markSource('depth', eventTime, receivedAt);
+    if (synchronization.synchronized) this.clearSourceError('depth');
+  }
+
+  markDepthUnsynchronized(): void {
+    this.depth.synchronized = false;
   }
 
   addTrade(event: TradeEvent): void {
@@ -275,6 +284,18 @@ export class MarketCache {
   recordValidationError(message: string): void {
     this.validationError = message;
     this.consecutiveFailures += 1;
+  }
+
+  recordSourceError(source: string, validationError: string): void {
+    const current = this.sourceErrors.get(source);
+    this.sourceErrors.set(source, {
+      validationError,
+      consecutiveFailures: (current?.consecutiveFailures ?? 0) + 1,
+    });
+  }
+
+  clearSourceError(source: string): void {
+    this.sourceErrors.delete(source);
   }
 
   getTrades(windowMs: number, now = Date.now()): TradeEvent[] {
@@ -320,7 +341,9 @@ export class MarketCache {
       statistics: [300_000, 900_000],
       'candle:5m': [5_000, 15_000],
       'candle:1m': [5_000, 15_000],
+      'candle:3m': [5_000, 15_000],
       'candle:15m': [5_000, 15_000],
+      'candle:30m': [5_000, 15_000],
       'candle:1h': [5_000, 15_000],
       'candle:4h': [5_000, 15_000],
     };
@@ -332,6 +355,7 @@ export class MarketCache {
           ? this.streamStates[channel]
           : null;
         const ageMs = time ? now - time.receivedAt : Number.POSITIVE_INFINITY;
+        const sourceError = this.sourceErrors.get(source);
         const status: DataStatus = streamState && !streamState.connected
           ? 'DISCONNECTED'
           : !time
@@ -355,8 +379,8 @@ export class MarketCache {
               : 0,
             consecutiveFailures:
               (streamState?.consecutiveFailures ?? 0) +
-              this.consecutiveFailures,
-            validationError: this.validationError,
+              (sourceError?.consecutiveFailures ?? 0),
+            validationError: sourceError?.validationError ?? null,
             message: streamState?.message ?? this.message,
           },
         ];

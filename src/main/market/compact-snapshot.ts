@@ -1,4 +1,10 @@
-import type { MarketSnapshot, TimeframeSnapshot } from '../../shared/contracts';
+import type {
+  AccountStatus,
+  MarketSnapshot,
+  RelayCompactSnapshot,
+  RelaySanitizedTrade,
+  TimeframeSnapshot,
+} from '../../shared/contracts';
 
 // Keep one kilobyte below the public 90KB action ceiling and match Worker.
 export const RELAY_SNAPSHOT_MAX_BYTES = 89_000;
@@ -42,7 +48,7 @@ const MINIMUM_CANDLE_LIMITS = {
 type CandleLimits = Record<keyof typeof PRIMARY_CANDLE_LIMITS, number>;
 
 export interface CompactSnapshotResult {
-  snapshot: MarketSnapshot;
+  snapshot: RelayCompactSnapshot;
   json: string;
   byteLength: number;
   sectionBytes: Record<string, number>;
@@ -59,7 +65,7 @@ function compactTimeframe(
 }
 
 function sectionByteLengths(
-  snapshot: MarketSnapshot,
+  snapshot: RelayCompactSnapshot,
 ): Record<string, number> {
   return Object.fromEntries(
     Object.entries(snapshot).map(([key, value]) => [
@@ -69,12 +75,36 @@ function sectionByteLengths(
   );
 }
 
+function sanitizeRecentTrade(
+  trade: AccountStatus['recentTrades'][number],
+): RelaySanitizedTrade {
+  return {
+    tradeId: trade.tradeId,
+    side: trade.side,
+    positionSide: trade.positionSide,
+    price: trade.price,
+    quantity: trade.quantity,
+    realizedPnl: trade.realizedPnl,
+    commission: trade.commission,
+    commissionAsset: trade.commissionAsset,
+    maker: trade.maker,
+    timestamp: trade.timestamp,
+  };
+}
+
+function sanitizeRecentTrades(
+  trades: AccountStatus['recentTrades'],
+  limit: number,
+): RelaySanitizedTrade[] {
+  return trades.slice(-limit).map(sanitizeRecentTrade);
+}
+
 function buildCompactSnapshot(
   source: MarketSnapshot,
   limits: CandleLimits,
   recentTradeLimit: number,
   orderLimit: number,
-): MarketSnapshot {
+): RelayCompactSnapshot {
   return {
     ...source,
     timeframes: {
@@ -91,7 +121,10 @@ function buildCompactSnapshot(
     account: {
       ...source.account,
       openOrders: source.account.openOrders.slice(-orderLimit),
-      recentTrades: source.account.recentTrades.slice(-recentTradeLimit),
+      recentTrades: sanitizeRecentTrades(
+        source.account.recentTrades,
+        recentTradeLimit,
+      ),
     },
     trading: {
       ...source.trading,
@@ -99,8 +132,10 @@ function buildCompactSnapshot(
         ...source.trading.liveManual,
         protectiveOrders:
           source.trading.liveManual.protectiveOrders.slice(-orderLimit),
-        recentTrades:
-          source.trading.liveManual.recentTrades.slice(-recentTradeLimit),
+        recentTrades: sanitizeRecentTrades(
+          source.trading.liveManual.recentTrades,
+          recentTradeLimit,
+        ),
       },
     },
   };

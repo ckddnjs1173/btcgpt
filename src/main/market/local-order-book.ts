@@ -57,7 +57,7 @@ export class LocalOrderBook {
         event.firstUpdateId <= snapshot.lastUpdateId &&
         event.finalUpdateId >= snapshot.lastUpdateId,
     );
-    if (firstIndex < 0 && relevant.length > 0) {
+    if (firstIndex < 0) {
       this.reset();
       for (const event of relevant) this.buffer(event);
       return false;
