@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { KlineTuple } from '../../src/main/binance/schemas';
 import { MarketCache } from '../../src/main/market/cache';
 import { detectCandleGaps } from '../../src/main/market/gaps';
 import { MarketDataService } from '../../src/main/market/service';
 import type { Candle } from '../../src/main/market/types';
-import type { KlineTuple } from '../../src/main/binance/schemas';
 
 const fixtures = JSON.parse(
   fs.readFileSync(
@@ -21,13 +21,15 @@ const repository = {
 };
 
 describe('recorded Binance public stream integration', () => {
-  it('normalizes trade, depth, liquidation, and closed kline events', () => {
+  it('normalizes trades and candles without exposing an unsynchronized diff book', () => {
     const service = new MarketDataService(repository);
     const receivedAt = 1_700_000_000_500;
     for (const fixture of Object.values(fixtures))
       service.ingestRecordedMessage(JSON.stringify(fixture), receivedAt);
+
     expect(service.cache.getTrades(60_000, receivedAt)).toHaveLength(1);
-    expect(service.cache.depth.bids[0]).toEqual([60_000, 2]);
+    expect(service.cache.depth.synchronized).toBe(false);
+    expect(service.cache.depth.bids).toHaveLength(0);
     expect(service.cache.getLiquidations(60_000, receivedAt)[0]?.notional).toBe(
       29_997.5,
     );
@@ -84,7 +86,7 @@ describe('candle gaps and source freshness', () => {
 describe('disconnect, reconnect, and REST recovery', () => {
   afterEach(() => vi.useRealTimers());
 
-  it('resynchronizes all timeframes before restoring the socket', async () => {
+  it('starts both stream channels and reconnects a failed channel while recovery runs', async () => {
     vi.useFakeTimers();
     class FakeSocket {
       readonly listeners = new Map<string, Array<() => void>>();
@@ -101,35 +103,41 @@ describe('disconnect, reconnect, and REST recovery', () => {
         for (const listener of this.listeners.get(type) ?? []) listener();
       }
     }
+
     const sockets: FakeSocket[] = [];
-    const intervalMs = {
+    const intervalMs: Record<string, number> = {
+      '1m': 60_000,
+      '3m': 180_000,
       '5m': 300_000,
       '15m': 900_000,
+      '30m': 1_800_000,
       '1h': 3_600_000,
       '4h': 14_400_000,
+      '1d': 86_400_000,
+      '1w': 604_800_000,
     };
-    const fetchKlines = vi.fn(
-      (_symbol: 'BTCUSDT', timeframe: keyof typeof intervalMs) =>
-        Promise.resolve(
-          Array.from({ length: 251 }, (_, index) => {
-            const open = index * intervalMs[timeframe];
-            return [
-              open,
-              '60000',
-              '60100',
-              '59900',
-              '60050',
-              '10',
-              open + intervalMs[timeframe] - 1,
-              '600000',
-              100,
-              '6',
-              '360000',
-              '0',
-            ] as KlineTuple;
-          }),
-        ),
-    );
+    const fetchKlines = vi.fn((_symbol: 'BTCUSDT', timeframe: string) => {
+      const interval = intervalMs[timeframe] ?? 60_000;
+      return Promise.resolve(
+        Array.from({ length: 251 }, (_, index) => {
+          const open = index * interval;
+          return [
+            open,
+            '60000',
+            '60100',
+            '59900',
+            '60050',
+            '10',
+            open + interval - 1,
+            '600000',
+            100,
+            '6',
+            '360000',
+            '0',
+          ] as KlineTuple;
+        }),
+      );
+    });
     const dependencies = {
       fetchServerTime: () => Promise.resolve({ serverTime: Date.now() }),
       fetchExchangeInfo: () =>
@@ -221,14 +229,18 @@ describe('disconnect, reconnect, and REST recovery', () => {
         return socket as unknown as WebSocket;
       },
     } as unknown as ConstructorParameters<typeof MarketDataService>[1];
+
     const service = new MarketDataService(repository, dependencies);
     await service.start();
-    expect(sockets).toHaveLength(1);
+    expect(sockets).toHaveLength(2);
+    expect(fetchKlines).toHaveBeenCalledWith('BTCUSDT', '1m', 251);
+    expect(fetchKlines).toHaveBeenCalledWith('BTCUSDT', '1w', 251);
+
     sockets[0]?.emit('open');
     sockets[0]?.emit('close');
     await vi.advanceTimersByTimeAsync(1_500);
-    expect(sockets).toHaveLength(2);
-    expect(fetchKlines).toHaveBeenCalledTimes(8);
+
+    expect(sockets).toHaveLength(3);
     service.stop();
   });
 });
