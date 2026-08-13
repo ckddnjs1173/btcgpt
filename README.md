@@ -10,15 +10,18 @@ Windows 11 데스크톱 보조 프로그램입니다.
 ## 운영 구성
 
 - Electron Main에서 Binance 공개 REST/WebSocket 수집
-- 5m, 15m, 1h, 4h 마감 캔들과 진행 캔들 분리
-- SQLite 로컬 캐시와 자동 gap recovery
-- 객관 지표, 수수료, 슬리피지, 본전가, 위험 수량 계산
-- 선택적 Binance signed GET 읽기 전용 계정 연결
+- 1m, 3m, 5m, 15m, 30m, 1h, 4h 실시간/마감 캔들 및 1d, 1w 마감 참고봉 분리
+- SQLite 로컬 캐시와 자동 candle gap recovery
+- update ID 기반 로컬 order book 동기화와 자동 재동기화
+- 15s~1h 체결 delta, 세션 CVD, 4시간 rolling CVD, OI, 포지셔닝 수집
+- 객관 지표, 수수료, 슬리피지, 본전가, 위험 수량, 청산거리 계산
+- 선택적 Binance signed GET 및 user data stream 읽기 전용 계정 연결
 - Windows safeStorage에 Binance 및 Relay 인증정보 암호화 저장
-- 5초마다 실제 로컬 스냅샷을 Worker/D1에 업로드
-- GPT Action의 최신 스냅샷 조회와 거래 계획 계산 검증
-- stale 또는 불완전 데이터의 분석 차단
-- 10배 격리, BTCUSDT 전용, 사용자 수동 주문 정책 고정
+- 5초마다 Relay용 compact snapshot을 Worker/D1에 업로드
+- schemaVersion 5 `decisionGates`로 시장 분석·신규 진입·포지션 관리 상태 분리
+- GPT Action의 최신 snapshot, 외부 context, lifecycle 조회와 거래 계획 계산 검증
+- 사용자 선택 1~150배 레버리지, 기본 10배, Isolated 전용
+- Windows 절전/복귀 후 시장·계정 스트림 재시작과 데이터 복구
 
 ## 설치 및 실행
 
@@ -80,6 +83,11 @@ GPT Action에는 `worker/openapi/openapi.json`을 등록하고 인증을 API Key
 Bearer로 설정합니다. 인증값에는 `ACTION_READ_KEY`만 사용합니다.
 `UPLOADER_WRITE_KEY`를 GPT에 입력하면 안 됩니다.
 
+GPT Instructions에는 `worker/openapi/GPT_INSTRUCTIONS.md`의 현재 버전을
+사용합니다. 신규 진입 계산에서는 `getLatestSnapshot`의 `snapshotId`를
+`validateTradePlan`에 전달해 분석 시점과 검증 시점의 snapshot이 달라졌는지
+확인합니다.
+
 ## Worker 재배포
 
 D1과 두 Secret은 이미 생성되어 있습니다. Worker 코드 변경 후 기존
@@ -115,7 +123,8 @@ DB, 로그, 백업, `.env`, Binance 키, Relay Secret은 Git 커밋 대상이
 ## 절대 원칙
 
 - BTCUSDT 이외 심볼을 추가하지 않습니다.
-- 레버리지는 10배 격리로 고정합니다.
+- 레버리지는 1~150배에서 사용자가 선택하며 미지정 시 10배이고, 마진은 Isolated만 지원합니다.
+- 고배율을 이유로 사용자 지정 증거금·수량·명목·최대손실을 자동 확대하지 않습니다.
 - 주문 API와 자동 주문 기능을 구현하지 않습니다.
 - OpenAI API를 호출하지 않습니다.
 - 가짜 스냅샷을 운영 Worker/D1에 업로드하지 않습니다.
