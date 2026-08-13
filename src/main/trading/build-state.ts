@@ -27,6 +27,17 @@ function isTradeForSide(
   return trade.positionSide === 'BOTH' || trade.positionSide === side;
 }
 
+function matchesPlanPosition(
+  plan: LockedTradePlan,
+  position: AccountPosition,
+): boolean {
+  return (
+    plan.side === position.side &&
+    plan.leverage === position.leverage &&
+    Math.abs(plan.quantity - position.quantity) < QUANTITY_EPSILON
+  );
+}
+
 function inferLiveTradeStart(
   position: AccountPosition,
   trades: AccountStatus['recentTrades'],
@@ -123,10 +134,7 @@ function createLiveTradeSession(
   const inferred = inferLiveTradeStart(position, recentTrades, now);
   const session: LiveTradeSession = {
     id: randomUUID(),
-    planId:
-      plan && plan.side === position.side && plan.leverage === position.leverage
-        ? plan.id
-        : null,
+    planId: plan && matchesPlanPosition(plan, position) ? plan.id : null,
     status: 'OPEN',
     side: position.side,
     entryPrice: position.entryPrice,
@@ -184,6 +192,22 @@ function updateLiveTradeSession(
   };
 }
 
+function syncBoundPlanStatus(
+  database: AppDatabase,
+  plan: LockedTradePlan | null,
+  session: LiveTradeSession,
+): void {
+  if (!plan || session.planId !== plan.id) return;
+  const desiredStatus: LockedTradePlan['status'] =
+    session.status === 'CLOSED'
+      ? 'CLOSED'
+      : session.status === 'PARTIALLY_CLOSED'
+        ? 'PARTIALLY_CLOSED'
+        : 'ENTERED';
+  if (plan.status !== desiredStatus)
+    database.updateLockedTradePlanStatus(plan.id, desiredStatus);
+}
+
 function syncLiveTradeSessions(
   database: AppDatabase,
   account: AccountStatus,
@@ -213,6 +237,7 @@ function syncLiveTradeSessions(
       now,
     );
     database.saveLiveTradeSession(closed);
+    syncBoundPlanStatus(database, plan, closed);
     lastCompleted = closed;
     active = null;
   }
@@ -228,6 +253,7 @@ function syncLiveTradeSessions(
       now,
     );
     database.saveLiveTradeSession(active);
+    syncBoundPlanStatus(database, plan, active);
     return { active, lastCompleted };
   }
 
@@ -239,6 +265,7 @@ function syncLiveTradeSessions(
       now,
     );
     database.saveLiveTradeSession(closed);
+    syncBoundPlanStatus(database, plan, closed);
     return { active: null, lastCompleted: closed };
   }
 
@@ -283,7 +310,8 @@ function buildProtectiveCoverage(
     stopLossCoverageRatio,
     takeProfitCoverageRatio,
     hasFullStopCoverage: stopLossCoverageRatio >= 1 - QUANTITY_EPSILON,
-    hasFullTakeProfitCoverage: takeProfitCoverageRatio >= 1 - QUANTITY_EPSILON,
+    hasFullTakeProfitCoverage:
+      takeProfitCoverageRatio >= 1 - QUANTITY_EPSILON,
   };
 }
 
@@ -293,12 +321,14 @@ export function buildTradingState(
   now = Date.now(),
 ): TradingState {
   const settings = database.readUserSettings();
-  const plan = database.readActiveLockedTradePlan(settings.tradingMode);
+  const initialPlan = database.readActiveLockedTradePlan(settings.tradingMode);
   const paperTrade = database.readActivePaperTrade();
   const latestPaperTrade = database.readLatestPaperTrade();
   const lastCompletedPaperTrade =
     latestPaperTrade?.status === 'CLOSED' ? latestPaperTrade : null;
-  const liveTrades = syncLiveTradeSessions(database, account, plan, now);
+  const liveTrades = syncLiveTradeSessions(database, account, initialPlan, now);
+  const plan = database.readActiveLockedTradePlan(settings.tradingMode);
+  const lastPlan = database.readLatestLockedTradePlan(settings.tradingMode);
   const blockedReasons: string[] = [];
 
   if (!account.connected) blockedReasons.push('ACCOUNT_NOT_CONNECTED');
@@ -317,12 +347,7 @@ export function buildTradingState(
     protectiveOrders,
   );
   const planMatchesPosition =
-    plan && account.position
-      ? plan.side === account.position.side &&
-        Math.abs(plan.quantity - account.position.quantity) <
-          QUANTITY_EPSILON &&
-        plan.leverage === account.position.leverage
-      : null;
+    plan && account.position ? matchesPlanPosition(plan, account.position) : null;
 
   if (planMatchesPosition === false)
     blockedReasons.push('LIVE_POSITION_DIFFERS_FROM_LOCKED_PLAN');
@@ -330,18 +355,23 @@ export function buildTradingState(
   const lifecycleStage =
     paperTrade || liveTrades.active || account.position
       ? ('MANAGING' as const)
-      : plan?.status === 'ENTERED'
+      : plan?.status === 'LOCKED' && plan.monitoring?.state === 'TRIGGERED'
         ? ('ENTRY_READY' as const)
         : plan?.status === 'LOCKED'
           ? ('WATCHING' as const)
-          : lastCompletedPaperTrade || liveTrades.lastCompleted
-            ? ('CLOSED' as const)
-            : ('FLAT' as const);
+          : lastPlan?.status === 'CANCELLED'
+            ? ('CANCELLED' as const)
+            : lastPlan?.status === 'CLOSED' ||
+                lastCompletedPaperTrade ||
+                liveTrades.lastCompleted
+              ? ('CLOSED' as const)
+              : ('FLAT' as const);
   const lifecycleTrade =
     paperTrade ??
     liveTrades.active ??
     lastCompletedPaperTrade ??
     liveTrades.lastCompleted;
+  const lifecyclePlan = plan ?? lastPlan;
 
   return {
     mode: settings.tradingMode,
@@ -353,6 +383,7 @@ export function buildTradingState(
         paperTrade?.planId ??
         liveTrades.active?.planId ??
         liveTrades.lastCompleted?.planId ??
+        lastPlan?.id ??
         null,
       tradeId: lifecycleTrade?.id ?? null,
       positionSource: paperTrade
@@ -360,12 +391,13 @@ export function buildTradingState(
         : liveTrades.active || account.position
           ? 'BINANCE_READ_ONLY'
           : 'NONE',
-      startedAt: lifecycleTrade?.openedAt ?? plan?.lockedAt ?? null,
-      updatedAt: lifecycleTrade?.updatedAt ?? plan?.lockedAt ?? now,
+      startedAt: lifecycleTrade?.openedAt ?? lifecyclePlan?.lockedAt ?? null,
+      updatedAt: lifecycleTrade?.updatedAt ?? lifecyclePlan?.lockedAt ?? now,
       blockedReasons:
         lifecycleStage === 'MANAGING' && account.position ? blockedReasons : [],
     },
     activePlan: plan,
+    lastPlan,
     activePaperTrade: paperTrade,
     lastCompletedPaperTrade,
     activeLiveTrade: liveTrades.active,
