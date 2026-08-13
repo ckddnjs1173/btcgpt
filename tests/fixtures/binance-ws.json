@@ -15,13 +15,14 @@
     }
   },
   "depth": {
-    "stream": "btcusdt@depth20@100ms",
+    "stream": "btcusdt@depth@100ms",
     "data": {
       "e": "depthUpdate",
       "E": 1700000000200,
       "s": "BTCUSDT",
       "U": 1,
       "u": 2,
+      "pu": 0,
       "b": [["60000.00", "2.0"]],
       "a": [["60000.20", "3.0"]]
     }
