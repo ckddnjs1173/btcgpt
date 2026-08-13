@@ -457,25 +457,6 @@ export function registerIpcHandlers({
       )
         throw new Error(`PLAN_VALIDATION_FAILED:${result.errors.join(',')}`);
       const settings = database.readUserSettings();
-      const existingPlan = database.readActiveLockedTradePlan(
-        settings.tradingMode,
-      );
-      if (existingPlan?.status === 'LOCKED') {
-        const now = Date.now();
-        database.saveLockedTradePlan({
-          ...existingPlan,
-          status: 'CANCELLED',
-          monitoring: existingPlan.monitoring
-            ? {
-                ...existingPlan.monitoring,
-                state: 'CANCELLED',
-                cancelledAt: now,
-              }
-            : existingPlan.monitoring,
-        });
-      } else if (existingPlan) {
-        throw new Error('ACTIVE_TRADE_PLAN_EXISTS');
-      }
       const account = accountService.getStatus();
       const entryFeeRate =
         (input.entryOrderType ?? 'TAKER') === 'MAKER'
@@ -530,6 +511,25 @@ export function registerIpcHandlers({
         },
         lockedAt,
       };
+      const existingPlan = database.readActiveLockedTradePlan(
+        settings.tradingMode,
+      );
+      if (existingPlan?.status === 'LOCKED') {
+        const now = Date.now();
+        database.saveLockedTradePlan({
+          ...existingPlan,
+          status: 'CANCELLED',
+          monitoring: existingPlan.monitoring
+            ? {
+                ...existingPlan.monitoring,
+                state: 'CANCELLED',
+                cancelledAt: now,
+              }
+            : existingPlan.monitoring,
+        });
+      } else if (existingPlan) {
+        throw new Error('ACTIVE_TRADE_PLAN_EXISTS');
+      }
       return database.saveLockedTradePlan(plan);
     },
   );
