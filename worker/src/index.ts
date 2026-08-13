@@ -30,7 +30,12 @@ export interface Env {
 
 const snapshotSchema = z
   .object({
-    schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+    schemaVersion: z.union([
+      z.literal(2),
+      z.literal(3),
+      z.literal(4),
+      z.literal(5),
+    ]),
     appVersion: z.string().max(30).optional(),
     snapshotId: z.string().min(1).max(100),
     symbol: z.literal('BTCUSDT'),
@@ -79,7 +84,8 @@ const snapshotSchema = z
     )
       context.addIssue({
         code: 'custom',
-        message: 'Schema version 3 or newer requires scalpContext and 1m timeframe',
+        message:
+          'Schema version 3 or newer requires scalpContext and 1m timeframe',
       });
     if (snapshot.schemaVersion >= 5 && !snapshot.decisionGates)
       context.addIssue({
@@ -173,26 +179,29 @@ const contextUploadSchema = z
   })
   .strict();
 
-const planSchema = z.object({
-  side: z.enum(['LONG', 'SHORT']),
-  entry: z.number().positive(),
-  stop: z.number().positive(),
-  targets: z.array(z.number().positive()).min(1).max(3),
-  maxLossUsdt: z.number().positive().optional(),
-  riskPercent: z.number().positive().max(1).optional(),
-  entryOrderType: z.enum(['MAKER', 'TAKER']).default('TAKER'),
-  exitOrderType: z.enum(['MAKER', 'TAKER']).default('TAKER'),
-  expectedFundingPeriods: z.number().int().min(0).max(12).default(0),
-  leverage: z.number().int().min(1).max(150).default(10),
-  sizeMode: z.enum([
-    'MARGIN_USDT',
-    'QUANTITY_BTC',
-    'NOTIONAL_USDT',
-    'MAX_LOSS_USDT',
-  ]),
-  sizeValue: z.number().positive(),
-  marginMode: z.literal('ISOLATED'),
-}).strict();
+const planSchema = z
+  .object({
+    snapshotId: z.string().min(1).max(100).optional(),
+    side: z.enum(['LONG', 'SHORT']),
+    entry: z.number().positive(),
+    stop: z.number().positive(),
+    targets: z.array(z.number().positive()).min(1).max(3),
+    maxLossUsdt: z.number().positive().optional(),
+    riskPercent: z.number().positive().max(1).optional(),
+    entryOrderType: z.enum(['MAKER', 'TAKER']).default('TAKER'),
+    exitOrderType: z.enum(['MAKER', 'TAKER']).default('TAKER'),
+    expectedFundingPeriods: z.number().int().min(0).max(12).default(0),
+    leverage: z.number().int().min(1).max(150).default(10),
+    sizeMode: z.enum([
+      'MARGIN_USDT',
+      'QUANTITY_BTC',
+      'NOTIONAL_USDT',
+      'MAX_LOSS_USDT',
+    ]),
+    sizeValue: z.number().positive(),
+    marginMode: z.literal('ISOLATED'),
+  })
+  .strict();
 
 const rateBuckets = new Map<string, { startedAt: number; count: number }>();
 const FORBIDDEN_SNAPSHOT_KEYS = new Set([
@@ -297,13 +306,10 @@ async function save(env: Env, raw: string, generatedAt: number): Promise<void> {
            generated_at=excluded.generated_at, received_at=excluded.received_at
          WHERE excluded.generated_at >= latest_trading_state.generated_at`,
       )
-      .bind(
-        JSON.stringify(snapshot.trading),
-        generatedAt,
-        receivedAt,
-      )
+      .bind(JSON.stringify(snapshot.trading), generatedAt, receivedAt)
       .run();
-    if (!tradingResult.success) throw new Error('D1_TRADING_STATE_WRITE_FAILED');
+    if (!tradingResult.success)
+      throw new Error('D1_TRADING_STATE_WRITE_FAILED');
   }
 }
 
@@ -333,13 +339,13 @@ async function saveContext(
   const snapshot = parsed.snapshot;
   const result = await requireDatabase(env)
     .prepare(
-        `INSERT INTO external_context_payloads
+      `INSERT INTO external_context_payloads
           (horizon, payload, generated_at, received_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(horizon) DO UPDATE SET payload=excluded.payload,
            generated_at=excluded.generated_at, received_at=excluded.received_at
          WHERE excluded.generated_at >= external_context_payloads.generated_at`,
-      )
+    )
     .bind(
       snapshot.horizon,
       JSON.stringify(snapshot),
@@ -361,7 +367,8 @@ async function saveContext(
     )
     .bind(JSON.stringify(summary), parsed.generatedAt, receivedAt)
     .run();
-  if (!summaryResult.success) throw new Error('D1_CONTEXT_SUMMARY_WRITE_FAILED');
+  if (!summaryResult.success)
+    throw new Error('D1_CONTEXT_SUMMARY_WRITE_FAILED');
 }
 
 async function loadContext(env: Env, horizon: string) {
@@ -396,10 +403,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     }
   }
 
-  if (
-    request.method === 'GET' &&
-    url.pathname === '/v1/uploader/status'
-  ) {
+  if (request.method === 'GET' && url.pathname === '/v1/uploader/status') {
     if (!authorized(request, env.UPLOADER_WRITE_KEY))
       return json({ error: 'UNAUTHORIZED' }, 401);
     try {
@@ -461,8 +465,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
       publishedAt: stored.receivedAt,
     };
     const originalDecisionGates = payload.decisionGates as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     if (originalDecisionGates) {
       const criticalBlockers = [
         ...((originalDecisionGates.criticalBlockers as string[] | undefined) ??
@@ -547,9 +550,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
         responseBody.riskContext = {
           ...risk,
           status:
-            riskAgeMs > 60 * 60_000
-              ? 'STALE'
-              : (risk.status ?? 'UNAVAILABLE'),
+            riskAgeMs > 60 * 60_000 ? 'STALE' : (risk.status ?? 'UNAVAILABLE'),
           ageMs: riskAgeMs,
         };
       } else {
@@ -576,10 +577,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     return json(responseBody);
   }
 
-  if (
-    url.pathname === '/v1/trading-state/latest' &&
-    request.method === 'GET'
-  ) {
+  if (url.pathname === '/v1/trading-state/latest' && request.method === 'GET') {
     if (!authorized(request, env.ACTION_READ_KEY))
       return json({ error: 'UNAUTHORIZED' }, 401);
     let stored;
@@ -621,9 +619,9 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     if (
       candidate.data.generatedAt > Date.now() + FUTURE_TOLERANCE_MS ||
       candidate.data.snapshot.items.some(
-          (contextItem) =>
-            contextItem.publishedAt > Date.now() + FUTURE_TOLERANCE_MS,
-        )
+        (contextItem) =>
+          contextItem.publishedAt > Date.now() + FUTURE_TOLERANCE_MS,
+      )
     )
       return json({ error: 'FUTURE_EXTERNAL_CONTEXT' }, 400);
     try {
@@ -645,8 +643,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
       if (!storedContext) return json({ error: 'NOT_FOUND' }, 404);
       const payload = JSON.parse(storedContext.raw) as Record<string, unknown>;
       const ageMs = Date.now() - storedContext.generatedAt;
-      if (ageMs > 60 * 60_000)
-        payload.status = 'STALE';
+      if (ageMs > 60 * 60_000) payload.status = 'STALE';
       const responseBody = {
         ...payload,
         ageMs,
@@ -707,7 +704,10 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     if (Date.now() - stored.generatedAt > MAX_SNAPSHOT_AGE_MS)
       return validationFailure(['SNAPSHOT_STALE'], 409);
     const snapshot = JSON.parse(stored.raw) as {
+      schemaVersion?: number;
+      snapshotId?: string;
       analysisGate?: { analysisAllowed?: boolean };
+      decisionGates?: { entryAllowed?: boolean };
       marketState?: { fundingRate?: number | null };
       productFilters?: {
         tickSize?: number;
@@ -736,8 +736,13 @@ export async function handler(request: Request, env: Env): Promise<Response> {
         riskPercent?: number | null;
       };
     };
-    if (snapshot.analysisGate?.analysisAllowed !== true)
-      return validationFailure(['ANALYSIS_NOT_ALLOWED'], 409);
+    if (plan.snapshotId && plan.snapshotId !== snapshot.snapshotId)
+      return validationFailure(['SNAPSHOT_CHANGED_REVALIDATE'], 409);
+    const entryAllowed =
+      (snapshot.schemaVersion ?? 0) >= 5
+        ? snapshot.decisionGates?.entryAllowed === true
+        : snapshot.analysisGate?.analysisAllowed === true;
+    if (!entryAllowed) return validationFailure(['ENTRY_NOT_ALLOWED'], 409);
     const filters = snapshot.productFilters;
     if (
       !filters?.tickSize ||
@@ -774,11 +779,9 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     const lossPerUnit =
       Math.abs(plan.entry - plan.stop) +
       plan.entry *
-        ((entryFeeRate ?? 0) +
-          Math.max(entrySlippageRate, exitSlippageRate)) +
+        ((entryFeeRate ?? 0) + Math.max(entrySlippageRate, exitSlippageRate)) +
       plan.stop *
-        ((exitFeeRate ?? 0) +
-          Math.max(entrySlippageRate, exitSlippageRate));
+        ((exitFeeRate ?? 0) + Math.max(entrySlippageRate, exitSlippageRate));
     const provisionalQuantity =
       plan.sizeMode === 'MARGIN_USDT'
         ? (plan.sizeValue * plan.leverage) / plan.entry
@@ -845,6 +848,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
               exitFeeRate: exitFeeRate ?? 0,
               entrySlippageRate,
               exitSlippageRate,
+              leverage: plan.leverage,
               fundingRate:
                 quantity > 0
                   ? signedFundingPayment(
@@ -881,10 +885,8 @@ export async function handler(request: Request, env: Env): Promise<Response> {
         initialMargin:
           quantity > 0 ? (plan.entry * quantity) / plan.leverage : null,
         requestedQuantity: quantityResult.requestedQuantity,
-        estimatedLiquidationPrice:
-          quantityResult.estimatedLiquidationPrice,
-        liquidationDistancePercent:
-          quantityResult.liquidationDistancePercent,
+        estimatedLiquidationPrice: quantityResult.estimatedLiquidationPrice,
+        liquidationDistancePercent: quantityResult.liquidationDistancePercent,
         maximumAllowed: {
           leverage: bracket.initialLeverage,
           notional: bracket.notionalCap,
@@ -893,8 +895,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
         },
         targets,
         calculationSource: {
-          snapshotId: (JSON.parse(stored.raw) as { snapshotId?: string })
-            .snapshotId,
+          snapshotId: snapshot.snapshotId,
           generatedAt: stored.generatedAt,
           productFilters: filters,
           feeRates: { entryFeeRate, exitFeeRate },

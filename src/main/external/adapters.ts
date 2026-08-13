@@ -36,8 +36,13 @@ function stableId(source: string, title: string, publishedAt: number): string {
 
 function relevance(text: string): 'HIGH' | 'MEDIUM' | 'LOW' {
   const normalized = text.toLowerCase();
-  if (/\b(bitcoin|btc|crypto|binance|spot etf)\b/.test(normalized)) return 'HIGH';
-  if (/\b(fomc|cpi|inflation|interest rate|employment|futures|derivative)\b/.test(normalized))
+  if (/\b(bitcoin|btc|crypto|binance|spot etf)\b/.test(normalized))
+    return 'HIGH';
+  if (
+    /\b(fomc|cpi|inflation|interest rate|employment|futures|derivative)\b/.test(
+      normalized,
+    )
+  )
     return 'MEDIUM';
   return 'LOW';
 }
@@ -55,8 +60,10 @@ export function item(
 ): ExternalContextItem {
   const safeTitle = clean(title, 240);
   const parsedUrl = new URL(url);
-  if (parsedUrl.protocol !== 'https:') throw new Error('EXTERNAL_URL_NOT_HTTPS');
-  if (publishedAt > observedAt + 5 * 60_000) throw new Error('FUTURE_PUBLISHED_AT');
+  if (parsedUrl.protocol !== 'https:')
+    throw new Error('EXTERNAL_URL_NOT_HTTPS');
+  if (publishedAt > observedAt + 5 * 60_000)
+    throw new Error('FUTURE_PUBLISHED_AT');
   return {
     id: stableId(source, safeTitle, publishedAt),
     source,
@@ -71,7 +78,10 @@ export function item(
     btcRelevance: relevance(`${safeTitle} ${snippet ?? ''}`),
     duplicateGroupId: null,
     duplicateCount: 1,
-    tags: [...new Set(tags.map((tag) => clean(tag, 40)).filter(Boolean))].slice(0, 12),
+    tags: [...new Set(tags.map((tag) => clean(tag, 40)).filter(Boolean))].slice(
+      0,
+      12,
+    ),
   };
 }
 
@@ -95,8 +105,11 @@ async function getText(url: string): Promise<string> {
 
 function xmlValue(block: string, names: string[]): string | null {
   for (const name of names) {
-    const match = block.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, 'i'));
-    if (match?.[1]) return clean(match[1].replace(/^<!\[CDATA\[|\]\]>$/g, ''), 2_000);
+    const match = block.match(
+      new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, 'i'),
+    );
+    if (match?.[1])
+      return clean(match[1].replace(/^<!\[CDATA\[|\]\]>$/g, ''), 2_000);
   }
   return null;
 }
@@ -148,9 +161,14 @@ export const sourceAdapters = {
       ),
     );
     const rows = z.array(jsonRecord).parse(raw.result);
-    const totalOi = rows.reduce((sum, row) => sum + Number(row.open_interest ?? 0), 0);
+    const totalOi = rows.reduce(
+      (sum, row) => sum + Number(row.open_interest ?? 0),
+      0,
+    );
     const ivs = rows.map((row) => Number(row.mark_iv)).filter(Number.isFinite);
-    const averageIv = ivs.length ? ivs.reduce((a, b) => a + b, 0) / ivs.length : null;
+    const averageIv = ivs.length
+      ? ivs.reduce((a, b) => a + b, 0) / ivs.length
+      : null;
     return [
       item(
         'DERIBIT',
@@ -214,7 +232,9 @@ export const sourceAdapters = {
   },
   async fearAndGreed(): Promise<ExternalContextItem[]> {
     const observedAt = Date.now();
-    const raw = jsonRecord.parse(await getJson('https://api.alternative.me/fng/?limit=1&format=json'));
+    const raw = jsonRecord.parse(
+      await getJson('https://api.alternative.me/fng/?limit=1&format=json'),
+    );
     const latest = z.array(jsonRecord).parse(raw.data)[0];
     if (!latest) return [];
     const at = Number(latest.timestamp) * 1_000;
@@ -237,55 +257,67 @@ export const sourceAdapters = {
     const url =
       'https://api.gdeltproject.org/api/v2/doc/doc?query=(bitcoin%20OR%20btc%20OR%20binance)%20sourcelang:english&mode=artlist&maxrecords=50&format=json&sort=datedesc';
     const raw = jsonRecord.parse(await getJson(url));
-    return z.array(jsonRecord).parse(raw.articles ?? []).flatMap((row) => {
-      const publishedAt = Date.parse(textValue(row.seendate));
-      try {
-        return [
-          item(
-            'GDELT',
-            'NEWS',
-            textValue(row.title),
-            textValue(row.url),
-            Number.isFinite(publishedAt) ? publishedAt : observedAt,
-            observedAt,
-            'SINGLE_SOURCE',
-            null,
-            ['news'],
-          ),
-        ];
-      } catch {
-        return [];
-      }
-    });
+    return z
+      .array(jsonRecord)
+      .parse(raw.articles ?? [])
+      .flatMap((row) => {
+        const publishedAt = Date.parse(textValue(row.seendate));
+        try {
+          return [
+            item(
+              'GDELT',
+              'NEWS',
+              textValue(row.title),
+              textValue(row.url),
+              Number.isFinite(publishedAt) ? publishedAt : observedAt,
+              observedAt,
+              'SINGLE_SOURCE',
+              null,
+              ['news'],
+            ),
+          ];
+        } catch {
+          return [];
+        }
+      });
   },
-  async naver(clientId?: string, clientSecret?: string): Promise<ExternalContextItem[]> {
+  async naver(
+    clientId?: string,
+    clientSecret?: string,
+  ): Promise<ExternalContextItem[]> {
     if (!clientId || !clientSecret) return [];
     const observedAt = Date.now();
     const raw = jsonRecord.parse(
       await getJson(
         'https://openapi.naver.com/v1/search/news.json?query=%EB%B9%84%ED%8A%B8%EC%BD%94%EC%9D%B8&display=50&sort=date',
-        { 'X-Naver-Client-Id': clientId, 'X-Naver-Client-Secret': clientSecret },
+        {
+          'X-Naver-Client-Id': clientId,
+          'X-Naver-Client-Secret': clientSecret,
+        },
       ),
     );
-    return z.array(jsonRecord).parse(raw.items).flatMap((row) => {
-      try {
-        return [
-          item(
-            'NAVER_NEWS',
-            'NEWS',
-            textValue(row.title),
-            textValue(row.originallink) || textValue(row.link),
-            Date.parse(textValue(row.pubDate)),
-            observedAt,
-            'SINGLE_SOURCE',
-            textValue(row.description),
-            ['news', 'ko'],
-          ),
-        ];
-      } catch {
-        return [];
-      }
-    });
+    return z
+      .array(jsonRecord)
+      .parse(raw.items)
+      .flatMap((row) => {
+        try {
+          return [
+            item(
+              'NAVER_NEWS',
+              'NEWS',
+              textValue(row.title),
+              textValue(row.originallink) || textValue(row.link),
+              Date.parse(textValue(row.pubDate)),
+              observedAt,
+              'SINGLE_SOURCE',
+              textValue(row.description),
+              ['news', 'ko'],
+            ),
+          ];
+        } catch {
+          return [];
+        }
+      });
   },
 };
 

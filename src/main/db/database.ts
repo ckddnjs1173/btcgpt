@@ -591,7 +591,11 @@ export class AppDatabase {
       netPnl: equity,
       averageNetPnl: trades.length > 0 ? equity / trades.length : null,
       profitFactor:
-        grossLoss > 0 ? grossProfit / grossLoss : trades.length > 0 ? null : null,
+        grossLoss > 0
+          ? grossProfit / grossLoss
+          : trades.length > 0
+            ? null
+            : null,
       maxDrawdown: trades.length > 0 ? maxDrawdown : null,
     };
   }

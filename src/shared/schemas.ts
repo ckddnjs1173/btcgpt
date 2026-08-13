@@ -101,12 +101,7 @@ export const positionCalculationInputSchema = z.object({
   target: z.number().positive().max(10_000_000),
   leverage: z.number().int().min(1).max(150).default(10),
   sizeMode: z
-    .enum([
-      'MARGIN_USDT',
-      'QUANTITY_BTC',
-      'NOTIONAL_USDT',
-      'MAX_LOSS_USDT',
-    ])
+    .enum(['MARGIN_USDT', 'QUANTITY_BTC', 'NOTIONAL_USDT', 'MAX_LOSS_USDT'])
     .default('MAX_LOSS_USDT'),
   sizeValue: z.number().positive().max(1_000_000_000).optional(),
   maxLossUsdt: z.number().positive().nullable().optional(),

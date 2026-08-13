@@ -165,12 +165,7 @@ export function createCompactRelaySnapshot(
   }
 
   if (byteLength >= RELAY_SNAPSHOT_MAX_BYTES) {
-    snapshot = buildCompactSnapshot(
-      fullSnapshot,
-      MINIMUM_CANDLE_LIMITS,
-      5,
-      20,
-    );
+    snapshot = buildCompactSnapshot(fullSnapshot, MINIMUM_CANDLE_LIMITS, 5, 20);
     json = JSON.stringify(snapshot);
     byteLength = Buffer.byteLength(json, 'utf8');
   }

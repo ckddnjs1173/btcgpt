@@ -381,11 +381,11 @@ export class MarketCache {
         const ageMs = time ? now - time.receivedAt : Number.POSITIVE_INFINITY;
         const sourceError = this.sourceErrors.get(source);
         const status: DataStatus = !time
-            ? 'INSUFFICIENT_DATA'
-            : ageMs > stale
-              ? 'STALE'
-              : sourceError
-                ? 'DELAYED'
+          ? 'INSUFFICIENT_DATA'
+          : ageMs > stale
+            ? 'STALE'
+            : sourceError
+              ? 'DELAYED'
               : ageMs > delayed
                 ? 'DELAYED'
                 : 'NORMAL';

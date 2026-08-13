@@ -59,13 +59,13 @@ export class ContextUploader {
         const response = await fetch(
           `${this.configuration.baseUrl}/v1/context/latest?horizon=${horizon}`,
           {
-          method: 'PUT',
-          headers: {
-            authorization: `Bearer ${this.configuration.uploadKey}`,
-            'content-type': 'application/json',
-          },
-          body: raw,
-          signal: AbortSignal.timeout(15_000),
+            method: 'PUT',
+            headers: {
+              authorization: `Bearer ${this.configuration.uploadKey}`,
+              'content-type': 'application/json',
+            },
+            body: raw,
+            signal: AbortSignal.timeout(15_000),
           },
         );
         if (!response.ok)

@@ -139,16 +139,13 @@ export class LocalOrderBook {
       syncState: this.syncState,
       snapshotLastUpdateId: this.observedSnapshotLastUpdateId,
       firstBufferedUpdateId: this.buffered[0]?.firstUpdateId ?? null,
-      lastBufferedFinalUpdateId:
-        this.buffered.at(-1)?.finalUpdateId ?? null,
+      lastBufferedFinalUpdateId: this.buffered.at(-1)?.finalUpdateId ?? null,
       bufferedEventCount: this.buffered.length,
     };
   }
 
   private tryApplyPendingSnapshot():
-    | 'SYNCHRONIZED'
-    | 'WAITING_FOR_BRIDGE'
-    | 'SNAPSHOT_STALE' {
+    'SYNCHRONIZED' | 'WAITING_FOR_BRIDGE' | 'SNAPSHOT_STALE' {
     const snapshot = this.pendingSnapshot;
     if (!snapshot) return 'WAITING_FOR_BRIDGE';
     const firstIndex = this.buffered.findIndex(

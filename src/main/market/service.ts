@@ -24,10 +24,7 @@ import type { Candle, Timeframe } from './types';
 import { detectCandleGaps } from './gaps';
 
 interface CandleRepository {
-  readClosedCandles(
-    timeframe: Timeframe,
-    limit?: number,
-  ): Candle[];
+  readClosedCandles(timeframe: Timeframe, limit?: number): Candle[];
   upsertClosedCandle(candle: Candle): void;
 }
 
@@ -57,10 +54,10 @@ const WS_URLS: Record<MarketStreamChannel, string> = {
   market:
     'wss://fstream.binance.com/market/stream?streams=' +
     [
-    'btcusdt@aggTrade',
-    'btcusdt@markPrice@1s',
-    ...TIMEFRAMES.map((tf) => `btcusdt@kline_${tf}`),
-    'btcusdt@forceOrder',
+      'btcusdt@aggTrade',
+      'btcusdt@markPrice@1s',
+      ...TIMEFRAMES.map((tf) => `btcusdt@kline_${tf}`),
+      'btcusdt@forceOrder',
     ].join('/'),
 };
 
@@ -225,14 +222,21 @@ export class MarketDataService {
       void this.refreshStatistics(runId);
     }, 5 * 60_000);
     this.serverTimeTimer = setInterval(() => {
-      void this.runOptionalTask(runId, 'serverTime', () => this.refreshServerTime(runId));
+      void this.runOptionalTask(runId, 'serverTime', () =>
+        this.refreshServerTime(runId),
+      );
     }, 5 * 60_000);
     this.exchangeInfoTimer = setInterval(() => {
-      void this.runOptionalTask(runId, 'exchangeInfo', () => this.refreshExchangeInfo(runId));
+      void this.runOptionalTask(runId, 'exchangeInfo', () =>
+        this.refreshExchangeInfo(runId),
+      );
     }, 5 * 60_000);
-    this.referenceCandleTimer = setInterval(() => {
-      void this.refreshReferenceCandles(runId);
-    }, 6 * 60 * 60_000);
+    this.referenceCandleTimer = setInterval(
+      () => {
+        void this.refreshReferenceCandles(runId);
+      },
+      6 * 60 * 60_000,
+    );
     this.bootstrap(runId);
     return Promise.resolve();
   }
@@ -345,7 +349,10 @@ export class MarketDataService {
       this.cache.clearSourceError(source);
     } catch (error) {
       if (!this.isRunActive(runId)) return;
-      this.cache.recordSourceError(source, `${source.toUpperCase()}_REST_FAILED`);
+      this.cache.recordSourceError(
+        source,
+        `${source.toUpperCase()}_REST_FAILED`,
+      );
       logger.warn(
         { source, ...safeErrorDetails(error) },
         'Optional market REST source failed',
@@ -430,10 +437,7 @@ export class MarketDataService {
     this.cache.clearSourceError(`candle:${timeframe}`);
   }
 
-  private applyRestCandles(
-    timeframe: Timeframe,
-    tuples: KlineTuple[],
-  ): void {
+  private applyRestCandles(timeframe: Timeframe, tuples: KlineTuple[]): void {
     for (const tuple of tuples) {
       const candle = normalizeRestCandle(timeframe, tuple);
       this.cache.upsertCandle(candle);
@@ -462,7 +466,10 @@ export class MarketDataService {
       },
       () => {
         if (this.isRunActive(runId))
-          this.cache.recordSourceError('market:markRest', 'MARK_PRICE_REST_FAILED');
+          this.cache.recordSourceError(
+            'market:markRest',
+            'MARK_PRICE_REST_FAILED',
+          );
       },
     );
     const tickerTask = this.dependencies.fetchTicker24h().then(
@@ -496,7 +503,10 @@ export class MarketDataService {
       },
       () => {
         if (this.isRunActive(runId))
-          this.cache.recordSourceError('market:tickerRest', 'TICKER_REST_FAILED');
+          this.cache.recordSourceError(
+            'market:tickerRest',
+            'TICKER_REST_FAILED',
+          );
       },
     );
     const oiTask = this.dependencies.fetchOpenInterest().then(
@@ -548,7 +558,10 @@ export class MarketDataService {
           },
           () => {
             if (this.isRunActive(runId))
-              this.cache.recordSourceError('depth', 'FALLBACK_DEPTH_REST_FAILED');
+              this.cache.recordSourceError(
+                'depth',
+                'FALLBACK_DEPTH_REST_FAILED',
+              );
           },
         );
     const tradesTask = this.dependencies.fetchAggregateTrades(100).then(
@@ -568,7 +581,10 @@ export class MarketDataService {
       },
       () => {
         if (this.isRunActive(runId))
-          this.cache.recordSourceError('trades', 'AGGREGATE_TRADES_REST_FAILED');
+          this.cache.recordSourceError(
+            'trades',
+            'AGGREGATE_TRADES_REST_FAILED',
+          );
       },
     );
     await Promise.allSettled([
@@ -584,19 +600,19 @@ export class MarketDataService {
     await Promise.allSettled(
       TIMEFRAMES.map(async (timeframe) => {
         try {
-        const tuples = await this.dependencies.fetchKlines(
-          'BTCUSDT',
-          timeframe,
-          3,
-        );
-        if (!this.isRunActive(runId)) return;
-        this.applyRestCandles(timeframe, tuples);
-        const gaps = detectCandleGaps(
-          this.cache.getClosed(timeframe).slice(-251),
-          timeframe,
-        );
-        if (gaps.length > 0) await this.recoverTimeframe(timeframe, runId);
-        this.cache.clearSourceError(`candle:${timeframe}`);
+          const tuples = await this.dependencies.fetchKlines(
+            'BTCUSDT',
+            timeframe,
+            3,
+          );
+          if (!this.isRunActive(runId)) return;
+          this.applyRestCandles(timeframe, tuples);
+          const gaps = detectCandleGaps(
+            this.cache.getClosed(timeframe).slice(-251),
+            timeframe,
+          );
+          if (gaps.length > 0) await this.recoverTimeframe(timeframe, runId);
+          this.cache.clearSourceError(`candle:${timeframe}`);
         } catch (error) {
           if (!this.isRunActive(runId)) return;
           this.cache.recordSourceError(
@@ -651,37 +667,44 @@ export class MarketDataService {
         const latest = result.value.at(-1);
         sentiment[field] = optionalNumber(
           field === 'takerBuySellRatio'
-            ? latest?.buySellRatio ?? latest?.longShortRatio
+            ? (latest?.buySellRatio ?? latest?.longShortRatio)
             : latest?.longShortRatio,
         );
         this.cache.clearSourceError(source);
-      } else this.cache.recordSourceError(source, `${source.toUpperCase()}_FAILED`);
+      } else
+        this.cache.recordSourceError(source, `${source.toUpperCase()}_FAILED`);
     };
     applyRatio(global, 'globalLongShortAccountRatio', 'statistics:globalRatio');
     applyRatio(topAccount, 'topLongShortAccountRatio', 'statistics:topAccount');
-    applyRatio(topPosition, 'topLongShortPositionRatio', 'statistics:topPosition');
+    applyRatio(
+      topPosition,
+      'topLongShortPositionRatio',
+      'statistics:topPosition',
+    );
     applyRatio(taker, 'takerBuySellRatio', 'statistics:takerRatio');
     const openInterestChanges: NonNullable<
       Parameters<MarketCache['updateSentiment']>[0]['openInterestChanges']
     > = {};
     STATISTICS_TIMEFRAMES.forEach((timeframe, index) => {
-        const result = oiHistories[index];
-        const history = result?.status === 'fulfilled' ? result.value : [];
-        const source = `statistics:oi:${timeframe}`;
-        if (result?.status === 'fulfilled') {
-          this.cache.clearSourceError(source);
-          openInterestChanges[timeframe] = history.length >= 2
+      const result = oiHistories[index];
+      const history = result?.status === 'fulfilled' ? result.value : [];
+      const source = `statistics:oi:${timeframe}`;
+      if (result?.status === 'fulfilled') {
+        this.cache.clearSourceError(source);
+        openInterestChanges[timeframe] =
+          history.length >= 2
             ? percentageChange(
                 Number(history.at(-1)?.sumOpenInterest),
                 Number(history.at(-2)?.sumOpenInterest),
               )
             : null;
-        } else
-          this.cache.recordSourceError(source, `OI_HISTORY_FAILED_${timeframe}`);
-      });
+      } else
+        this.cache.recordSourceError(source, `OI_HISTORY_FAILED_${timeframe}`);
+    });
     if (Object.keys(openInterestChanges).length > 0)
       sentiment.openInterestChanges = openInterestChanges;
-    if (Object.keys(sentiment).length > 0) this.cache.updateSentiment(sentiment);
+    if (Object.keys(sentiment).length > 0)
+      this.cache.updateSentiment(sentiment);
   }
 
   private publishOrderBook(eventTime: number, receivedAt: number): void {
@@ -753,9 +776,10 @@ export class MarketDataService {
     return 'DEPTH_SNAPSHOT_REQUEST_FAILED';
   }
 
-  private orderBookRetryDetails(
-    errorCode: string,
-  ): { attempt: number; nextRetryMs: number } {
+  private orderBookRetryDetails(errorCode: string): {
+    attempt: number;
+    nextRetryMs: number;
+  } {
     const attempt = this.orderBookSyncAttempt + 1;
     const base = Math.min(
       ORDER_BOOK_RETRY_MAX_MS,
@@ -919,7 +943,11 @@ export class MarketDataService {
     timeframe: (typeof REFERENCE_TIMEFRAMES)[number],
     runId: number,
   ): Promise<void> {
-    const tuples = await this.dependencies.fetchKlines('BTCUSDT', timeframe, 251);
+    const tuples = await this.dependencies.fetchKlines(
+      'BTCUSDT',
+      timeframe,
+      251,
+    );
     if (!this.isRunActive(runId)) return;
     this.applyRestCandles(timeframe, tuples);
     this.cache.clearSourceError(`candle:${timeframe}`);
@@ -947,10 +975,7 @@ export class MarketDataService {
 
   private scheduleReconnect(channel: MarketStreamChannel, runId: number): void {
     if (!this.isRunActive(runId) || this.reconnectTimers[channel]) return;
-    const base = Math.min(
-      30_000,
-      1_000 * 2 ** this.reconnectAttempts[channel],
-    );
+    const base = Math.min(30_000, 1_000 * 2 ** this.reconnectAttempts[channel]);
     const delay = Math.round(base * (0.8 + Math.random() * 0.4));
     this.reconnectAttempts[channel] += 1;
     this.reconnectTimers[channel] = setTimeout(() => {
@@ -1056,9 +1081,7 @@ export class MarketDataService {
         const socket = this.sockets.public;
         if (socket) {
           const errorCode =
-            result === 'GAP'
-              ? 'DEPTH_UPDATE_ID_GAP'
-              : 'DEPTH_SNAPSHOT_STALE';
+            result === 'GAP' ? 'DEPTH_UPDATE_ID_GAP' : 'DEPTH_SNAPSHOT_STALE';
           const retry = this.orderBookRetryDetails(errorCode);
           this.scheduleOrderBookSync(socket, retry.nextRetryMs);
         }

@@ -133,7 +133,9 @@ export class BinanceAccountClient {
       signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok)
-      throw new Error(`Binance user stream API returned HTTP ${response.status}`);
+      throw new Error(
+        `Binance user stream API returned HTTP ${response.status}`,
+      );
     return (await response.json()) as unknown;
   }
 
@@ -197,7 +199,9 @@ export class BinanceAccountClient {
     );
     if (activePositions.length === 0) return null;
     if (activePositions.length > 1)
-      throw new Error('Multiple active BTCUSDT position legs are not supported');
+      throw new Error(
+        'Multiple active BTCUSDT position legs are not supported',
+      );
     const item = activePositions[0]!;
     const amount = Number(item.positionAmt);
     const side =

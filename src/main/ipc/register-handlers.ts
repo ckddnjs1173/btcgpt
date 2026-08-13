@@ -62,10 +62,7 @@ interface RegisterIpcHandlersOptions {
   getRelayStatus: () => RelayStatus;
   configureRelay: (input: RelayConfigurationInput) => Promise<void>;
   disconnectRelay: () => void;
-  configureNaver: (input: {
-    clientId: string;
-    clientSecret: string;
-  }) => void;
+  configureNaver: (input: { clientId: string; clientSecret: string }) => void;
   disconnectNaver: () => void;
 }
 
@@ -211,206 +208,153 @@ export function registerIpcHandlers({
   const validatePositionPlan = (
     rawInput: unknown,
   ): PositionCalculationResult => {
-      const input = positionCalculationInputSchema.parse(rawInput);
-      const settings = database.readUserSettings();
-      const accountCommission = accountService.getStatus().commission;
-      const makerFeeRate =
-        accountCommission?.makerRate ?? settings.makerFeeRate;
-      const takerFeeRate =
-        accountCommission?.takerRate ?? settings.takerFeeRate;
-      const filters = marketData.cache.productFilters;
-      const errors: string[] = [];
-      if (makerFeeRate === null || takerFeeRate === null)
-        errors.push('FEE_RATE_REQUIRED');
-      if (
-        settings.entrySlippageBps === null ||
-        settings.exitSlippageBps === null
-      )
-        errors.push('SLIPPAGE_INPUT_REQUIRED');
-      if (!filters) errors.push('PRODUCT_FILTERS_REQUIRED');
-      const account = accountService.getStatus();
-      if (!account.connected) errors.push('BINANCE_READ_ONLY_ACCOUNT_REQUIRED');
-      if (account.leverageBrackets.length === 0)
-        errors.push('LEVERAGE_BRACKETS_REQUIRED');
-      if (
-        (input.side === 'LONG' &&
-          (input.stop >= input.entry || input.target <= input.entry)) ||
-        (input.side === 'SHORT' &&
-          (input.stop <= input.entry || input.target >= input.entry))
-      )
-        errors.push('INVALID_STOP_OR_TARGET_DIRECTION');
-      if (errors.length || !filters)
-        return {
-          valid: false,
-          errors,
-          warnings: [],
-          quantity: null,
-          requestedQuantity: null,
-          notional: null,
-          isolatedMargin: null,
-          leverage: input.leverage,
-          sizeMode: input.sizeMode,
-          sizeValue: input.sizeValue ?? null,
-          breakevenPrice: null,
-          estimatedLiquidationPrice: null,
-          liquidationDistancePercent: null,
-          maximumAllowed: {
-            leverage: null,
-            notional: null,
-            quantity: null,
-            margin: null,
-          },
-          estimatedMaxLoss: null,
-          target: null,
-        };
-      const entryFeeRate =
-        (input.entryOrderType ?? 'TAKER') === 'MAKER'
-          ? (makerFeeRate ?? 0)
-          : (takerFeeRate ?? 0);
-      const exitFeeRate =
-        (input.exitOrderType ?? 'TAKER') === 'MAKER'
-          ? (makerFeeRate ?? 0)
-          : (takerFeeRate ?? 0);
-      const slippageRate =
-        Math.max(
-          settings.entrySlippageBps ?? 0,
-          settings.exitSlippageBps ?? 0,
-        ) / 10_000;
-      const entrySlippageRate = (settings.entrySlippageBps ?? 0) / 10_000;
-      const exitSlippageRate = (settings.exitSlippageBps ?? 0) / 10_000;
-      const provisionalQuantity =
-        input.sizeMode === 'MARGIN_USDT' && input.sizeValue
-          ? (input.sizeValue * input.leverage) / input.entry
-          : input.sizeMode === 'QUANTITY_BTC' && input.sizeValue
-            ? input.sizeValue
-            : input.sizeMode === 'NOTIONAL_USDT' && input.sizeValue
-              ? input.sizeValue / input.entry
-              : input.sizeValue && input.sizeMode === 'MAX_LOSS_USDT'
-                ? input.sizeValue /
-                  (Math.abs(input.entry - input.stop) +
-                    input.entry * (entryFeeRate + slippageRate) +
-                    input.stop * (exitFeeRate + slippageRate))
-                : 0;
-      const provisionalNotional = provisionalQuantity * input.entry;
-      const bracket =
-        account.leverageBrackets.find(
-          (candidate) =>
-            provisionalNotional >= candidate.notionalFloor &&
-            provisionalNotional <= candidate.notionalCap,
-        ) ?? account.leverageBrackets.at(-1);
-      if (!input.sizeValue || !bracket)
-        return {
-          valid: false,
-          errors: [
-            !input.sizeValue ? 'SIZE_VALUE_REQUIRED' : 'LEVERAGE_BRACKET_NOT_FOUND',
-          ],
-          warnings: [],
-          quantity: null,
-          requestedQuantity: null,
-          notional: null,
-          isolatedMargin: null,
-          leverage: input.leverage,
-          sizeMode: input.sizeMode,
-          sizeValue: input.sizeValue ?? null,
-          breakevenPrice: null,
-          estimatedLiquidationPrice: null,
-          liquidationDistancePercent: null,
-          maximumAllowed: {
-            leverage: bracket?.initialLeverage ?? null,
-            notional: bracket?.notionalCap ?? null,
-            quantity: bracket ? bracket.notionalCap / input.entry : null,
-            margin: bracket ? bracket.notionalCap / input.leverage : null,
-          },
-          estimatedMaxLoss: null,
-          target: null,
-        };
-      const quantity = validateExactPositionSize({
-        side: input.side,
-        entry: input.entry,
-        stop: input.stop,
+    const input = positionCalculationInputSchema.parse(rawInput);
+    const settings = database.readUserSettings();
+    const accountCommission = accountService.getStatus().commission;
+    const makerFeeRate = accountCommission?.makerRate ?? settings.makerFeeRate;
+    const takerFeeRate = accountCommission?.takerRate ?? settings.takerFeeRate;
+    const filters = marketData.cache.productFilters;
+    const errors: string[] = [];
+    if (makerFeeRate === null || takerFeeRate === null)
+      errors.push('FEE_RATE_REQUIRED');
+    if (settings.entrySlippageBps === null || settings.exitSlippageBps === null)
+      errors.push('SLIPPAGE_INPUT_REQUIRED');
+    if (!filters) errors.push('PRODUCT_FILTERS_REQUIRED');
+    const account = accountService.getStatus();
+    if (!account.connected) errors.push('BINANCE_READ_ONLY_ACCOUNT_REQUIRED');
+    if (account.leverageBrackets.length === 0)
+      errors.push('LEVERAGE_BRACKETS_REQUIRED');
+    if (
+      (input.side === 'LONG' &&
+        (input.stop >= input.entry || input.target <= input.entry)) ||
+      (input.side === 'SHORT' &&
+        (input.stop <= input.entry || input.target >= input.entry))
+    )
+      errors.push('INVALID_STOP_OR_TARGET_DIRECTION');
+    if (errors.length || !filters)
+      return {
+        valid: false,
+        errors,
+        warnings: [],
+        quantity: null,
+        requestedQuantity: null,
+        notional: null,
+        isolatedMargin: null,
         leverage: input.leverage,
         sizeMode: input.sizeMode,
-        sizeValue: input.sizeValue,
-        maximumLeverage: bracket.initialLeverage,
-        maximumNotional: bracket.notionalCap,
-        maintenanceMarginRate: bracket.maintenanceMarginRate,
-        maxLossUsdt:
-          input.maxLossUsdt ??
-          (input.sizeMode === 'MAX_LOSS_USDT'
-            ? input.sizeValue
-            : settings.maxLossUsdt),
-        accountEquity: input.accountEquity,
-        riskPercent: input.riskPercent ?? settings.riskPercent,
-        availableMargin: account.balance?.availableBalance,
-        entryFeeRate,
-        exitFeeRate,
-        slippageRate,
-        stepSize: filters.stepSize,
-        minQuantity: filters.minQuantity,
-        minNotional: filters.minNotional,
-        tickSize: filters.tickSize,
-      });
-      if (!quantity.valid)
-        return {
-          valid: false,
-          errors: quantity.reasons,
-          warnings: quantity.warnings,
+        sizeValue: input.sizeValue ?? null,
+        breakevenPrice: null,
+        estimatedLiquidationPrice: null,
+        liquidationDistancePercent: null,
+        maximumAllowed: {
+          leverage: null,
+          notional: null,
           quantity: null,
-          requestedQuantity: quantity.requestedQuantity,
-          notional: quantity.notional,
-          isolatedMargin: quantity.isolatedMargin,
-          leverage: input.leverage,
-          sizeMode: input.sizeMode,
-          sizeValue: input.sizeValue,
-          breakevenPrice: null,
-          estimatedLiquidationPrice: quantity.estimatedLiquidationPrice,
-          liquidationDistancePercent: quantity.liquidationDistancePercent,
-          maximumAllowed: {
-            leverage: bracket.initialLeverage,
-            notional: bracket.notionalCap,
-            quantity: quantity.maximumQuantity,
-            margin: quantity.maximumMargin,
-          },
-          estimatedMaxLoss: quantity.estimatedMaxLoss,
-          target: null,
-        };
-      const fundingPayment = signedFundingPayment(
-        input.side,
-        input.entry * quantity.quantity,
-        marketData.cache.state.fundingRate ?? 0,
-      );
-      const plan = calculatePlan({
-        side: input.side,
-        entry: input.entry,
-        exit: input.target,
-        quantity: quantity.quantity,
-        entryFeeRate,
-        exitFeeRate,
-        entrySlippageRate,
-        exitSlippageRate,
-        fundingRate: fundingPayment / (input.entry * quantity.quantity),
-        leverage: input.leverage,
-      });
+          margin: null,
+        },
+        estimatedMaxLoss: null,
+        target: null,
+      };
+    const entryFeeRate =
+      (input.entryOrderType ?? 'TAKER') === 'MAKER'
+        ? (makerFeeRate ?? 0)
+        : (takerFeeRate ?? 0);
+    const exitFeeRate =
+      (input.exitOrderType ?? 'TAKER') === 'MAKER'
+        ? (makerFeeRate ?? 0)
+        : (takerFeeRate ?? 0);
+    const slippageRate =
+      Math.max(settings.entrySlippageBps ?? 0, settings.exitSlippageBps ?? 0) /
+      10_000;
+    const entrySlippageRate = (settings.entrySlippageBps ?? 0) / 10_000;
+    const exitSlippageRate = (settings.exitSlippageBps ?? 0) / 10_000;
+    const provisionalQuantity =
+      input.sizeMode === 'MARGIN_USDT' && input.sizeValue
+        ? (input.sizeValue * input.leverage) / input.entry
+        : input.sizeMode === 'QUANTITY_BTC' && input.sizeValue
+          ? input.sizeValue
+          : input.sizeMode === 'NOTIONAL_USDT' && input.sizeValue
+            ? input.sizeValue / input.entry
+            : input.sizeValue && input.sizeMode === 'MAX_LOSS_USDT'
+              ? input.sizeValue /
+                (Math.abs(input.entry - input.stop) +
+                  input.entry * (entryFeeRate + slippageRate) +
+                  input.stop * (exitFeeRate + slippageRate))
+              : 0;
+    const provisionalNotional = provisionalQuantity * input.entry;
+    const bracket =
+      account.leverageBrackets.find(
+        (candidate) =>
+          provisionalNotional >= candidate.notionalFloor &&
+          provisionalNotional <= candidate.notionalCap,
+      ) ?? account.leverageBrackets.at(-1);
+    if (!input.sizeValue || !bracket)
       return {
-        valid: true,
-        errors: [],
+        valid: false,
+        errors: [
+          !input.sizeValue
+            ? 'SIZE_VALUE_REQUIRED'
+            : 'LEVERAGE_BRACKET_NOT_FOUND',
+        ],
+        warnings: [],
+        quantity: null,
+        requestedQuantity: null,
+        notional: null,
+        isolatedMargin: null,
+        leverage: input.leverage,
+        sizeMode: input.sizeMode,
+        sizeValue: input.sizeValue ?? null,
+        breakevenPrice: null,
+        estimatedLiquidationPrice: null,
+        liquidationDistancePercent: null,
+        maximumAllowed: {
+          leverage: bracket?.initialLeverage ?? null,
+          notional: bracket?.notionalCap ?? null,
+          quantity: bracket ? bracket.notionalCap / input.entry : null,
+          margin: bracket ? bracket.notionalCap / input.leverage : null,
+        },
+        estimatedMaxLoss: null,
+        target: null,
+      };
+    const quantity = validateExactPositionSize({
+      side: input.side,
+      entry: input.entry,
+      stop: input.stop,
+      leverage: input.leverage,
+      sizeMode: input.sizeMode,
+      sizeValue: input.sizeValue,
+      maximumLeverage: bracket.initialLeverage,
+      maximumNotional: bracket.notionalCap,
+      maintenanceMarginRate: bracket.maintenanceMarginRate,
+      maxLossUsdt:
+        input.maxLossUsdt ??
+        (input.sizeMode === 'MAX_LOSS_USDT'
+          ? input.sizeValue
+          : settings.maxLossUsdt),
+      accountEquity: input.accountEquity,
+      riskPercent: input.riskPercent ?? settings.riskPercent,
+      availableMargin: account.balance?.availableBalance,
+      entryFeeRate,
+      exitFeeRate,
+      slippageRate,
+      stepSize: filters.stepSize,
+      minQuantity: filters.minQuantity,
+      minNotional: filters.minNotional,
+      tickSize: filters.tickSize,
+    });
+    if (!quantity.valid)
+      return {
+        valid: false,
+        errors: quantity.reasons,
         warnings: quantity.warnings,
-        quantity: quantity.quantity,
+        quantity: null,
         requestedQuantity: quantity.requestedQuantity,
         notional: quantity.notional,
         isolatedMargin: quantity.isolatedMargin,
         leverage: input.leverage,
         sizeMode: input.sizeMode,
         sizeValue: input.sizeValue,
-        breakevenPrice: breakevenExitPrice(
-          input.side,
-          input.entry,
-          entryFeeRate,
-          exitFeeRate,
-          entrySlippageRate,
-          marketData.cache.state.fundingRate ?? 0,
-          exitSlippageRate,
-        ),
+        breakevenPrice: null,
         estimatedLiquidationPrice: quantity.estimatedLiquidationPrice,
         liquidationDistancePercent: quantity.liquidationDistancePercent,
         maximumAllowed: {
@@ -420,16 +364,64 @@ export function registerIpcHandlers({
           margin: quantity.maximumMargin,
         },
         estimatedMaxLoss: quantity.estimatedMaxLoss,
-        target: {
-          grossPnl: plan.grossPnl,
-          netPnl: plan.netPnl,
-          initialMargin: plan.initialMargin,
-          netMarginRoiPercent: (plan.netPnl / plan.initialMargin) * 100,
-          entryFee: plan.entryFee,
-          exitFee: plan.exitFee,
-          slippage: plan.slippage,
-        },
+        target: null,
       };
+    const fundingPayment = signedFundingPayment(
+      input.side,
+      input.entry * quantity.quantity,
+      marketData.cache.state.fundingRate ?? 0,
+    );
+    const plan = calculatePlan({
+      side: input.side,
+      entry: input.entry,
+      exit: input.target,
+      quantity: quantity.quantity,
+      entryFeeRate,
+      exitFeeRate,
+      entrySlippageRate,
+      exitSlippageRate,
+      fundingRate: fundingPayment / (input.entry * quantity.quantity),
+      leverage: input.leverage,
+    });
+    return {
+      valid: true,
+      errors: [],
+      warnings: quantity.warnings,
+      quantity: quantity.quantity,
+      requestedQuantity: quantity.requestedQuantity,
+      notional: quantity.notional,
+      isolatedMargin: quantity.isolatedMargin,
+      leverage: input.leverage,
+      sizeMode: input.sizeMode,
+      sizeValue: input.sizeValue,
+      breakevenPrice: breakevenExitPrice(
+        input.side,
+        input.entry,
+        entryFeeRate,
+        exitFeeRate,
+        entrySlippageRate,
+        marketData.cache.state.fundingRate ?? 0,
+        exitSlippageRate,
+      ),
+      estimatedLiquidationPrice: quantity.estimatedLiquidationPrice,
+      liquidationDistancePercent: quantity.liquidationDistancePercent,
+      maximumAllowed: {
+        leverage: bracket.initialLeverage,
+        notional: bracket.notionalCap,
+        quantity: quantity.maximumQuantity,
+        margin: quantity.maximumMargin,
+      },
+      estimatedMaxLoss: quantity.estimatedMaxLoss,
+      target: {
+        grossPnl: plan.grossPnl,
+        netPnl: plan.netPnl,
+        initialMargin: plan.initialMargin,
+        netMarginRoiPercent: (plan.netPnl / plan.initialMargin) * 100,
+        entryFee: plan.entryFee,
+        exitFee: plan.exitFee,
+        slippage: plan.slippage,
+      },
+    };
   };
   ipcMain.handle(
     IPC_CHANNELS.calculatePositionPlan,
@@ -504,12 +496,13 @@ export function registerIpcHandlers({
 
   ipcMain.handle(IPC_CHANNELS.enterPaperTrade, (): PaperTrade => {
     const plan = database.readActiveLockedTradePlan('PAPER');
-    if (!plan || plan.status !== 'LOCKED') throw new Error('PAPER_PLAN_REQUIRED');
-    if (database.readActivePaperTrade()) throw new Error('PAPER_TRADE_ALREADY_OPEN');
+    if (!plan || plan.status !== 'LOCKED')
+      throw new Error('PAPER_PLAN_REQUIRED');
+    if (database.readActivePaperTrade())
+      throw new Error('PAPER_TRADE_ALREADY_OPEN');
     const now = Date.now();
     const entryFee = plan.notional * plan.entryFeeRate;
-    const entrySlippage =
-      plan.notional * (plan.entrySlippageBps / 10_000);
+    const entrySlippage = plan.notional * (plan.entrySlippageBps / 10_000);
     const trade: PaperTrade = {
       id: randomUUID(),
       planId: plan.id,
@@ -546,25 +539,20 @@ export function registerIpcHandlers({
     return database.savePaperTrade(trade);
   });
 
-  const closePaper = (
-    rawInput: unknown,
-    forceAll: boolean,
-  ): PaperTrade => {
+  const closePaper = (rawInput: unknown, forceAll: boolean): PaperTrade => {
     const input = paperCloseInputSchema.parse(rawInput ?? {});
     const trade = database.readActivePaperTrade();
     if (!trade) throw new Error('OPEN_PAPER_TRADE_REQUIRED');
     const plan = database.readActiveLockedTradePlan('PAPER');
-    if (!plan || plan.id !== trade.planId) throw new Error('PAPER_PLAN_NOT_FOUND');
-    const quantity = forceAll
-      ? trade.remainingQuantity
-      : (input.quantity ?? 0);
+    if (!plan || plan.id !== trade.planId)
+      throw new Error('PAPER_PLAN_NOT_FOUND');
+    const quantity = forceAll ? trade.remainingQuantity : (input.quantity ?? 0);
     if (quantity <= 0 || quantity > trade.remainingQuantity)
       throw new Error('INVALID_CLOSE_QUANTITY');
     const filters = marketData.cache.productFilters;
     if (!filters || !isStepAligned(quantity, filters.stepSize))
       throw new Error('CLOSE_QUANTITY_NOT_ALIGNED');
-    const exitPrice =
-      input.exitPrice ?? marketData.cache.state.markPrice;
+    const exitPrice = input.exitPrice ?? marketData.cache.state.markPrice;
     if (!exitPrice) throw new Error('EXIT_PRICE_REQUIRED');
     const gross =
       trade.side === 'LONG'
@@ -626,9 +614,8 @@ export function registerIpcHandlers({
   const getTradingState = (): TradingState =>
     buildTradingState(database, accountService.getStatus());
 
-  ipcMain.handle(
-    IPC_CHANNELS.getTradingState,
-    (): TradingState => getTradingState(),
+  ipcMain.handle(IPC_CHANNELS.getTradingState, (): TradingState =>
+    getTradingState(),
   );
 
   ipcMain.handle(
@@ -675,9 +662,8 @@ export function registerIpcHandlers({
       tradingState: getTradingState(),
     });
   };
-  ipcMain.handle(
-    IPC_CHANNELS.getLatestSnapshot,
-    (): MarketSnapshot => getLatestFullSnapshot(),
+  ipcMain.handle(IPC_CHANNELS.getLatestSnapshot, (): MarketSnapshot =>
+    getLatestFullSnapshot(),
   );
   ipcMain.handle(
     IPC_CHANNELS.getLatestCompactSnapshot,

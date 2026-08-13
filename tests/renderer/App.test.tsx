@@ -41,7 +41,15 @@ const desktopApiMock: DesktopApi = {
     lastSnapshotAt: null,
     markPrice: null,
     indexPrice: null,
-    timeframeCounts: { '5m': 0, '15m': 0, '1h': 0, '4h': 0 },
+    timeframeCounts: {
+      '1m': 0,
+      '3m': 0,
+      '5m': 0,
+      '15m': 0,
+      '30m': 0,
+      '1h': 0,
+      '4h': 0,
+    },
     dataStatus: 'INITIALIZING',
   }),
   getLatestSnapshot: vi.fn().mockRejectedValue(new Error('not ready')),
@@ -52,10 +60,20 @@ const desktopApiMock: DesktopApi = {
     connected: false,
     lastUpdatedAt: null,
     error: null,
+    stream: {
+      status: 'DISCONNECTED',
+      lastEventAt: null,
+      lastAccountUpdateAt: null,
+      lastOrderTradeUpdateAt: null,
+      reconnectCount: 0,
+      error: null,
+    },
     position: null,
     commission: null,
     balance: null,
     openOrders: [],
+    recentTrades: [],
+    leverageBrackets: [],
   }),
   saveManualPosition: vi.fn(),
   clearManualPosition: vi.fn(),
@@ -80,6 +98,8 @@ const desktopApiMock: DesktopApi = {
     partialTakeProfitRatios: [0.3, 0.3, 0.4],
     minimumNetMarginRoiPercent: 2,
     autoStart: false,
+    tradingMode: 'PAPER',
+    defaultLeverage: 10,
   }),
   saveUserSettings: vi.fn(),
   calculatePositionPlan: vi.fn(),
@@ -96,13 +116,13 @@ describe('Phase 0 dashboard', () => {
     });
   });
 
-  it('loads the read-only market dashboard without trading actions', async () => {
+  it('loads the read-only market dashboard with configurable isolated leverage', async () => {
     render(<App />);
 
     expect(
       screen.getByRole('heading', { name: 'BTC Futures Assistant' }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/10x · Isolated/)).toBeInTheDocument();
+    expect(screen.getByLabelText('선택 레버리지')).toHaveValue('10');
     expect(screen.queryByText('자동매매 시작')).not.toBeInTheDocument();
 
     await waitFor(() => {

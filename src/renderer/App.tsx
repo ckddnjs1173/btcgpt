@@ -16,15 +16,7 @@ type Timeframe = Extract<
   keyof MarketSnapshot['timeframes'],
   '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h'
 >;
-const TIMEFRAMES: Timeframe[] = [
-  '1m',
-  '3m',
-  '5m',
-  '15m',
-  '30m',
-  '1h',
-  '4h',
-];
+const TIMEFRAMES: Timeframe[] = ['1m', '3m', '5m', '15m', '30m', '1h', '4h'];
 const DEFAULT_SETTINGS: UserSettings = {
   gptUrl: 'https://chatgpt.com/',
   makerFeeRate: null,
@@ -64,7 +56,8 @@ function parseOptionalDecimal(value: string, label: string): number | null {
   const normalized = value.trim().replace(',', '.');
   if (normalized === '') return null;
   const parsed = Number(normalized);
-  if (!Number.isFinite(parsed)) throw new Error(`${label} 값이 올바르지 않습니다.`);
+  if (!Number.isFinite(parsed))
+    throw new Error(`${label} 값이 올바르지 않습니다.`);
   return parsed;
 }
 
@@ -88,8 +81,8 @@ function marketGateMessage(snapshot: MarketSnapshot): string {
         : '호가장 재동기화 중',
     );
   if (
-    snapshot.decisionGates.degradedSources.some(
-      (source) => source.startsWith('candle:'),
+    snapshot.decisionGates.degradedSources.some((source) =>
+      source.startsWith('candle:'),
     )
   )
     messages.push('캔들 REST 초기화 또는 갱신 확인 필요');
@@ -151,10 +144,7 @@ export function App() {
     target: '',
     leverage: '10',
     sizeMode: 'MARGIN_USDT' as
-      | 'MARGIN_USDT'
-      | 'QUANTITY_BTC'
-      | 'NOTIONAL_USDT'
-      | 'MAX_LOSS_USDT',
+      'MARGIN_USDT' | 'QUANTITY_BTC' | 'NOTIONAL_USDT' | 'MAX_LOSS_USDT',
     sizeValue: '',
     entryOrderType: 'TAKER' as 'MAKER' | 'TAKER',
     exitOrderType: 'TAKER' as 'MAKER' | 'TAKER',
@@ -384,7 +374,8 @@ export function App() {
 
   const lockPlan = useCallback(async () => {
     try {
-      if (!window.desktopApi.lockTradePlan) throw new Error('계획 고정 API 미지원');
+      if (!window.desktopApi.lockTradePlan)
+        throw new Error('계획 고정 API 미지원');
       await window.desktopApi.lockTradePlan({
         side: calculator.side,
         entry: Number(calculator.entry),
@@ -409,7 +400,8 @@ export function App() {
 
   const enterPaperTrade = useCallback(async () => {
     try {
-      if (!window.desktopApi.enterPaperTrade) throw new Error('PAPER API 미지원');
+      if (!window.desktopApi.enterPaperTrade)
+        throw new Error('PAPER API 미지원');
       await window.desktopApi.enterPaperTrade();
       setResult({ ok: true, message: 'PAPER 거래를 시작했습니다.' });
       await refresh();
@@ -423,9 +415,13 @@ export function App() {
 
   const closePaperTrade = useCallback(async () => {
     try {
-      if (!window.desktopApi.closePaperTrade) throw new Error('PAPER API 미지원');
+      if (!window.desktopApi.closePaperTrade)
+        throw new Error('PAPER API 미지원');
       await window.desktopApi.closePaperTrade({});
-      setResult({ ok: true, message: 'PAPER 거래를 비용 차감 후 종료했습니다.' });
+      setResult({
+        ok: true,
+        message: 'PAPER 거래를 비용 차감 후 종료했습니다.',
+      });
       await refresh();
     } catch (error) {
       setResult({
@@ -493,11 +489,11 @@ export function App() {
   const localOiChanges = snapshot?.openInterest?.localChanges;
   const scalpReady = Boolean(
     scalpContext?.candles?.['1m'] &&
-      scalpContext?.candles?.['5m'] &&
-      scalpContext?.depth &&
-      orderFlow15s &&
-      orderFlow30s &&
-      localOiChanges,
+    scalpContext?.candles?.['5m'] &&
+    scalpContext?.depth &&
+    orderFlow15s &&
+    orderFlow30s &&
+    localOiChanges,
   );
   const sourceHealth = snapshot?.sourceHealth;
 
@@ -509,7 +505,7 @@ export function App() {
           <div>
             <p className="eyebrow">LOCAL · READ ONLY · BTCUSDT</p>
             <h1>BTC Futures Assistant</h1>
-            <small>v{snapshot?.appVersion ?? '0.5.4'}</small>
+            <small>v{snapshot?.appVersion ?? '0.5.6'}</small>
           </div>
         </div>
         <div
@@ -568,8 +564,7 @@ export function App() {
           </strong>
         </span>
         <span>
-          계정 STREAM{' '}
-          <strong>{account?.stream.status ?? 'OFF'}</strong>
+          계정 STREAM <strong>{account?.stream.status ?? 'OFF'}</strong>
         </span>
         <span>
           중계{' '}
@@ -595,18 +590,16 @@ export function App() {
             '핵심 시장 데이터가 준비되지 않았습니다.'}
         </div>
       )}
-      {gates &&
-        gates.marketAnalysisAvailable &&
-        !gates.entryAllowed && (
-          <div className="notice warning" role="status">
-            시장 분석 가능 · 신규 진입만 차단 · 포지션 관리{' '}
-            {gates.positionManagementAvailable ? '가능' : '확인 필요'} ·{' '}
-            {marketGateMessage(snapshot) ||
-              gates.criticalBlockers.join(', ') ||
-              gates.degradedSources.join(', ') ||
-              '필수 진입 데이터 준비 중'}
-          </div>
-        )}
+      {gates && gates.marketAnalysisAvailable && !gates.entryAllowed && (
+        <div className="notice warning" role="status">
+          시장 분석 가능 · 신규 진입만 차단 · 포지션 관리{' '}
+          {gates.positionManagementAvailable ? '가능' : '확인 필요'} ·{' '}
+          {marketGateMessage(snapshot) ||
+            gates.criticalBlockers.join(', ') ||
+            gates.degradedSources.join(', ') ||
+            '필수 진입 데이터 준비 중'}
+        </div>
+      )}
       {result && (
         <div className={`notice ${result.ok ? 'success' : 'error'}`}>
           {result.message}
@@ -644,8 +637,7 @@ export function App() {
           <div className="chart-meta">
             <span>마감 {rows.length}개</span>
             <span>
-              진행 {selectedTimeframe?.live ? 1 : 0}개 (신규 진입
-              판단 제외)
+              진행 {selectedTimeframe?.live ? 1 : 0}개 (신규 진입 판단 제외)
             </span>
           </div>
         </article>
@@ -756,7 +748,7 @@ export function App() {
                           timeframe === '15m' ||
                           timeframe === '1h' ||
                           timeframe === '4h'
-                        ? snapshot.openInterest.changes[timeframe] ?? null
+                        ? (snapshot.openInterest.changes[timeframe] ?? null)
                         : null,
                     2,
                   )}
@@ -960,15 +952,8 @@ export function App() {
                 <div>
                   <dt>Imbalance Δ 5s / 30s</dt>
                   <dd>
-                    {formatNumber(
-                      scalpContext.depth.imbalanceChange5s,
-                      4,
-                    )}{' '}
-                    /{' '}
-                    {formatNumber(
-                      scalpContext.depth.imbalanceChange30s,
-                      4,
-                    )}
+                    {formatNumber(scalpContext.depth.imbalanceChange5s, 4)} /{' '}
+                    {formatNumber(scalpContext.depth.imbalanceChange30s, 4)}
                   </dd>
                 </div>
                 <div>
@@ -990,8 +975,7 @@ export function App() {
                 <div>
                   <dt>로컬 OI Δ 1m / 5m</dt>
                   <dd>
-                    {formatNumber(localOiChanges['1m'], 4)}%
-                    {' / '}
+                    {formatNumber(localOiChanges['1m'], 4)}%{' / '}
                     {formatNumber(localOiChanges['5m'], 4)}%
                   </dd>
                 </div>
@@ -1003,9 +987,7 @@ export function App() {
         <section className="panel scalp-panel scalp-loading">
           <p className="eyebrow">SCALP CONTEXT</p>
           <h3>초단기 데이터 준비 중</h3>
-          <p>
-            v3 체결·호가·OI 표본이 준비되면 이 영역이 자동으로 갱신됩니다.
-          </p>
+          <p>v3 체결·호가·OI 표본이 준비되면 이 영역이 자동으로 갱신됩니다.</p>
         </section>
       ) : null}
 
@@ -1044,7 +1026,9 @@ export function App() {
 
       <section className="panel account-panel">
         <div>
-          <p className="eyebrow">PHASE 9·10 · {snapshot?.trading.mode ?? settings.tradingMode}</p>
+          <p className="eyebrow">
+            PHASE 9·10 · {snapshot?.trading.mode ?? settings.tradingMode}
+          </p>
           <h3>고정 계획과 포지션 관리</h3>
           <p>
             앱은 객관값과 비용 차감 결과만 기록합니다. 실제 주문·부분익절·종료와
@@ -1068,9 +1052,13 @@ export function App() {
           {snapshot?.trading.activePaperTrade && (
             <span>
               PAPER {snapshot.trading.activePaperTrade.status} · 잔여{' '}
-              {formatNumber(snapshot.trading.activePaperTrade.remainingQuantity, 8)} BTC ·
-              순실현손익{' '}
-              {formatNumber(snapshot.trading.activePaperTrade.realizedNetPnl)} USDT
+              {formatNumber(
+                snapshot.trading.activePaperTrade.remainingQuantity,
+                8,
+              )}{' '}
+              BTC · 순실현손익{' '}
+              {formatNumber(snapshot.trading.activePaperTrade.realizedNetPnl)}{' '}
+              USDT
             </span>
           )}
           <span>
@@ -1111,7 +1099,8 @@ export function App() {
                     8,
                   )}{' '}
                   BTC · 순실현손익{' '}
-                  {snapshot.trading.liveManual.currentTrade.realizedNetPnl === null
+                  {snapshot.trading.liveManual.currentTrade.realizedNetPnl ===
+                  null
                     ? '통화 단위 확인 필요'
                     : `${formatNumber(
                         snapshot.trading.liveManual.currentTrade.realizedNetPnl,
@@ -1144,7 +1133,8 @@ export function App() {
                 snapshot?.trading.liveManual.lastCompletedTrade && (
                   <span>
                     최근 실거래 종료 ·{' '}
-                    {snapshot.trading.liveManual.lastCompletedTrade.side} · 순손익{' '}
+                    {snapshot.trading.liveManual.lastCompletedTrade.side} ·
+                    순손익{' '}
                     {snapshot.trading.liveManual.lastCompletedTrade
                       .realizedNetPnl === null
                       ? '확정 불가'
@@ -1185,9 +1175,7 @@ export function App() {
                 : '없음'}
             </span>
             <span>연속 실패 {relay.consecutiveFailures}회</span>
-            <span>
-              Compact snapshot {relay.lastPayloadBytes ?? '—'} bytes
-            </span>
+            <span>Compact snapshot {relay.lastPayloadBytes ?? '—'} bytes</span>
             <button onClick={() => void disconnectRelay()}>
               중계 연결 해제 및 키 삭제
             </button>

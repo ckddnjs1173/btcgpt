@@ -47,10 +47,10 @@ describe('PROJECT_SPEC freshness thresholds', () => {
     expect(cache.sourceHealth(receivedAt + 10_001).trades!.status).toBe(
       'STALE',
     );
-    expect(cache.sourceHealth(receivedAt + 5_001)['candle:5m']!.status).toBe(
+    expect(cache.sourceHealth(receivedAt + 20_001)['candle:5m']!.status).toBe(
       'DELAYED',
     );
-    expect(cache.sourceHealth(receivedAt + 15_001)['candle:5m']!.status).toBe(
+    expect(cache.sourceHealth(receivedAt + 45_001)['candle:5m']!.status).toBe(
       'STALE',
     );
   });

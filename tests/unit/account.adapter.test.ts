@@ -33,21 +33,28 @@ function symbolConfigurationResponse(leverage = 10, marginType = 'ISOLATED') {
   );
 }
 
-describe('read-only account adapter', () => {
-  it('normalizes a fixed 10x isolated BTCUSDT position with signed GET', async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(positionResponse())
-      .mockResolvedValueOnce(symbolConfigurationResponse());
-    const client = new BinanceAccountClient(
-      { apiKey: 'a'.repeat(32), apiSecret: 'b'.repeat(32) },
+function clientWithResponses(leverage: number, marginType = 'ISOLATED') {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(positionResponse())
+    .mockResolvedValueOnce(symbolConfigurationResponse(leverage, marginType));
+  return {
+    fetcher,
+    client: new BinanceAccountClient(
+      { apiKey: 'test-key', apiSecret: 'test-secret' },
       fetcher,
-    );
+    ),
+  };
+}
+
+describe('read-only account adapter', () => {
+  it('normalizes a user-selected isolated BTCUSDT position with signed GET', async () => {
+    const { client, fetcher } = clientWithResponses(50);
 
     const position = await client.fetchPosition();
 
     expect(position?.side).toBe('LONG');
-    expect(position?.leverage).toBe(10);
+    expect(position?.leverage).toBe(50);
     expect(fetcher).toHaveBeenCalledTimes(2);
     const [positionUrl, positionOptions] = fetcher.mock.calls[0] as [
       string,
@@ -60,16 +67,13 @@ describe('read-only account adapter', () => {
     expect(positionOptions.method).toBe('GET');
   });
 
-  it('rejects account symbol configuration outside the fixed policy', async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(positionResponse())
-      .mockResolvedValueOnce(symbolConfigurationResponse(20, 'CROSSED'));
-    const client = new BinanceAccountClient(
-      { apiKey: 'a'.repeat(32), apiSecret: 'b'.repeat(32) },
-      fetcher,
-    );
+  it('rejects crossed margin even when leverage is in range', async () => {
+    const { client } = clientWithResponses(20, 'CROSSED');
+    await expect(client.fetchPosition()).rejects.toThrow(/isolated margin/);
+  });
 
-    await expect(client.fetchPosition()).rejects.toThrow(/10x isolated/);
+  it('rejects leverage outside the supported 1-150 range', async () => {
+    const { client } = clientWithResponses(151);
+    await expect(client.fetchPosition()).rejects.toThrow(/1-150 range/);
   });
 });
