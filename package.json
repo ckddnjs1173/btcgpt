@@ -7,7 +7,6 @@
   "main": ".vite/build/main.js",
   "private": true,
   "scripts": {
-    "postinstall": "node scripts/prepare-phase12.cjs",
     "start": "electron-forge start",
     "build": "electron-forge package",
     "package": "electron-forge package",
@@ -29,7 +28,7 @@
   },
   "keywords": ["bitcoin", "futures", "electron", "local-first"],
   "license": "UNLICENSED",
-  "engines": {"node": ">=24.0.0", "npm": ">=11.0.0"},
+  "engines": { "node": ">=24.0.0", "npm": ">=11.0.0" },
   "dependencies": {
     "electron-squirrel-startup": "1.0.1",
     "lightweight-charts": "4.0.0",
