@@ -1,0 +1,164 @@
+import { Notification } from 'electron';
+
+import type {
+  ApprovedPlanMonitoring,
+  LockedTradePlan,
+  MarketSnapshot,
+  TradingMode,
+} from '../../shared/contracts';
+import type { AppDatabase } from '../db/database';
+import { logger } from '../logging/logger';
+
+const MONITOR_INTERVAL_MS = 1_000;
+
+function conditionMet(
+  condition: ApprovedPlanMonitoring['triggerCondition'],
+  price: number,
+  threshold: number,
+): boolean {
+  return condition === 'AT_OR_ABOVE' ? price >= threshold : price <= threshold;
+}
+
+function currentMode(database: AppDatabase): TradingMode {
+  return database.readUserSettings().tradingMode;
+}
+
+function showNotification(title: string, body: string): void {
+  if (!Notification.isSupported()) return;
+  new Notification({
+    title: `BTC Futures Assistant · ${title}`,
+    body,
+  }).show();
+}
+
+export class ApprovedPlanMonitor {
+  private timer: NodeJS.Timeout | null = null;
+
+  constructor(
+    private readonly database: AppDatabase,
+    private readonly getSnapshot: () => MarketSnapshot,
+  ) {}
+
+  start(): void {
+    if (this.timer) return;
+    this.timer = setInterval(() => this.check(), MONITOR_INTERVAL_MS);
+    this.check();
+  }
+
+  stop(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  private check(): void {
+    const plan = this.database.readActiveLockedTradePlan(
+      currentMode(this.database),
+    );
+    if (!plan || plan.status !== 'LOCKED') return;
+
+    const monitoring = plan.monitoring;
+    if (!monitoring) return;
+
+    const now = Date.now();
+    if (now >= monitoring.expiresAt) {
+      this.transition(plan, {
+        ...monitoring,
+        state: 'EXPIRED',
+        expiredAt: now,
+      });
+      showNotification(
+        '승인 계획 만료',
+        `${plan.side} 계획이 만료되었습니다. 새 snapshot으로 다시 검토한 뒤 재승인하세요.`,
+      );
+      return;
+    }
+
+    let snapshot: MarketSnapshot;
+    try {
+      snapshot = this.getSnapshot();
+    } catch (error) {
+      logger.warn(
+        {
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+          errorMessage:
+            error instanceof Error
+              ? error.message.slice(0, 200)
+              : 'Unknown plan-monitor snapshot error',
+        },
+        'Approved plan monitor could not read a snapshot',
+      );
+      return;
+    }
+
+    const markPrice = snapshot.marketState.markPrice;
+    const marketHealth = snapshot.sourceHealth.market;
+    if (
+      markPrice === null ||
+      !marketHealth ||
+      ['STALE', 'DISCONNECTED', 'INSUFFICIENT_DATA'].includes(
+        marketHealth.status,
+      )
+    )
+      return;
+
+    if (
+      conditionMet(
+        monitoring.invalidationCondition,
+        markPrice,
+        monitoring.invalidationPrice,
+      )
+    ) {
+      this.transition(plan, {
+        ...monitoring,
+        state: 'INVALIDATED',
+        invalidatedAt: now,
+      });
+      showNotification(
+        '승인 계획 무효화',
+        `${plan.side} 계획 무효화 가격 ${monitoring.invalidationPrice} 도달 · 현재 Mark ${markPrice}. 주문을 누르지 말고 새 계획을 확인하세요.`,
+      );
+      return;
+    }
+
+    if (
+      monitoring.state === 'WATCHING' &&
+      snapshot.decisionGates.entryAllowed &&
+      conditionMet(
+        monitoring.triggerCondition,
+        markPrice,
+        monitoring.triggerPrice,
+      )
+    ) {
+      const updated = {
+        ...monitoring,
+        state: 'TRIGGERED' as const,
+        triggeredAt: now,
+      };
+      this.database.saveLockedTradePlan({ ...plan, monitoring: updated });
+      const target = plan.targets[0] ?? null;
+      showNotification(
+        '승인 계획 트리거 충족',
+        `${plan.side} · ${plan.quantity} BTC · Entry ${plan.entry} · SL ${plan.stop}${target === null ? '' : ` · TP ${target}`} · Binance에서 직접 입력·확인하세요.`,
+      );
+      logger.info(
+        { planId: plan.id, triggerPrice: monitoring.triggerPrice },
+        'Approved plan trigger satisfied',
+      );
+    }
+  }
+
+  private transition(
+    plan: LockedTradePlan,
+    monitoring: ApprovedPlanMonitoring,
+  ): void {
+    this.database.saveLockedTradePlan({
+      ...plan,
+      status: 'CANCELLED',
+      monitoring,
+    });
+    logger.info(
+      { planId: plan.id, monitoringState: monitoring.state },
+      'Approved plan monitoring ended',
+    );
+  }
+}
