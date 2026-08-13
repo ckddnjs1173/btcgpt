@@ -388,7 +388,10 @@ export function App() {
         entryOrderType: calculator.entryOrderType,
         exitOrderType: calculator.exitOrderType,
       });
-      setResult({ ok: true, message: '검증된 진입 전 계획을 고정했습니다.' });
+      setResult({
+        ok: true,
+        message: '검증된 계획을 고정하고 30분 객관 가격 감시를 시작했습니다.',
+      });
       await refresh();
     } catch (error) {
       setResult({
@@ -1070,9 +1073,10 @@ export function App() {
             {formatNumber(snapshot?.trading.statistics.netPnl ?? 0)} USDT
           </span>
           {settings.tradingMode === 'PAPER' &&
-            snapshot?.trading.activePlan?.status === 'LOCKED' && (
+            snapshot?.trading.activePlan?.status === 'LOCKED' &&
+            snapshot.trading.activePlan.monitoring?.state === 'TRIGGERED' && (
               <button onClick={() => void enterPaperTrade()}>
-                고정 계획으로 PAPER 진입
+                트리거 충족 계획으로 PAPER 진입
               </button>
             )}
           {snapshot?.trading.activePaperTrade && (
