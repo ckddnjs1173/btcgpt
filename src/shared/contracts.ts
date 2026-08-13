@@ -647,6 +647,23 @@ export interface PositionCalculationResult {
   } | null;
 }
 
+export type ApprovedPlanPriceCondition = 'AT_OR_ABOVE' | 'AT_OR_BELOW';
+export type ApprovedPlanMonitoringState =
+  'WATCHING' | 'TRIGGERED' | 'INVALIDATED' | 'EXPIRED' | 'CANCELLED';
+export interface ApprovedPlanMonitoring {
+  referencePrice: 'MARK_PRICE';
+  triggerCondition: ApprovedPlanPriceCondition;
+  triggerPrice: number;
+  invalidationCondition: ApprovedPlanPriceCondition;
+  invalidationPrice: number;
+  expiresAt: number;
+  state: ApprovedPlanMonitoringState;
+  triggeredAt: number | null;
+  invalidatedAt: number | null;
+  expiredAt: number | null;
+  cancelledAt: number | null;
+}
+
 export interface LockedTradePlan {
   id: string;
   mode: TradingMode;
@@ -674,6 +691,7 @@ export interface LockedTradePlan {
   expectedFundingPeriods: number;
   snapshotId: string;
   marketGeneratedAt: number;
+  monitoring?: ApprovedPlanMonitoring;
   lockedAt: number;
 }
 
@@ -776,6 +794,7 @@ export interface TradingState {
   mode: TradingMode;
   lifecycle: TradeLifecycle;
   activePlan: LockedTradePlan | null;
+  lastPlan: LockedTradePlan | null;
   activePaperTrade: PaperTrade | null;
   lastCompletedPaperTrade: PaperTrade | null;
   activeLiveTrade: LiveTradeSession | null;

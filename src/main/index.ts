@@ -21,6 +21,7 @@ import { CredentialStore } from './security/credential-store';
 import { RelayConfigurationStore } from './security/relay-configuration-store';
 import { NaverCredentialStore } from './security/naver-credential-store';
 import { buildTradingState } from './trading/build-state';
+import { ApprovedPlanMonitor } from './trading/approved-plan-monitor';
 
 if (started) {
   app.quit();
@@ -47,6 +48,7 @@ let marketData: MarketDataService | null = null;
 let relayUploader: RelayUploader | null = null;
 let accountService: AccountService | null = null;
 let notificationMonitor: OperationalNotificationMonitor | null = null;
+let approvedPlanMonitor: ApprovedPlanMonitor | null = null;
 let externalContext: ExternalContextService | null = null;
 let contextUploader: ContextUploader | null = null;
 let quitting = false;
@@ -77,6 +79,8 @@ app.on('before-quit', () => {
 });
 
 app.on('will-quit', () => {
+  approvedPlanMonitor?.stop();
+  approvedPlanMonitor = null;
   notificationMonitor?.stop();
   notificationMonitor = null;
   accountService?.stop();
@@ -283,6 +287,10 @@ void app.whenReady().then(() => {
       },
   );
   notificationMonitor.start();
+  approvedPlanMonitor = new ApprovedPlanMonitor(database, () =>
+    generateSnapshot(marketData!.cache, getSnapshotOptions()),
+  );
+  approvedPlanMonitor.start();
 
   powerMonitor.on('resume', () => {
     if (quitting || resumeRecoveryInProgress) return;

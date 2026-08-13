@@ -53,6 +53,8 @@ import {
 import { randomUUID } from 'node:crypto';
 import { buildTradingState } from '../trading/build-state';
 
+const APPROVED_PLAN_DEFAULT_TTL_MS = 30 * 60_000;
+
 interface RegisterIpcHandlersOptions {
   database: AppDatabase;
   isTrayReady: () => boolean;
@@ -441,6 +443,9 @@ export function registerIpcHandlers({
         throw new Error(
           `ENTRY_BLOCKED:${snapshot.decisionGates.criticalBlockers.join(',')}`,
         );
+      const referencePrice =
+        snapshot.marketState.markPrice ?? snapshot.marketState.lastPrice;
+      if (!referencePrice) throw new Error('PLAN_REFERENCE_PRICE_REQUIRED');
       const result = validatePositionPlan(input);
       if (
         !result.valid ||
@@ -461,6 +466,7 @@ export function registerIpcHandlers({
         (input.exitOrderType ?? 'TAKER') === 'MAKER'
           ? (account.commission?.makerRate ?? settings.makerFeeRate ?? 0)
           : (account.commission?.takerRate ?? settings.takerFeeRate ?? 0);
+      const lockedAt = Date.now();
       const plan: LockedTradePlan = {
         id: randomUUID(),
         mode: settings.tradingMode,
@@ -488,8 +494,42 @@ export function registerIpcHandlers({
         expectedFundingPeriods: input.expectedFundingPeriods,
         snapshotId: snapshot.snapshotId,
         marketGeneratedAt: snapshot.generatedAt,
-        lockedAt: Date.now(),
+        monitoring: {
+          referencePrice: 'MARK_PRICE',
+          triggerCondition:
+            input.entry >= referencePrice ? 'AT_OR_ABOVE' : 'AT_OR_BELOW',
+          triggerPrice: input.entry,
+          invalidationCondition:
+            input.stop >= referencePrice ? 'AT_OR_ABOVE' : 'AT_OR_BELOW',
+          invalidationPrice: input.stop,
+          expiresAt: lockedAt + APPROVED_PLAN_DEFAULT_TTL_MS,
+          state: 'WATCHING',
+          triggeredAt: null,
+          invalidatedAt: null,
+          expiredAt: null,
+          cancelledAt: null,
+        },
+        lockedAt,
       };
+      const existingPlan = database.readActiveLockedTradePlan(
+        settings.tradingMode,
+      );
+      if (existingPlan?.status === 'LOCKED') {
+        const now = Date.now();
+        database.saveLockedTradePlan({
+          ...existingPlan,
+          status: 'CANCELLED',
+          monitoring: existingPlan.monitoring
+            ? {
+                ...existingPlan.monitoring,
+                state: 'CANCELLED',
+                cancelledAt: now,
+              }
+            : existingPlan.monitoring,
+        });
+      } else if (existingPlan) {
+        throw new Error('ACTIVE_TRADE_PLAN_EXISTS');
+      }
       return database.saveLockedTradePlan(plan);
     },
   );
@@ -498,6 +538,8 @@ export function registerIpcHandlers({
     const plan = database.readActiveLockedTradePlan('PAPER');
     if (!plan || plan.status !== 'LOCKED')
       throw new Error('PAPER_PLAN_REQUIRED');
+    if (plan.monitoring?.state !== 'TRIGGERED')
+      throw new Error('PAPER_PLAN_TRIGGER_REQUIRED');
     if (database.readActivePaperTrade())
       throw new Error('PAPER_TRADE_ALREADY_OPEN');
     const now = Date.now();

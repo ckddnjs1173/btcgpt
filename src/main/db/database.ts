@@ -392,6 +392,20 @@ export class AppDatabase {
     }
   }
 
+  readLatestLockedTradePlan(mode?: TradingMode): LockedTradePlan | null {
+    const row = this.database
+      .prepare(
+        `SELECT payload FROM locked_trade_plans WHERE (? IS NULL OR mode = ?) ORDER BY locked_at DESC LIMIT 1`,
+      )
+      .get(mode ?? null, mode ?? null) as { payload: string } | undefined;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.payload) as LockedTradePlan;
+    } catch {
+      return null;
+    }
+  }
+
   updateLockedTradePlanStatus(
     id: string,
     status: LockedTradePlan['status'],
