@@ -21,7 +21,7 @@ class MemoryD1 {
         values = nextValues;
         return statement;
       },
-      run: async () => {
+      run: () => {
         if (query.includes('INSERT INTO latest_snapshot')) {
           const [raw, generatedAt, receivedAt] = values as [string, number, number];
           if (!this.snapshot || generatedAt >= this.snapshot.generatedAt)
@@ -45,18 +45,22 @@ class MemoryD1 {
           if (!this.riskContext || generatedAt >= this.riskContext.generatedAt)
             this.riskContext = { raw, generatedAt };
         }
-        return { success: true };
+        return Promise.resolve({ success: true });
       },
-      first: async <T>(): Promise<T | null> => {
-        if (query.includes('SELECT 1 AS ok')) return { ok: 1 } as T;
-        if (query.includes('FROM latest_snapshot')) return this.snapshot as T | null;
+      first: <T>(): Promise<T | null> => {
+        if (query.includes('SELECT 1 AS ok'))
+          return Promise.resolve({ ok: 1 } as T);
+        if (query.includes('FROM latest_snapshot'))
+          return Promise.resolve(this.snapshot as T | null);
         if (query.includes('FROM latest_trading_state'))
-          return this.tradingState as T | null;
+          return Promise.resolve(this.tradingState as T | null);
         if (query.includes('FROM external_context_payloads'))
-          return (this.contexts.get(String(values[0])) ?? null) as T | null;
+          return Promise.resolve(
+            (this.contexts.get(String(values[0])) ?? null) as T | null,
+          );
         if (query.includes('FROM external_context_summary'))
-          return this.riskContext as T | null;
-        return null;
+          return Promise.resolve(this.riskContext as T | null);
+        return Promise.resolve(null);
       },
     };
     return statement;
@@ -174,7 +178,7 @@ describe('worker handler', () => {
       DB: new MemoryD1(),
       UPLOADER_WRITE_KEY: 'upload-secret',
       ACTION_READ_KEY: 'read-secret',
-    } as Env;
+    };
   });
 
   it('reports D1 health', async () => {
@@ -217,7 +221,7 @@ describe('worker handler', () => {
       env,
     );
     expect(response.status).toBe(409);
-    expect((await response.json()) as unknown).toMatchObject({
+    expect(await response.json()).toMatchObject({
       ok: false,
       errors: ['ENTRY_NOT_ALLOWED'],
     });
@@ -234,7 +238,7 @@ describe('worker handler', () => {
       env,
     );
     expect(response.status).toBe(409);
-    expect((await response.json()) as unknown).toMatchObject({
+    expect(await response.json()).toMatchObject({
       ok: false,
       errors: ['SNAPSHOT_CHANGED_REVALIDATE'],
     });
@@ -283,8 +287,6 @@ describe('worker handler', () => {
       env,
     );
     expect(response.status).toBe(200);
-    expect((await response.json()) as unknown).toMatchObject({
-      snapshotId: 'newer',
-    });
+    expect(await response.json()).toMatchObject({ snapshotId: 'newer' });
   });
 });
