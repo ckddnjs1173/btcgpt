@@ -310,8 +310,7 @@ function buildProtectiveCoverage(
     stopLossCoverageRatio,
     takeProfitCoverageRatio,
     hasFullStopCoverage: stopLossCoverageRatio >= 1 - QUANTITY_EPSILON,
-    hasFullTakeProfitCoverage:
-      takeProfitCoverageRatio >= 1 - QUANTITY_EPSILON,
+    hasFullTakeProfitCoverage: takeProfitCoverageRatio >= 1 - QUANTITY_EPSILON,
   };
 }
 
@@ -347,7 +346,9 @@ export function buildTradingState(
     protectiveOrders,
   );
   const planMatchesPosition =
-    plan && account.position ? matchesPlanPosition(plan, account.position) : null;
+    plan && account.position
+      ? matchesPlanPosition(plan, account.position)
+      : null;
 
   if (planMatchesPosition === false)
     blockedReasons.push('LIVE_POSITION_DIFFERS_FROM_LOCKED_PLAN');

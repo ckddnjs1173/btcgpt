@@ -916,6 +916,7 @@ export function generateSnapshot(
         blockedReasons: ['TRADING_STATE_UNAVAILABLE'],
       },
       activePlan: null,
+      lastPlan: null,
       activePaperTrade: null,
       lastCompletedPaperTrade: null,
       activeLiveTrade: null,
