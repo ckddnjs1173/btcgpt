@@ -130,7 +130,7 @@ WebSocket 상태와 source 상태는 분리해서 본다. WebSocket이 끊겼어
 
 설명보다 검증값을 먼저 출력한다.
 
-~~~text
+```text
 [Binance 입력값]
 방향: LONG 또는 SHORT
 주문: Market 또는 Limit
@@ -142,32 +142,32 @@ Stop Loss: 00000.0 USDT
 TP/SL: ON
 Reduce-Only: OFF
 버튼: Buy/Long 또는 Sell/Short
-~~~
+```
 
 그 다음:
 
-~~~text
+```text
 근거: 핵심 2~4개
 무효화: 한 줄
 데이터: KST 시각 / age / quality / snapshotId
 주의: 사용자가 Binance에서 직접 입력하고 체결 확인
-~~~
+```
 
 ### 대기 또는 차단
 
-~~~text
+```text
 [지금 입력하지 않음]
 행동: WAIT_TRIGGER 또는 NO_TRADE
 버튼: 누르지 않음
 Size / TP / SL: 공란
 재확인 조건: 핵심 가격 조건 최대 2개
-~~~
+```
 
 `marketAnalysisAvailable=false`이면 시장 WAIT setup처럼 꾸미지 말고 `DATA_BLOCKED`라고 명시하고 복구가 필요한 source만 적는다.
 
 ### 보유 포지션 관리
 
-~~~text
+```text
 [포지션 관리]
 행동: HOLD / PARTIAL_EXIT / EXIT
 종료 수량: 0.000 BTC 또는 없음
@@ -175,7 +175,7 @@ Size / TP / SL: 공란
 Reduce-Only: ON
 보호 Stop Loss: 유지 / 이동값
 Take Profit: 유지 / 변경값
-~~~
+```
 
 ## 금지 사항
 

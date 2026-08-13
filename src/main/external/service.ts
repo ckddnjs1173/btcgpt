@@ -164,8 +164,16 @@ export class ExternalContextService {
   ): ExternalContextSnapshot {
     const windows = {
       INTRADAY: { past: 24 * 60 * 60_000, future: 24 * 60 * 60_000, max: 40 },
-      SWING: { past: 7 * 24 * 60 * 60_000, future: 14 * 24 * 60 * 60_000, max: 80 },
-      MACRO: { past: 30 * 24 * 60 * 60_000, future: 90 * 24 * 60 * 60_000, max: 120 },
+      SWING: {
+        past: 7 * 24 * 60 * 60_000,
+        future: 14 * 24 * 60 * 60_000,
+        max: 80,
+      },
+      MACRO: {
+        past: 30 * 24 * 60 * 60_000,
+        future: 90 * 24 * 60 * 60_000,
+        max: 120,
+      },
     }[horizon];
     const sourceHealth = this.currentHealth(now);
     const items = this.deduplicatedItems()
@@ -176,13 +184,18 @@ export class ExternalContextService {
       )
       .sort(
         (a, b) =>
-          ({ OFFICIAL: 0, MULTI_SOURCE: 1, SINGLE_SOURCE: 2, UNVERIFIED_SOCIAL: 3 }[
-            a.trustTier
-          ] -
-            { OFFICIAL: 0, MULTI_SOURCE: 1, SINGLE_SOURCE: 2, UNVERIFIED_SOCIAL: 3 }[
-              b.trustTier
-            ]) ||
-          b.publishedAt - a.publishedAt,
+          ({
+            OFFICIAL: 0,
+            MULTI_SOURCE: 1,
+            SINGLE_SOURCE: 2,
+            UNVERIFIED_SOCIAL: 3,
+          })[a.trustTier] -
+            {
+              OFFICIAL: 0,
+              MULTI_SOURCE: 1,
+              SINGLE_SOURCE: 2,
+              UNVERIFIED_SOCIAL: 3,
+            }[b.trustTier] || b.publishedAt - a.publishedAt,
       )
       .slice(0, windows.max);
     return {
@@ -196,19 +209,27 @@ export class ExternalContextService {
     };
   }
 
-  private async collect(source: Exclude<SourceName, 'BINANCE_ANNOUNCEMENT'>): Promise<void> {
+  private async collect(
+    source: Exclude<SourceName, 'BINANCE_ANNOUNCEMENT'>,
+  ): Promise<void> {
     if (this.stopped) return;
     const state = this.health[source];
     try {
       let records: ExternalContextItem[] = [];
       if (source === 'DERIBIT') records = await sourceAdapters.deribit();
-      else if (source === 'MEMPOOL_SPACE') records = await sourceAdapters.mempool();
-      else if (source === 'COIN_METRICS_COMMUNITY') records = await sourceAdapters.coinMetrics();
-      else if (source === 'ALTERNATIVE_ME') records = await sourceAdapters.fearAndGreed();
+      else if (source === 'MEMPOOL_SPACE')
+        records = await sourceAdapters.mempool();
+      else if (source === 'COIN_METRICS_COMMUNITY')
+        records = await sourceAdapters.coinMetrics();
+      else if (source === 'ALTERNATIVE_ME')
+        records = await sourceAdapters.fearAndGreed();
       else if (source === 'GDELT') records = await sourceAdapters.gdelt();
       else if (source === 'NAVER_NEWS') {
         const credentials = this.naverCredentials();
-        records = await sourceAdapters.naver(credentials.clientId, credentials.clientSecret);
+        records = await sourceAdapters.naver(
+          credentials.clientId,
+          credentials.clientSecret,
+        );
       } else {
         const feed = officialFeeds.find(([name]) => name === source);
         if (feed) records = await fetchRss(feed[0], feed[1], feed[2]);
@@ -222,13 +243,20 @@ export class ExternalContextService {
       state.lastFailure = Date.now();
       state.consecutiveFailures += 1;
       state.status = 'DISCONNECTED';
-      state.error = error instanceof Error ? error.message.slice(0, 120) : 'COLLECTION_FAILED';
-      logger.warn({ source, error: state.error }, 'External context source failed');
+      state.error =
+        error instanceof Error
+          ? error.message.slice(0, 120)
+          : 'COLLECTION_FAILED';
+      logger.warn(
+        { source, error: state.error },
+        'External context source failed',
+      );
     } finally {
       if (!this.stopped) {
         const delay = Math.min(
           SOURCE_INTERVALS[source] * 8,
-          SOURCE_INTERVALS[source] * 2 ** Math.min(3, state.consecutiveFailures),
+          SOURCE_INTERVALS[source] *
+            2 ** Math.min(3, state.consecutiveFailures),
         );
         state.nextAttemptAt = Date.now() + delay;
         const timer = setTimeout(() => void this.collect(source), delay);
@@ -267,7 +295,10 @@ export class ExternalContextService {
     };
     socket.onmessage = (event) => {
       try {
-        const envelope = JSON.parse(String(event.data)) as Record<string, unknown>;
+        const envelope = JSON.parse(String(event.data)) as Record<
+          string,
+          unknown
+        >;
         const raw =
           typeof envelope.data === 'string'
             ? (JSON.parse(envelope.data) as Record<string, unknown>)
@@ -279,7 +310,9 @@ export class ExternalContextService {
             ? String(titleCandidate)
             : '';
         if (!title) return;
-        const publishedAt = Number(raw.publishDate ?? raw.releaseDate ?? raw.E ?? Date.now());
+        const publishedAt = Number(
+          raw.publishDate ?? raw.releaseDate ?? raw.E ?? Date.now(),
+        );
         const url =
           typeof raw.url === 'string' && raw.url.startsWith('https://')
             ? raw.url
@@ -313,9 +346,15 @@ export class ExternalContextService {
       this.announcementPing = null;
       if (this.stopped) return;
       source.status = 'DISCONNECTED';
-      const delay = Math.min(5 * 60_000, 5_000 * 2 ** Math.min(6, source.consecutiveFailures));
+      const delay = Math.min(
+        5 * 60_000,
+        5_000 * 2 ** Math.min(6, source.consecutiveFailures),
+      );
       source.nextAttemptAt = Date.now() + delay;
-      this.announcementRetry = setTimeout(() => this.connectAnnouncements(), delay);
+      this.announcementRetry = setTimeout(
+        () => this.connectAnnouncements(),
+        delay,
+      );
     };
   }
 
@@ -325,7 +364,9 @@ export class ExternalContextService {
     for (const [id, record] of this.items)
       if (record.publishedAt < cutoff) this.items.delete(id);
     while (this.items.size > MAX_ITEMS) {
-      const oldest = [...this.items.values()].sort((a, b) => a.publishedAt - b.publishedAt)[0];
+      const oldest = [...this.items.values()].sort(
+        (a, b) => a.publishedAt - b.publishedAt,
+      )[0];
       if (!oldest) break;
       this.items.delete(oldest.id);
     }
@@ -343,11 +384,16 @@ export class ExternalContextService {
     }
     return [...groups.entries()].map(([key, records]) => {
       const preferred = [...records].sort(
-        (a, b) => (a.trustTier === 'OFFICIAL' ? -1 : 0) - (b.trustTier === 'OFFICIAL' ? -1 : 0),
+        (a, b) =>
+          (a.trustTier === 'OFFICIAL' ? -1 : 0) -
+          (b.trustTier === 'OFFICIAL' ? -1 : 0),
       )[0]!;
       return {
         ...preferred,
-        duplicateGroupId: createHash('sha256').update(key).digest('hex').slice(0, 20),
+        duplicateGroupId: createHash('sha256')
+          .update(key)
+          .digest('hex')
+          .slice(0, 20),
         duplicateCount: records.length,
         trustTier:
           records.length > 1 && preferred.trustTier !== 'OFFICIAL'
@@ -361,7 +407,8 @@ export class ExternalContextService {
     return Object.fromEntries(
       Object.entries(this.health).map(([source, state]) => {
         const interval = SOURCE_INTERVALS[source as SourceName];
-        const ageMs = state.lastSuccess === null ? null : now - state.lastSuccess;
+        const ageMs =
+          state.lastSuccess === null ? null : now - state.lastSuccess;
         let status: ContextStatus = state.status;
         if (
           interval > 0 &&
@@ -375,13 +422,20 @@ export class ExternalContextService {
     );
   }
 
-  private overallStatus(health: Record<string, ExternalSourceHealth>): ContextStatus {
-    const enabled = Object.values(health).filter((source) => source.status !== 'DISABLED');
+  private overallStatus(
+    health: Record<string, ExternalSourceHealth>,
+  ): ContextStatus {
+    const enabled = Object.values(health).filter(
+      (source) => source.status !== 'DISABLED',
+    );
     if (!enabled.length) return 'UNAVAILABLE';
-    if (enabled.every((source) => source.status === 'INITIALIZING')) return 'INITIALIZING';
-    if (enabled.every((source) => source.status === 'DISCONNECTED')) return 'DISCONNECTED';
+    if (enabled.every((source) => source.status === 'INITIALIZING'))
+      return 'INITIALIZING';
+    if (enabled.every((source) => source.status === 'DISCONNECTED'))
+      return 'DISCONNECTED';
     if (enabled.some((source) => source.status === 'STALE')) return 'STALE';
-    if (enabled.some((source) => source.status === 'DISCONNECTED')) return 'DELAYED';
+    if (enabled.some((source) => source.status === 'DISCONNECTED'))
+      return 'DELAYED';
     return 'NORMAL';
   }
 
@@ -395,7 +449,8 @@ export class ExternalContextService {
     const highRisk = recent.find(
       (record) =>
         record.btcRelevance === 'HIGH' &&
-        (record.trustTier === 'OFFICIAL' || record.trustTier === 'MULTI_SOURCE') &&
+        (record.trustTier === 'OFFICIAL' ||
+          record.trustTier === 'MULTI_SOURCE') &&
         /\b(outage|suspend|maintenance|hack|security|fomc|cpi|employment|enforcement|lawsuit)\b/i.test(
           record.title,
         ),

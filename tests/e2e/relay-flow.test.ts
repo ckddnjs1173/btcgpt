@@ -20,7 +20,11 @@ class RelayD1 {
         return statement;
       },
       run: () => {
-        const [raw, generatedAt, receivedAt] = values as [string, number, number];
+        const [raw, generatedAt, receivedAt] = values as [
+          string,
+          number,
+          number,
+        ];
         if (query.includes('INSERT INTO latest_snapshot'))
           this.snapshot = { raw, generatedAt, receivedAt };
         if (query.includes('INSERT INTO latest_trading_state'))

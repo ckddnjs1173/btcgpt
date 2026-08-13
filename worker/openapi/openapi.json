@@ -62,7 +62,10 @@
           "ageMs": { "type": "number" },
           "marketDataAgeMs": { "type": "number" },
           "relayPublishAgeMs": { "type": ["number", "null"] },
-          "criticalBlockers": { "type": "array", "items": { "type": "string" } },
+          "criticalBlockers": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
           "degradedSources": { "type": "array", "items": { "type": "string" } },
           "missingFields": { "type": "array", "items": { "type": "string" } }
         },
@@ -70,7 +73,15 @@
       },
       "WebSocketHealth": {
         "type": "object",
-        "required": ["status", "connected", "lastConnectedAt", "lastEventAt", "reconnectCount", "consecutiveFailures", "errorCode"],
+        "required": [
+          "status",
+          "connected",
+          "lastConnectedAt",
+          "lastEventAt",
+          "reconnectCount",
+          "consecutiveFailures",
+          "errorCode"
+        ],
         "properties": {
           "status": { "type": "string", "enum": ["CONNECTED", "DISCONNECTED"] },
           "connected": { "type": "boolean" },
@@ -84,7 +95,21 @@
       },
       "MarketSnapshot": {
         "type": "object",
-        "required": ["schemaVersion", "appVersion", "snapshotId", "symbol", "market", "generatedAt", "decisionGates", "connections", "marketState", "orderFlow", "sourceHealth", "timeframes", "trading"],
+        "required": [
+          "schemaVersion",
+          "appVersion",
+          "snapshotId",
+          "symbol",
+          "market",
+          "generatedAt",
+          "decisionGates",
+          "connections",
+          "marketState",
+          "orderFlow",
+          "sourceHealth",
+          "timeframes",
+          "trading"
+        ],
         "properties": {
           "schemaVersion": { "type": "integer", "const": 5 },
           "appVersion": { "type": "string" },
@@ -99,18 +124,34 @@
             "type": "object",
             "required": ["publicWebSocket", "marketWebSocket"],
             "properties": {
-              "publicWebSocket": { "$ref": "#/components/schemas/WebSocketHealth" },
-              "marketWebSocket": { "$ref": "#/components/schemas/WebSocketHealth" }
+              "publicWebSocket": {
+                "$ref": "#/components/schemas/WebSocketHealth"
+              },
+              "marketWebSocket": {
+                "$ref": "#/components/schemas/WebSocketHealth"
+              }
             }
           },
           "strategy": { "type": "object", "additionalProperties": true },
           "marketState": { "type": "object", "additionalProperties": true },
           "orderFlow": {
             "type": "object",
-            "required": ["orderBookSynchronized", "orderBookSyncState", "orderBookLevelCount"],
+            "required": [
+              "orderBookSynchronized",
+              "orderBookSyncState",
+              "orderBookLevelCount"
+            ],
             "properties": {
               "orderBookSynchronized": { "type": "boolean" },
-              "orderBookSyncState": { "type": "string", "enum": ["FETCHING_SNAPSHOT", "WAITING_FOR_BRIDGE", "SYNCHRONIZED", "RETRY_SCHEDULED"] },
+              "orderBookSyncState": {
+                "type": "string",
+                "enum": [
+                  "FETCHING_SNAPSHOT",
+                  "WAITING_FOR_BRIDGE",
+                  "SYNCHRONIZED",
+                  "RETRY_SCHEDULED"
+                ]
+              },
               "orderBookLevelCount": { "type": "integer", "minimum": 0 },
               "sessionCvd": { "type": "number" },
               "rollingCvd4h": { "type": "number" }
@@ -123,7 +164,10 @@
           "position": { "type": "object", "additionalProperties": true },
           "account": { "type": "object", "additionalProperties": true },
           "costSettings": { "type": "object", "additionalProperties": true },
-          "productFilters": { "type": ["object", "null"], "additionalProperties": true },
+          "productFilters": {
+            "type": ["object", "null"],
+            "additionalProperties": true
+          },
           "sourceHealth": { "type": "object", "additionalProperties": true },
           "timeframes": { "type": "object", "additionalProperties": true },
           "riskContext": { "type": "object", "additionalProperties": true },
@@ -134,15 +178,29 @@
       },
       "ExternalContext": {
         "type": "object",
-        "required": ["schemaVersion", "generatedAt", "status", "horizon", "items", "sourceHealth", "riskContext"],
+        "required": [
+          "schemaVersion",
+          "generatedAt",
+          "status",
+          "horizon",
+          "items",
+          "sourceHealth",
+          "riskContext"
+        ],
         "properties": {
           "schemaVersion": { "type": "integer", "const": 2 },
           "generatedAt": { "type": "integer" },
           "relayReceivedAt": { "type": "integer" },
           "ageMs": { "type": "number" },
           "status": { "type": "string" },
-          "horizon": { "type": "string", "enum": ["INTRADAY", "SWING", "MACRO"] },
-          "items": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "horizon": {
+            "type": "string",
+            "enum": ["INTRADAY", "SWING", "MACRO"]
+          },
+          "items": {
+            "type": "array",
+            "items": { "type": "object", "additionalProperties": true }
+          },
           "sourceHealth": { "type": "object", "additionalProperties": true },
           "riskContext": { "type": "object", "additionalProperties": true }
         },
@@ -151,7 +209,16 @@
       "TradePlan": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["side", "entry", "stop", "targets", "sizeMode", "sizeValue", "leverage", "marginMode"],
+        "required": [
+          "side",
+          "entry",
+          "stop",
+          "targets",
+          "sizeMode",
+          "sizeValue",
+          "leverage",
+          "marginMode"
+        ],
         "properties": {
           "snapshotId": {
             "type": "string",
@@ -160,21 +227,64 @@
           "side": { "type": "string", "enum": ["LONG", "SHORT"] },
           "entry": { "type": "number", "exclusiveMinimum": 0 },
           "stop": { "type": "number", "exclusiveMinimum": 0 },
-          "targets": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "number", "exclusiveMinimum": 0 } },
+          "targets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": { "type": "number", "exclusiveMinimum": 0 }
+          },
           "maxLossUsdt": { "type": "number", "exclusiveMinimum": 0 },
-          "riskPercent": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
-          "entryOrderType": { "type": "string", "enum": ["MAKER", "TAKER"], "default": "TAKER" },
-          "exitOrderType": { "type": "string", "enum": ["MAKER", "TAKER"], "default": "TAKER" },
-          "expectedFundingPeriods": { "type": "integer", "minimum": 0, "maximum": 12, "default": 0 },
-          "sizeMode": { "type": "string", "enum": ["MARGIN_USDT", "QUANTITY_BTC", "NOTIONAL_USDT", "MAX_LOSS_USDT"] },
+          "riskPercent": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1
+          },
+          "entryOrderType": {
+            "type": "string",
+            "enum": ["MAKER", "TAKER"],
+            "default": "TAKER"
+          },
+          "exitOrderType": {
+            "type": "string",
+            "enum": ["MAKER", "TAKER"],
+            "default": "TAKER"
+          },
+          "expectedFundingPeriods": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12,
+            "default": 0
+          },
+          "sizeMode": {
+            "type": "string",
+            "enum": [
+              "MARGIN_USDT",
+              "QUANTITY_BTC",
+              "NOTIONAL_USDT",
+              "MAX_LOSS_USDT"
+            ]
+          },
           "sizeValue": { "type": "number", "exclusiveMinimum": 0 },
-          "leverage": { "type": "integer", "minimum": 1, "maximum": 150, "default": 10 },
+          "leverage": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 150,
+            "default": 10
+          },
           "marginMode": { "type": "string", "const": "ISOLATED" }
         }
       },
       "PlanValidationResponse": {
         "type": "object",
-        "required": ["ok", "errors", "warnings", "quantity", "initialMargin", "targets", "calculationSource"],
+        "required": [
+          "ok",
+          "errors",
+          "warnings",
+          "quantity",
+          "initialMargin",
+          "targets",
+          "calculationSource"
+        ],
         "properties": {
           "ok": { "type": "boolean", "const": true },
           "errors": { "type": "array", "items": { "type": "string" } },
@@ -188,14 +298,27 @@
           "estimatedLiquidationPrice": { "type": ["number", "null"] },
           "liquidationDistancePercent": { "type": ["number", "null"] },
           "maximumAllowed": { "type": "object", "additionalProperties": true },
-          "targets": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "targets": {
+            "type": "array",
+            "items": { "type": "object", "additionalProperties": true }
+          },
           "calculationSource": {
             "type": "object",
-            "required": ["snapshotId", "generatedAt", "productFilters", "feeRates", "slippage", "fundingRate"],
+            "required": [
+              "snapshotId",
+              "generatedAt",
+              "productFilters",
+              "feeRates",
+              "slippage",
+              "fundingRate"
+            ],
             "properties": {
               "snapshotId": { "type": ["string", "null"] },
               "generatedAt": { "type": "integer" },
-              "productFilters": { "type": "object", "additionalProperties": true },
+              "productFilters": {
+                "type": "object",
+                "additionalProperties": true
+              },
               "feeRates": { "type": "object", "additionalProperties": true },
               "slippage": { "type": "object", "additionalProperties": true },
               "fundingRate": { "type": "number" }
@@ -211,31 +334,57 @@
           "mode": { "type": "string", "enum": ["PAPER", "LIVE_MANUAL"] },
           "lifecycle": {
             "type": "object",
-            "required": ["stage", "mode", "planId", "tradeId", "positionSource", "startedAt", "updatedAt", "blockedReasons"],
+            "required": [
+              "stage",
+              "mode",
+              "planId",
+              "tradeId",
+              "positionSource",
+              "startedAt",
+              "updatedAt",
+              "blockedReasons"
+            ],
             "properties": {
-              "stage": { "type": "string", "enum": ["FLAT", "WATCHING", "ENTRY_READY", "MANAGING", "CLOSED", "CANCELLED"] },
+              "stage": {
+                "type": "string",
+                "enum": [
+                  "FLAT",
+                  "WATCHING",
+                  "ENTRY_READY",
+                  "MANAGING",
+                  "CLOSED",
+                  "CANCELLED"
+                ]
+              },
               "mode": { "type": "string", "enum": ["PAPER", "LIVE_MANUAL"] },
               "planId": { "type": ["string", "null"] },
               "tradeId": { "type": ["string", "null"] },
-              "positionSource": { "type": "string", "enum": ["NONE", "PAPER", "BINANCE_READ_ONLY"] },
+              "positionSource": {
+                "type": "string",
+                "enum": ["NONE", "PAPER", "BINANCE_READ_ONLY"]
+              },
               "startedAt": { "type": ["integer", "null"] },
               "updatedAt": { "type": "integer" },
-              "blockedReasons": { "type": "array", "items": { "type": "string" } }
+              "blockedReasons": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
             }
           },
           "liveManual": { "type": "object", "additionalProperties": true },
           "generatedAt": { "type": "integer" },
           "relayReceivedAt": { "type": "integer" },
           "ageMs": { "type": "number" },
-          "relayStatus": { "type": "string", "enum": ["NORMAL", "DELAYED", "STALE"] }
+          "relayStatus": {
+            "type": "string",
+            "enum": ["NORMAL", "DELAYED", "STALE"]
+          }
         },
         "additionalProperties": true
       }
     }
   },
-  "security": [
-    { "actionKey": [] }
-  ],
+  "security": [{ "actionKey": [] }],
   "paths": {
     "/v1/snapshot/latest": {
       "get": {
@@ -243,11 +392,46 @@
         "summary": "Get the latest validated BTCUSDT snapshot",
         "x-openai-isConsequential": false,
         "responses": {
-          "200": { "description": "Latest snapshot", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MarketSnapshot" } } } },
-          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "404": { "description": "No snapshot", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "429": { "description": "Rate limited", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "503": { "description": "Storage unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+          "200": {
+            "description": "Latest snapshot",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MarketSnapshot" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "404": {
+            "description": "No snapshot",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "503": {
+            "description": "Storage unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
         }
       }
     },
@@ -261,16 +445,61 @@
             "name": "horizon",
             "in": "query",
             "required": true,
-            "schema": { "type": "string", "enum": ["INTRADAY", "SWING", "MACRO"] }
+            "schema": {
+              "type": "string",
+              "enum": ["INTRADAY", "SWING", "MACRO"]
+            }
           }
         ],
         "responses": {
-          "200": { "description": "External context", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExternalContext" } } } },
-          "400": { "description": "Invalid horizon", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "404": { "description": "No context", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "429": { "description": "Rate limited", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "503": { "description": "Storage unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+          "200": {
+            "description": "External context",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ExternalContext" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid horizon",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "404": {
+            "description": "No context",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "503": {
+            "description": "Storage unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
         }
       }
     },
@@ -281,16 +510,71 @@
         "x-openai-isConsequential": false,
         "requestBody": {
           "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TradePlan" } } }
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TradePlan" }
+            }
+          }
         },
         "responses": {
-          "200": { "description": "Validated calculation", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlanValidationResponse" } } } },
-          "400": { "description": "Invalid plan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ValidationFailure" } } } },
-          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "409": { "description": "Current snapshot cannot validate this plan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ValidationFailure" } } } },
-          "413": { "description": "Payload too large", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "429": { "description": "Rate limited", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "503": { "description": "Storage unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ValidationFailure" } } } }
+          "200": {
+            "description": "Validated calculation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanValidationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid plan",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ValidationFailure" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "409": {
+            "description": "Current snapshot cannot validate this plan",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ValidationFailure" }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "503": {
+            "description": "Storage unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ValidationFailure" }
+              }
+            }
+          }
         }
       }
     },
@@ -300,11 +584,46 @@
         "summary": "Get the latest manual or paper lifecycle state",
         "x-openai-isConsequential": false,
         "responses": {
-          "200": { "description": "Lifecycle state", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TradingState" } } } },
-          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "404": { "description": "No lifecycle state", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "429": { "description": "Rate limited", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "503": { "description": "Storage unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+          "200": {
+            "description": "Lifecycle state",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TradingState" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "404": {
+            "description": "No lifecycle state",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "503": {
+            "description": "Storage unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
         }
       }
     }

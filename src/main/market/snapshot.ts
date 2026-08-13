@@ -256,7 +256,9 @@ function candleStructure(
     closeLocation:
       range > 0 && selected ? (selected.close - selected.low) / range : null,
     ema20SlopePerCandle:
-      latestEma !== null && previousEma !== null ? latestEma - previousEma : null,
+      latestEma !== null && previousEma !== null
+        ? latestEma - previousEma
+        : null,
     vwapDistanceBps:
       selectedPrice !== null && timeframeIndicators.vwap
         ? ((selectedPrice - timeframeIndicators.vwap) /
@@ -277,13 +279,10 @@ function candleStructure(
         ? (selectedPrice - timeframeIndicators.pivotLow) /
           timeframeIndicators.atr14
         : null,
-    rangeCompression5vs20:
-      range5 !== null && range20 ? range5 / range20 : null,
+    rangeCompression5vs20: range5 !== null && range20 ? range5 / range20 : null,
     liveVolumeRatio:
       live && progressRatio && timeframeIndicators.volumeSma20
-        ? live.volume /
-          progressRatio /
-          timeframeIndicators.volumeSma20
+        ? live.volume / progressRatio / timeframeIndicators.volumeSma20
         : null,
     volumeZScore: timeframeIndicators.volumeZScore,
     abovePivotHigh:
@@ -461,7 +460,9 @@ export function generateSnapshot(
           ? ((lastTradePrice - firstTradePrice) / firstTradePrice) * 10_000
           : null;
       const deltaPriceRelation =
-        priceChangeBps === null || Math.abs(priceChangeBps) < 0.01 || delta === 0
+        priceChangeBps === null ||
+        Math.abs(priceChangeBps) < 0.01 ||
+        delta === 0
           ? ('FLAT_OR_INSUFFICIENT' as const)
           : priceChangeBps > 0 && delta < 0
             ? ('PRICE_UP_DELTA_DOWN' as const)
@@ -527,8 +528,7 @@ export function generateSnapshot(
     .reduce((sum, [price, quantity]) => sum + price * quantity, 0);
   const bestBid = cache.depth.bids[0] ?? null;
   const bestAsk = cache.depth.asks[0] ?? null;
-  const topQuantity =
-    (bestBid?.[1] ?? 0) + (bestAsk?.[1] ?? 0);
+  const topQuantity = (bestBid?.[1] ?? 0) + (bestAsk?.[1] ?? 0);
   const microPrice =
     bestBid && bestAsk && topQuantity > 0
       ? (bestAsk[0] * bestBid[1] + bestBid[0] * bestAsk[1]) / topQuantity
@@ -686,11 +686,13 @@ export function generateSnapshot(
           : Math.max(0, generatedAt - options.publishedAt),
       criticalBlockers,
       degradedSources,
-      missingFields: [...new Set([
-        ...marketMissingFields,
-        ...entryMissingFields,
-        ...positionManagementMissingFields,
-      ])],
+      missingFields: [
+        ...new Set([
+          ...marketMissingFields,
+          ...entryMissingFields,
+          ...positionManagementMissingFields,
+        ]),
+      ],
     },
     analysisGate: {
       analysisAllowed: entryAllowed,

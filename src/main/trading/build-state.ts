@@ -38,7 +38,8 @@ function inferLiveTradeStart(
   const compatible = trades
     .filter((trade) => isTradeForSide(trade, position.side))
     .sort((left, right) => right.timestamp - left.timestamp);
-  let cursor = position.side === 'LONG' ? position.quantity : -position.quantity;
+  let cursor =
+    position.side === 'LONG' ? position.quantity : -position.quantity;
 
   for (const trade of compatible) {
     const previous = cursor - tradeSignedQuantity(trade);
@@ -61,8 +62,7 @@ function inferLiveTradeStart(
   const earliestCompatible = compatible.at(-1)?.timestamp;
   return {
     openedAt:
-      earliestCompatible ??
-      (position.updatedAt > 0 ? position.updatedAt : now),
+      earliestCompatible ?? (position.updatedAt > 0 ? position.updatedAt : now),
     attribution: 'OBSERVED_AFTER_CONNECT',
   };
 }
@@ -101,8 +101,7 @@ function mergeTradeAccounting(
   );
   const completeAttribution = session.attribution === 'OBSERVED_FROM_FLAT';
   const feesPaid =
-    completeAttribution &&
-    commissionAssets.every((asset) => asset === 'USDT')
+    completeAttribution && commissionAssets.every((asset) => asset === 'USDT')
       ? (commissionByAsset.USDT ?? 0)
       : null;
 
@@ -111,8 +110,7 @@ function mergeTradeAccounting(
     realizedGrossPnl,
     commissionByAsset,
     feesPaid,
-    realizedNetPnl:
-      feesPaid === null ? null : realizedGrossPnl - feesPaid,
+    realizedNetPnl: feesPaid === null ? null : realizedGrossPnl - feesPaid,
   };
 }
 
@@ -126,9 +124,7 @@ function createLiveTradeSession(
   const session: LiveTradeSession = {
     id: randomUUID(),
     planId:
-      plan &&
-      plan.side === position.side &&
-      plan.leverage === position.leverage
+      plan && plan.side === position.side && plan.leverage === position.leverage
         ? plan.id
         : null,
     status: 'OPEN',
@@ -144,8 +140,7 @@ function createLiveTradeSession(
     realizedGrossPnl: 0,
     feesPaid: inferred.attribution === 'OBSERVED_FROM_FLAT' ? 0 : null,
     commissionByAsset: {},
-    realizedNetPnl:
-      inferred.attribution === 'OBSERVED_FROM_FLAT' ? 0 : null,
+    realizedNetPnl: inferred.attribution === 'OBSERVED_FROM_FLAT' ? 0 : null,
     unrealizedPnl: position.unrealizedPnl,
     lastMarkPrice: position.markPrice,
     observedTradeIds: [],
@@ -176,11 +171,7 @@ function updateLiveTradeSession(
   return {
     ...session,
     ...accounting,
-    status: closed
-      ? 'CLOSED'
-      : partiallyClosed
-        ? 'PARTIALLY_CLOSED'
-        : 'OPEN',
+    status: closed ? 'CLOSED' : partiallyClosed ? 'PARTIALLY_CLOSED' : 'OPEN',
     entryPrice: position?.entryPrice ?? session.entryPrice,
     peakQuantity,
     remainingQuantity,
@@ -277,8 +268,7 @@ function buildProtectiveCoverage(
   const stopLossQuantity = protective
     .filter(
       (order) =>
-        order.type.includes('STOP') &&
-        !order.type.includes('TAKE_PROFIT'),
+        order.type.includes('STOP') && !order.type.includes('TAKE_PROFIT'),
     )
     .reduce((sum, order) => sum + orderQuantity(order), 0);
   const takeProfitQuantity = protective
@@ -293,8 +283,7 @@ function buildProtectiveCoverage(
     stopLossCoverageRatio,
     takeProfitCoverageRatio,
     hasFullStopCoverage: stopLossCoverageRatio >= 1 - QUANTITY_EPSILON,
-    hasFullTakeProfitCoverage:
-      takeProfitCoverageRatio >= 1 - QUANTITY_EPSILON,
+    hasFullTakeProfitCoverage: takeProfitCoverageRatio >= 1 - QUANTITY_EPSILON,
   };
 }
 
@@ -371,18 +360,10 @@ export function buildTradingState(
         : liveTrades.active || account.position
           ? 'BINANCE_READ_ONLY'
           : 'NONE',
-      startedAt:
-        lifecycleTrade?.openedAt ??
-        plan?.lockedAt ??
-        null,
-      updatedAt:
-        lifecycleTrade?.updatedAt ??
-        plan?.lockedAt ??
-        now,
+      startedAt: lifecycleTrade?.openedAt ?? plan?.lockedAt ?? null,
+      updatedAt: lifecycleTrade?.updatedAt ?? plan?.lockedAt ?? now,
       blockedReasons:
-        lifecycleStage === 'MANAGING' && account.position
-          ? blockedReasons
-          : [],
+        lifecycleStage === 'MANAGING' && account.position ? blockedReasons : [],
     },
     activePlan: plan,
     activePaperTrade: paperTrade,

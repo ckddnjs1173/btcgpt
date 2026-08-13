@@ -23,12 +23,23 @@ class MemoryD1 {
       },
       run: () => {
         if (query.includes('INSERT INTO latest_snapshot')) {
-          const [raw, generatedAt, receivedAt] = values as [string, number, number];
+          const [raw, generatedAt, receivedAt] = values as [
+            string,
+            number,
+            number,
+          ];
           if (!this.snapshot || generatedAt >= this.snapshot.generatedAt)
             this.snapshot = { raw, generatedAt, receivedAt };
         } else if (query.includes('INSERT INTO latest_trading_state')) {
-          const [raw, generatedAt, receivedAt] = values as [string, number, number];
-          if (!this.tradingState || generatedAt >= this.tradingState.generatedAt)
+          const [raw, generatedAt, receivedAt] = values as [
+            string,
+            number,
+            number,
+          ];
+          if (
+            !this.tradingState ||
+            generatedAt >= this.tradingState.generatedAt
+          )
             this.tradingState = { raw, generatedAt, receivedAt };
         } else if (query.includes('INSERT INTO external_context_payloads')) {
           const [horizon, raw, generatedAt, receivedAt] = values as [
@@ -182,7 +193,10 @@ describe('worker handler', () => {
   });
 
   it('reports D1 health', async () => {
-    const response = await handler(new Request('https://example.com/health'), env);
+    const response = await handler(
+      new Request('https://example.com/health'),
+      env,
+    );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, storage: 'D1' });
   });

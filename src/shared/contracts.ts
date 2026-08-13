@@ -350,10 +350,7 @@ export type ExternalContextCategory =
   | 'ONCHAIN'
   | 'SENTIMENT';
 export type TrustTier =
-  | 'OFFICIAL'
-  | 'MULTI_SOURCE'
-  | 'SINGLE_SOURCE'
-  | 'UNVERIFIED_SOCIAL';
+  'OFFICIAL' | 'MULTI_SOURCE' | 'SINGLE_SOURCE' | 'UNVERIFIED_SOCIAL';
 
 export interface ExternalContextItem {
   id: string;
@@ -600,10 +597,7 @@ export interface UserSettings {
 
 export type TradingMode = 'PAPER' | 'LIVE_MANUAL';
 export type PositionSizeMode =
-  | 'MARGIN_USDT'
-  | 'QUANTITY_BTC'
-  | 'NOTIONAL_USDT'
-  | 'MAX_LOSS_USDT';
+  'MARGIN_USDT' | 'QUANTITY_BTC' | 'NOTIONAL_USDT' | 'MAX_LOSS_USDT';
 
 export interface PositionCalculationInput {
   side: 'LONG' | 'SHORT';
@@ -765,12 +759,7 @@ export interface TradingStatistics {
 }
 
 export type TradeLifecycleStage =
-  | 'FLAT'
-  | 'WATCHING'
-  | 'ENTRY_READY'
-  | 'MANAGING'
-  | 'CLOSED'
-  | 'CANCELLED';
+  'FLAT' | 'WATCHING' | 'ENTRY_READY' | 'MANAGING' | 'CLOSED' | 'CANCELLED';
 
 export interface TradeLifecycle {
   stage: TradeLifecycleStage;

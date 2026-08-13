@@ -14,9 +14,7 @@ export class NaverCredentialStore {
     const validated = naverConfigurationSchema.parse(credentials);
     this.database.writeSetting(
       STORAGE_KEY,
-      safeStorage
-        .encryptString(JSON.stringify(validated))
-        .toString('base64'),
+      safeStorage.encryptString(JSON.stringify(validated)).toString('base64'),
     );
   }
 

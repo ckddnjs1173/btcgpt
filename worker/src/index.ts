@@ -84,7 +84,8 @@ const snapshotSchema = z
     )
       context.addIssue({
         code: 'custom',
-        message: 'Schema version 3 or newer requires scalpContext and 1m timeframe',
+        message:
+          'Schema version 3 or newer requires scalpContext and 1m timeframe',
       });
     if (snapshot.schemaVersion >= 5 && !snapshot.decisionGates)
       context.addIssue({
@@ -307,7 +308,8 @@ async function save(env: Env, raw: string, generatedAt: number): Promise<void> {
       )
       .bind(JSON.stringify(snapshot.trading), generatedAt, receivedAt)
       .run();
-    if (!tradingResult.success) throw new Error('D1_TRADING_STATE_WRITE_FAILED');
+    if (!tradingResult.success)
+      throw new Error('D1_TRADING_STATE_WRITE_FAILED');
   }
 }
 
@@ -365,7 +367,8 @@ async function saveContext(
     )
     .bind(JSON.stringify(summary), parsed.generatedAt, receivedAt)
     .run();
-  if (!summaryResult.success) throw new Error('D1_CONTEXT_SUMMARY_WRITE_FAILED');
+  if (!summaryResult.success)
+    throw new Error('D1_CONTEXT_SUMMARY_WRITE_FAILED');
 }
 
 async function loadContext(env: Env, horizon: string) {
@@ -462,8 +465,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
       publishedAt: stored.receivedAt,
     };
     const originalDecisionGates = payload.decisionGates as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     if (originalDecisionGates) {
       const criticalBlockers = [
         ...((originalDecisionGates.criticalBlockers as string[] | undefined) ??
@@ -548,9 +550,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
         responseBody.riskContext = {
           ...risk,
           status:
-            riskAgeMs > 60 * 60_000
-              ? 'STALE'
-              : (risk.status ?? 'UNAVAILABLE'),
+            riskAgeMs > 60 * 60_000 ? 'STALE' : (risk.status ?? 'UNAVAILABLE'),
           ageMs: riskAgeMs,
         };
       } else {
@@ -577,10 +577,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     return json(responseBody);
   }
 
-  if (
-    url.pathname === '/v1/trading-state/latest' &&
-    request.method === 'GET'
-  ) {
+  if (url.pathname === '/v1/trading-state/latest' && request.method === 'GET') {
     if (!authorized(request, env.ACTION_READ_KEY))
       return json({ error: 'UNAUTHORIZED' }, 401);
     let stored;
@@ -745,8 +742,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
       (snapshot.schemaVersion ?? 0) >= 5
         ? snapshot.decisionGates?.entryAllowed === true
         : snapshot.analysisGate?.analysisAllowed === true;
-    if (!entryAllowed)
-      return validationFailure(['ENTRY_NOT_ALLOWED'], 409);
+    if (!entryAllowed) return validationFailure(['ENTRY_NOT_ALLOWED'], 409);
     const filters = snapshot.productFilters;
     if (
       !filters?.tickSize ||
@@ -783,11 +779,9 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     const lossPerUnit =
       Math.abs(plan.entry - plan.stop) +
       plan.entry *
-        ((entryFeeRate ?? 0) +
-          Math.max(entrySlippageRate, exitSlippageRate)) +
+        ((entryFeeRate ?? 0) + Math.max(entrySlippageRate, exitSlippageRate)) +
       plan.stop *
-        ((exitFeeRate ?? 0) +
-          Math.max(entrySlippageRate, exitSlippageRate));
+        ((exitFeeRate ?? 0) + Math.max(entrySlippageRate, exitSlippageRate));
     const provisionalQuantity =
       plan.sizeMode === 'MARGIN_USDT'
         ? (plan.sizeValue * plan.leverage) / plan.entry
@@ -891,10 +885,8 @@ export async function handler(request: Request, env: Env): Promise<Response> {
         initialMargin:
           quantity > 0 ? (plan.entry * quantity) / plan.leverage : null,
         requestedQuantity: quantityResult.requestedQuantity,
-        estimatedLiquidationPrice:
-          quantityResult.estimatedLiquidationPrice,
-        liquidationDistancePercent:
-          quantityResult.liquidationDistancePercent,
+        estimatedLiquidationPrice: quantityResult.estimatedLiquidationPrice,
+        liquidationDistancePercent: quantityResult.liquidationDistancePercent,
         maximumAllowed: {
           leverage: bracket.initialLeverage,
           notional: bracket.notionalCap,

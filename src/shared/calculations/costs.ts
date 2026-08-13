@@ -84,10 +84,7 @@ export function calculatePositionPlan(input: PositionPlanInput) {
 }
 
 export type SizeMode =
-  | 'MARGIN_USDT'
-  | 'QUANTITY_BTC'
-  | 'NOTIONAL_USDT'
-  | 'MAX_LOSS_USDT';
+  'MARGIN_USDT' | 'QUANTITY_BTC' | 'NOTIONAL_USDT' | 'MAX_LOSS_USDT';
 
 export interface ExactSizeValidationInput extends QuantityValidationInput {
   side: 'LONG' | 'SHORT';
@@ -114,7 +111,11 @@ export function validateExactPositionSize(
 ): ExactSizeValidationResult {
   const reasons: string[] = [];
   const warnings: string[] = [];
-  if (!Number.isInteger(input.leverage) || input.leverage < 1 || input.leverage > 150)
+  if (
+    !Number.isInteger(input.leverage) ||
+    input.leverage < 1 ||
+    input.leverage > 150
+  )
     reasons.push('LEVERAGE_OUT_OF_RANGE');
   if (input.leverage > input.maximumLeverage)
     reasons.push('LEVERAGE_EXCEEDS_BINANCE_BRACKET');
@@ -135,21 +136,28 @@ export function validateExactPositionSize(
     requestedQuantity = input.sizeValue;
   else if (input.sizeMode === 'NOTIONAL_USDT')
     requestedQuantity = input.sizeValue / input.entry;
-  else requestedQuantity = floorToStep(input.sizeValue / lossPerUnit, input.stepSize);
+  else
+    requestedQuantity = floorToStep(
+      input.sizeValue / lossPerUnit,
+      input.stepSize,
+    );
   const quantity =
-    input.sizeMode === 'MAX_LOSS_USDT'
-      ? requestedQuantity
-      : requestedQuantity;
+    input.sizeMode === 'MAX_LOSS_USDT' ? requestedQuantity : requestedQuantity;
   const notional = quantity * input.entry;
   const isolatedMargin = notional / input.leverage;
   const estimatedMaxLoss = quantity * lossPerUnit;
-  if (input.tickSize && (!isStepAligned(input.entry, input.tickSize) || !isStepAligned(input.stop, input.tickSize)))
+  if (
+    input.tickSize &&
+    (!isStepAligned(input.entry, input.tickSize) ||
+      !isStepAligned(input.stop, input.tickSize))
+  )
     reasons.push('PRICE_NOT_ALIGNED_TO_TICK_SIZE');
   if (!isStepAligned(quantity, input.stepSize))
     reasons.push('QUANTITY_NOT_ALIGNED_TO_STEP_SIZE');
   if (quantity < input.minQuantity) reasons.push('BELOW_MIN_QUANTITY');
   if (notional < input.minNotional) reasons.push('BELOW_MIN_NOTIONAL');
-  if (notional > input.maximumNotional) reasons.push('NOTIONAL_EXCEEDS_BINANCE_BRACKET');
+  if (notional > input.maximumNotional)
+    reasons.push('NOTIONAL_EXCEEDS_BINANCE_BRACKET');
   if (
     input.availableMargin !== null &&
     input.availableMargin !== undefined &&
@@ -168,8 +176,7 @@ export function validateExactPositionSize(
     ),
     input.stepSize,
   );
-  const liquidationFraction =
-    1 / input.leverage - input.maintenanceMarginRate;
+  const liquidationFraction = 1 / input.leverage - input.maintenanceMarginRate;
   const estimatedLiquidationPrice =
     liquidationFraction > 0
       ? input.side === 'LONG'
