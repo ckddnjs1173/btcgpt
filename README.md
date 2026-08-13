@@ -21,6 +21,7 @@ Windows 11 데스크톱 보조 프로그램입니다.
 - schemaVersion 5 `decisionGates`로 시장 분석·신규 진입·포지션 관리 상태 분리
 - GPT Action의 최신 snapshot, 외부 context, lifecycle 조회와 거래 계획 계산 검증
 - 사용자 선택 1~150배 레버리지, 기본 10배, Isolated 전용
+- 사용자 승인 계획의 가격 trigger·무효화·만료를 로컬에서 감시하고 알림만 제공
 - Windows 절전/복귀 후 시장·계정 스트림 재시작과 데이터 복구
 
 ## 설치 및 실행
