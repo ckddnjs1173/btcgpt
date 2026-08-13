@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { app, powerMonitor } from 'electron';
 import type { BrowserWindow, Tray } from 'electron';
 import started from 'electron-squirrel-startup';
 import path from 'node:path';
@@ -50,6 +50,7 @@ let notificationMonitor: OperationalNotificationMonitor | null = null;
 let externalContext: ExternalContextService | null = null;
 let contextUploader: ContextUploader | null = null;
 let quitting = false;
+let resumeRecoveryInProgress = false;
 
 function showMainWindow(): void {
   if (mainWindow === null || mainWindow.isDestroyed()) {
@@ -282,6 +283,48 @@ void app.whenReady().then(() => {
       },
   );
   notificationMonitor.start();
+
+  powerMonitor.on('resume', () => {
+    if (quitting || resumeRecoveryInProgress) return;
+    resumeRecoveryInProgress = true;
+    logger.info('System resumed; restarting live market and account streams');
+    try {
+      marketData?.stop();
+      accountService?.stop();
+      if (process.env.BTC_E2E_DISABLE_MARKET !== '1')
+        void marketData
+          ?.start()
+          .catch((error: unknown) => {
+            logger.warn(
+              {
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+                errorMessage:
+                  error instanceof Error
+                    ? error.message.slice(0, 300)
+                    : 'Unknown resume recovery error',
+              },
+              'Market data resume recovery failed',
+            );
+          })
+          .finally(() => {
+            resumeRecoveryInProgress = false;
+          });
+      else resumeRecoveryInProgress = false;
+      accountService?.start();
+    } catch (error) {
+      resumeRecoveryInProgress = false;
+      logger.warn(
+        {
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+          errorMessage:
+            error instanceof Error
+              ? error.message.slice(0, 300)
+              : 'Unknown resume recovery error',
+        },
+        'System resume recovery failed',
+      );
+    }
+  });
 
   logger.info(
     {
