@@ -215,6 +215,7 @@ function floorToStep(value: number, step: number): number {
 export interface QuantityValidationInput {
   entry: number;
   stop: number;
+  leverage?: number;
   maxLossUsdt?: number | null;
   accountEquity?: number | null;
   riskPercent?: number | null;
@@ -292,7 +293,7 @@ export function validateRiskQuantity(
   let quantity = floorToStep(maxLoss / lossPerUnit, input.stepSize);
   if (input.availableMargin !== null && input.availableMargin !== undefined) {
     const marginQuantity = floorToStep(
-      (input.availableMargin * 10) / input.entry,
+      (input.availableMargin * (input.leverage ?? 10)) / input.entry,
       input.stepSize,
     );
     if (quantity > marginQuantity) {
