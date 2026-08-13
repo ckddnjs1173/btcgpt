@@ -1,0 +1,48 @@
+name: Phase 12 CI fix
+
+on:
+  push:
+    branches:
+      - finalize-phase12
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: finalize-phase12
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Add default last plan and format
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = 'src/main/market/snapshot.ts';
+          let source = fs.readFileSync(path, 'utf8');
+          const before = '      activePlan: null,\n      activePaperTrade: null,';
+          const after = '      activePlan: null,\n      lastPlan: null,\n      activePaperTrade: null,';
+          if (source.includes(before)) {
+            source = source.replace(before, after);
+            fs.writeFileSync(path, source);
+          }
+          NODE
+          npm run format
+      - name: Commit CI fixes
+        run: |
+          if git diff --quiet; then
+            echo "No changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: complete default phase 12 trading state"
+          git push origin HEAD:finalize-phase12
