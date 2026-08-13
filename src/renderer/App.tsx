@@ -505,7 +505,7 @@ export function App() {
           <div>
             <p className="eyebrow">LOCAL · READ ONLY · BTCUSDT</p>
             <h1>BTC Futures Assistant</h1>
-            <small>v{snapshot?.appVersion ?? '0.5.4'}</small>
+            <small>v{snapshot?.appVersion ?? '0.5.6'}</small>
           </div>
         </div>
         <div
