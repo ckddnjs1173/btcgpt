@@ -200,7 +200,9 @@
             "description": "Idempotent retry of an already stored identical decision.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/DecisionRecordResult" }
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionRecordResult"
+                }
               }
             }
           },
@@ -208,7 +210,9 @@
             "description": "Decision recorded.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/DecisionRecordResult" }
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionRecordResult"
+                }
               }
             }
           },
