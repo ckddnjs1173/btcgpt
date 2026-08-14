@@ -28,7 +28,9 @@ const decisionSchema = z
     analysisMode: z.enum(['FAST', 'VERIFY', 'DEEP']).default('FAST'),
     instructionVersion: z.string().trim().min(1).max(80),
     contextPackVersion: z.string().trim().min(1).max(80),
-    confidenceBand: z.enum(['NONE', 'LOW', 'MEDIUM', 'HIGH']).default('NONE'),
+    confidenceBand: z
+      .enum(['NONE', 'LOW', 'MEDIUM', 'HIGH'])
+      .default('NONE'),
     planValidation: z
       .enum(['NOT_APPLICABLE', 'NOT_RUN', 'VALIDATED', 'BLOCKED'])
       .default('NOT_APPLICABLE'),
@@ -37,7 +39,10 @@ const decisionSchema = z
     targets: z.array(z.number().positive()).max(3).default([]),
     triggerSummary: z.string().trim().max(300).nullable().optional(),
     invalidationSummary: z.string().trim().max(300).nullable().optional(),
-    reasonTags: z.array(z.string().trim().min(1).max(60)).max(12).default([]),
+    reasonTags: z
+      .array(z.string().trim().min(1).max(60))
+      .max(12)
+      .default([]),
     counterThesisTags: z
       .array(z.string().trim().min(1).max(60))
       .max(8)
@@ -45,31 +50,34 @@ const decisionSchema = z
   })
   .strict()
   .superRefine((decision, context) => {
-    if (decision.parentDecisionId === decision.decisionId)
+    if (decision.parentDecisionId === decision.decisionId) {
       context.addIssue({
         code: 'custom',
         path: ['parentDecisionId'],
         message: 'parentDecisionId must differ from decisionId',
       });
+    }
     if (decision.decision === 'ENTER_NOW') {
-      if (decision.side === 'NEUTRAL')
+      if (decision.side === 'NEUTRAL') {
         context.addIssue({
           code: 'custom',
           path: ['side'],
           message: 'ENTER_NOW requires LONG or SHORT side',
         });
-      if (
+      }
+      const missingTradeValues =
         decision.entry === null ||
         decision.entry === undefined ||
         decision.stop === null ||
         decision.stop === undefined ||
-        decision.targets.length === 0
-      )
+        decision.targets.length === 0;
+      if (missingTradeValues) {
         context.addIssue({
           code: 'custom',
           path: ['entry'],
           message: 'ENTER_NOW requires entry, stop and at least one target',
         });
+      }
     }
   });
 
@@ -88,10 +96,12 @@ type LatestSnapshotRow = {
   generatedAt: number;
 };
 
-const decisionRateBuckets = new Map<
-  string,
-  { startedAt: number; count: number }
->();
+type DecisionRateBucket = {
+  startedAt: number;
+  count: number;
+};
+
+const decisionRateBuckets = new Map<string, DecisionRateBucket>();
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -113,8 +123,9 @@ function authorized(request: Request, expected: string): boolean {
   const actual = bearer(request);
   if (!actual || !expected || actual.length !== expected.length) return false;
   let difference = 0;
-  for (let index = 0; index < actual.length; index += 1)
+  for (let index = 0; index < actual.length; index += 1) {
     difference |= actual.charCodeAt(index) ^ expected.charCodeAt(index);
+  }
   return difference === 0;
 }
 
@@ -199,17 +210,20 @@ async function saveDecision(
 }
 
 async function recordDecision(request: Request, env: Env): Promise<Response> {
-  if (!authorized(request, env.ACTION_READ_KEY))
+  if (!authorized(request, env.ACTION_READ_KEY)) {
     return json({ error: 'UNAUTHORIZED' }, 401);
+  }
   if (rateLimited(request)) return json({ error: 'RATE_LIMITED' }, 429);
 
   const declared = Number(request.headers.get('content-length') ?? 0);
-  if (declared > MAX_DECISION_BODY_BYTES)
+  if (declared > MAX_DECISION_BODY_BYTES) {
     return json({ error: 'PAYLOAD_TOO_LARGE' }, 413);
+  }
 
   const raw = await request.text();
-  if (new TextEncoder().encode(raw).byteLength > MAX_DECISION_BODY_BYTES)
+  if (new TextEncoder().encode(raw).byteLength > MAX_DECISION_BODY_BYTES) {
     return json({ error: 'PAYLOAD_TOO_LARGE' }, 413);
+  }
 
   let input: unknown;
   try {
@@ -219,7 +233,7 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
   }
 
   const parsed = decisionSchema.safeParse(input);
-  if (!parsed.success)
+  if (!parsed.success) {
     return json(
       {
         error: 'INVALID_DECISION',
@@ -230,19 +244,22 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
       },
       400,
     );
+  }
 
   const decision = parsed.data;
   const recordedAt = Date.now();
-  if (decision.marketGeneratedAt > recordedAt + FUTURE_TOLERANCE_MS)
+  if (decision.marketGeneratedAt > recordedAt + FUTURE_TOLERANCE_MS) {
     return json({ error: 'FUTURE_MARKET_GENERATED_AT' }, 400);
+  }
 
   const normalizedPayload = JSON.stringify(decision);
 
   try {
     const existing = await loadDecision(env, decision.decisionId);
     if (existing) {
-      if (existing.payload !== normalizedPayload)
+      if (existing.payload !== normalizedPayload) {
         return json({ error: 'DECISION_ID_CONFLICT' }, 409);
+      }
       return json({
         ok: true,
         decisionId: decision.decisionId,
@@ -262,20 +279,24 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
     } catch {
       return json({ error: 'SNAPSHOT_STORAGE_CORRUPT' }, 503);
     }
-    if (!latestPayload || typeof latestPayload !== 'object')
+    if (!latestPayload || typeof latestPayload !== 'object') {
       return json({ error: 'SNAPSHOT_STORAGE_CORRUPT' }, 503);
+    }
 
-    const latestSnapshotId = (latestPayload as { snapshotId?: unknown }).snapshotId;
-    if (typeof latestSnapshotId !== 'string')
+    const snapshotPayload = latestPayload as { snapshotId?: unknown };
+    const latestSnapshotId = snapshotPayload.snapshotId;
+    if (typeof latestSnapshotId !== 'string') {
       return json({ error: 'SNAPSHOT_STORAGE_CORRUPT' }, 503);
+    }
 
     const snapshotStatus =
       latestSnapshotId === decision.snapshotId ? 'CURRENT' : 'SUPERSEDED';
-    if (
+    const metadataMismatch =
       snapshotStatus === 'CURRENT' &&
-      latest.generatedAt !== decision.marketGeneratedAt
-    )
+      latest.generatedAt !== decision.marketGeneratedAt;
+    if (metadataMismatch) {
       return json({ error: 'SNAPSHOT_METADATA_MISMATCH' }, 409);
+    }
 
     const snapshotToRecordLatencyMs = Math.max(
       0,
@@ -309,8 +330,9 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
 
 export async function handler(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  if (request.method === 'POST' && url.pathname === '/v1/decision/record')
-    return recordDecision(request, env);
+  const isDecisionRecord =
+    request.method === 'POST' && url.pathname === '/v1/decision/record';
+  if (isDecisionRecord) return recordDecision(request, env);
   return legacyHandler(request, env);
 }
 
