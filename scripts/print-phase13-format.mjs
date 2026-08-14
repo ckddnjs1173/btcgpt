@@ -9,7 +9,8 @@ const files = [
 
 for (const file of files) {
   const source = await readFile(file, 'utf8');
-  const formatted = await prettier.format(source, { filepath: file });
+  const config = (await prettier.resolveConfig(file)) ?? {};
+  const formatted = await prettier.format(source, { ...config, filepath: file });
   console.log(`PHASE13_FORMAT_BEGIN:${file}`);
   console.log(Buffer.from(formatted, 'utf8').toString('base64'));
   console.log(`PHASE13_FORMAT_END:${file}`);
