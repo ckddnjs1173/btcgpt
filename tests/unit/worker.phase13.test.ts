@@ -248,10 +248,7 @@ describe('phase 13 decision telemetry', () => {
 
   it('preserves a valid analyzed decision when the relay snapshot has advanced', async () => {
     const olderGeneratedAt = Date.now() - 1_000;
-    await uploadSnapshot(
-      env,
-      snapshotFixture('snapshot-a', olderGeneratedAt),
-    );
+    await uploadSnapshot(env, snapshotFixture('snapshot-a', olderGeneratedAt));
     await uploadSnapshot(env, snapshotFixture('snapshot-b', Date.now()));
 
     const response = await record(
