@@ -35,8 +35,9 @@ class MemoryD1 {
             number,
             number,
           ];
-          if (!this.snapshot || generatedAt >= this.snapshot.generatedAt)
+          if (!this.snapshot || generatedAt >= this.snapshot.generatedAt) {
             this.snapshot = { raw, generatedAt, receivedAt };
+          }
         } else if (query.includes('INSERT INTO decision_log')) {
           const [
             decisionId,
@@ -82,12 +83,13 @@ class MemoryD1 {
         return Promise.resolve({ success: true });
       },
       first: <T>(): Promise<T | null> => {
-        if (query.includes('FROM latest_snapshot'))
+        if (query.includes('FROM latest_snapshot')) {
           return Promise.resolve(this.snapshot as T | null);
-        if (query.includes('FROM decision_log'))
-          return Promise.resolve(
-            (this.decisions.get(String(values[0])) ?? null) as T | null,
-          );
+        }
+        if (query.includes('FROM decision_log')) {
+          const decision = this.decisions.get(String(values[0])) ?? null;
+          return Promise.resolve(decision as T | null);
+        }
         return Promise.resolve(null);
       },
     };
@@ -151,7 +153,10 @@ function decisionFixture(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function uploadSnapshot(env: Env, snapshot: ReturnType<typeof snapshotFixture>) {
+async function uploadSnapshot(
+  env: Env,
+  snapshot: ReturnType<typeof snapshotFixture>,
+) {
   return handler(
     new Request('https://example.com/v1/snapshot/latest', {
       method: 'PUT',
@@ -162,7 +167,11 @@ async function uploadSnapshot(env: Env, snapshot: ReturnType<typeof snapshotFixt
   );
 }
 
-async function record(env: Env, body: Record<string, unknown>, authenticated = true) {
+async function record(
+  env: Env,
+  body: Record<string, unknown>,
+  authenticated = true,
+) {
   return handler(
     new Request('https://example.com/v1/decision/record', {
       method: 'POST',
@@ -194,10 +203,11 @@ describe('phase 13 decision telemetry', () => {
 
   it('stores a current decision and makes identical retries idempotent', async () => {
     const generatedAt = Date.now();
-    expect(
-      (await uploadSnapshot(env, snapshotFixture('snapshot-a', generatedAt)))
-        .status,
-    ).toBe(200);
+    const upload = await uploadSnapshot(
+      env,
+      snapshotFixture('snapshot-a', generatedAt),
+    );
+    expect(upload.status).toBe(200);
 
     const body = decisionFixture({ marketGeneratedAt: generatedAt });
     const created = await record(env, body);
