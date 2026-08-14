@@ -28,9 +28,7 @@ const decisionSchema = z
     analysisMode: z.enum(['FAST', 'VERIFY', 'DEEP']).default('FAST'),
     instructionVersion: z.string().trim().min(1).max(80),
     contextPackVersion: z.string().trim().min(1).max(80),
-    confidenceBand: z
-      .enum(['NONE', 'LOW', 'MEDIUM', 'HIGH'])
-      .default('NONE'),
+    confidenceBand: z.enum(['NONE', 'LOW', 'MEDIUM', 'HIGH']).default('NONE'),
     planValidation: z
       .enum(['NOT_APPLICABLE', 'NOT_RUN', 'VALIDATED', 'BLOCKED'])
       .default('NOT_APPLICABLE'),
@@ -39,10 +37,7 @@ const decisionSchema = z
     targets: z.array(z.number().positive()).max(3).default([]),
     triggerSummary: z.string().trim().max(300).nullable().optional(),
     invalidationSummary: z.string().trim().max(300).nullable().optional(),
-    reasonTags: z
-      .array(z.string().trim().min(1).max(60))
-      .max(12)
-      .default([]),
+    reasonTags: z.array(z.string().trim().min(1).max(60)).max(12).default([]),
     counterThesisTags: z
       .array(z.string().trim().min(1).max(60))
       .max(8)
