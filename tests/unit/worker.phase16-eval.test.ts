@@ -177,11 +177,7 @@ describe('phase 16B replay experiment registry', () => {
     );
   }
 
-  async function startRun(
-    runId: string,
-    decisionId: string,
-    trialIndex = 1,
-  ) {
+  async function startRun(runId: string, decisionId: string, trialIndex = 1) {
     return handler(
       request('/v1/replay/run/start', {
         method: 'POST',
@@ -316,7 +312,9 @@ describe('phase 16B replay experiment registry', () => {
       env,
     );
     expect(conflict.status).toBe(409);
-    expect(await conflict.json()).toMatchObject({ error: 'RUN_OUTPUT_CONFLICT' });
+    expect(await conflict.json()).toMatchObject({
+      error: 'RUN_OUTPUT_CONFLICT',
+    });
 
     const run = await handler(request('/v1/replay/run/run-long'), env);
     expect(run.status).toBe(200);
@@ -337,9 +335,9 @@ describe('phase 16B replay experiment registry', () => {
     seedReplayCase('decision-long');
     seedReplayCase('decision-abstain');
     expect((await startRun('run-long', 'decision-long')).status).toBe(201);
-    expect(
-      (await startRun('run-abstain', 'decision-abstain')).status,
-    ).toBe(201);
+    expect((await startRun('run-abstain', 'decision-abstain')).status).toBe(
+      201,
+    );
 
     expect(
       (
