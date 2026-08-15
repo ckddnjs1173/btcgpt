@@ -3,6 +3,23 @@ import { describe, expect, it } from 'vitest';
 import type { Env } from '../../worker/src/index';
 import { handleResearchReadRequest } from '../../worker/src/phase24-25-research';
 
+type BenchmarkBody = {
+  version: string;
+  matchedCases: number;
+  agreement: { decisionAgreementRate: number | null };
+  promotionEvidence: { status: string };
+  actualExecution: { averageRealizedNetR: number | null };
+};
+
+type SizingBody = {
+  version: string;
+  status: string;
+  sampleCount: number;
+  candidateRiskMultiplier: { multiplier: number } | null;
+  liveActivation: { enabled: boolean; requiresExplicitApproval: boolean };
+  leverageResearch: { recommendation: unknown };
+};
+
 function request(path: string, authorized = true) {
   return new Request(`https://example.com${path}`, {
     headers: authorized ? { authorization: 'Bearer read' } : {},
@@ -77,7 +94,7 @@ describe('Phase 24-25 research', () => {
       env,
     );
     expect(response?.status).toBe(200);
-    const body = (await response?.json()) as Record<string, any>;
+    const body = (await response?.json()) as BenchmarkBody;
     expect(body.version).toBe('benchmark-v1');
     expect(body.matchedCases).toBe(50);
     expect(body.agreement.decisionAgreementRate).toBe(1);
@@ -121,11 +138,11 @@ describe('Phase 24-25 research', () => {
       env,
     );
     expect(response?.status).toBe(200);
-    const body = (await response?.json()) as Record<string, any>;
+    const body = (await response?.json()) as SizingBody;
     expect(body.version).toBe('sizing-research-v1');
     expect(body.status).toBe('RESEARCH_ONLY');
     expect(body.sampleCount).toBe(40);
-    expect(body.candidateRiskMultiplier.multiplier).toBeLessThanOrEqual(1.2);
+    expect(body.candidateRiskMultiplier?.multiplier ?? 99).toBeLessThanOrEqual(1.2);
     expect(body.liveActivation.enabled).toBe(false);
     expect(body.liveActivation.requiresExplicitApproval).toBe(true);
     expect(body.leverageResearch.recommendation).toBeNull();
