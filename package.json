@@ -28,7 +28,7 @@
     "replay:batch:ingest": "node scripts/replay-batch-ingest.mjs",
     "research:report": "node scripts/research-report.mjs",
     "format": "prettier --write .",
-    "format:check": "node scripts/print-research-ops-format.mjs && prettier --check .",
+    "format:check": "prettier --check .",
     "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations"
   },
   "keywords": [
