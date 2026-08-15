@@ -31,6 +31,10 @@ type MemoryRow = {
   maxDownBps60m: number | null;
 };
 
+type D1AllStatement = {
+  all<T>(): Promise<{ results?: T[]; success: boolean }>;
+};
+
 type OutcomePoint = {
   returnBps: number | null;
   maxUpBps: number | null;
@@ -158,8 +162,10 @@ function parseFingerprint(payload: string): MarketFingerprint | null {
   }
 }
 
-function outcome(row: MemoryRow, horizon: '5m' | '15m' | '30m' | '60m') {
-  const suffix = horizon === '5m' ? '5m' : horizon === '15m' ? '15m' : horizon === '30m' ? '30m' : '60m';
+function outcome(
+  row: MemoryRow,
+  horizon: '5m' | '15m' | '30m' | '60m',
+): OutcomePoint {
   const returns = {
     '5m': row.returnBps5m,
     '15m': row.returnBps15m,
@@ -178,7 +184,6 @@ function outcome(row: MemoryRow, horizon: '5m' | '15m' | '30m' | '60m') {
     '30m': row.maxDownBps30m,
     '60m': row.maxDownBps60m,
   } as const;
-  void suffix;
   return {
     returnBps: returns[horizon],
     maxUpBps: maxUps[horizon],
@@ -222,7 +227,8 @@ function unavailable(now: number): TradingMemoryContext {
     comparableCount: 0,
     analogs: [],
     outcomeSummary: summarize([]),
-    policy: 'Historical analogs are evidence only; GPT owns current market interpretation.',
+    policy:
+      'Historical analogs are evidence only; GPT owns current market interpretation.',
   };
 }
 
@@ -270,9 +276,7 @@ export async function buildTradingMemory(
       current.marketGeneratedAt,
       current.snapshotId,
       MAX_CANDIDATES,
-    );
-
-  if (!statement.all) return unavailable(now);
+    ) as unknown as D1AllStatement;
 
   try {
     const queryResult = await statement.all<MemoryRow>();
