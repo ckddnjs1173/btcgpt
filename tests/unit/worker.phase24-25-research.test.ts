@@ -142,7 +142,9 @@ describe('Phase 24-25 research', () => {
     expect(body.version).toBe('sizing-research-v1');
     expect(body.status).toBe('RESEARCH_ONLY');
     expect(body.sampleCount).toBe(40);
-    expect(body.candidateRiskMultiplier?.multiplier ?? 99).toBeLessThanOrEqual(1.2);
+    expect(body.candidateRiskMultiplier?.multiplier ?? 99).toBeLessThanOrEqual(
+      1.2,
+    );
     expect(body.liveActivation.enabled).toBe(false);
     expect(body.liveActivation.requiresExplicitApproval).toBe(true);
     expect(body.leverageResearch.recommendation).toBeNull();
