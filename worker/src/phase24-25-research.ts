@@ -381,14 +381,14 @@ async function benchmarkResponse(env: Env, experimentId: string) {
       liveAverageDecisionLatencyMs: mean(liveLatencies),
       apiAverageLatencyMs: mean(apiLatencies),
       apiReportedCostSamples: costs.length,
-      apiTotalReportedCostUsd: costs.length > 0 ? costs.reduce((a, b) => a + b, 0) : null,
+      apiTotalReportedCostUsd:
+        costs.length > 0 ? costs.reduce((a, b) => a + b, 0) : null,
     },
     actualExecution: {
       closedLinkedTrades: liveNetR.length,
       averageRealizedNetR: mean(liveNetR),
       medianRealizedNetR: median(liveNetR),
-      note:
-        'Actual cost-adjusted Net R exists only for linked executed trades. Replay directional bps are not presented as realized Net R.',
+      note: 'Actual cost-adjusted Net R exists only for linked executed trades. Replay directional bps are not presented as realized Net R.',
     },
     promotionEvidence: benchmarkEvidence(rows.length, live, api, costs.length),
   });
@@ -451,7 +451,9 @@ function groupedCohorts(
   return [...groups.entries()]
     .map(([key, group]) => cohort(group, key))
     .filter((value): value is Cohort => value !== null)
-    .sort((a, b) => b.sampleCount - a.sampleCount || a.key.localeCompare(b.key));
+    .sort(
+      (a, b) => b.sampleCount - a.sampleCount || a.key.localeCompare(b.key),
+    );
 }
 
 function leverageBucket(leverage: number | null): string {
@@ -510,7 +512,9 @@ async function sizingResponse(env: Env) {
   return json({
     version: SIZING_RESEARCH_VERSION,
     status:
-      rows.length >= MIN_SIZING_TRADES ? 'RESEARCH_ONLY' : 'INSUFFICIENT_SAMPLE',
+      rows.length >= MIN_SIZING_TRADES
+        ? 'RESEARCH_ONLY'
+        : 'INSUFFICIENT_SAMPLE',
     sampleCount: rows.length,
     minimumSampleCount: MIN_SIZING_TRADES,
     performance: {
@@ -532,19 +536,19 @@ async function sizingResponse(env: Env) {
       analysisMode: groupedCohorts(rows, (row) => row.analysisMode),
       confidenceBand: groupedCohorts(rows, (row) => row.confidenceBand),
       contextPackVersion: groupedCohorts(rows, (row) => row.contextPackVersion),
-      observedLeverage: groupedCohorts(rows, (row) => leverageBucket(finite(row.leverage))),
+      observedLeverage: groupedCohorts(rows, (row) =>
+        leverageBucket(finite(row.leverage)),
+      ),
     },
     candidateRiskMultiplier: candidate,
     leverageResearch: {
       recommendation: null,
-      note:
-        'Observed leverage cohorts are descriptive only. Leverage is confounded with setup, stop distance, margin and liquidation constraints, so no automatic leverage recommendation is produced.',
+      note: 'Observed leverage cohorts are descriptive only. Leverage is confounded with setup, stop distance, margin and liquidation constraints, so no automatic leverage recommendation is produced.',
     },
     liveActivation: {
       enabled: false,
       requiresExplicitApproval: true,
-      note:
-        'This endpoint never changes user size, margin, leverage, trade plans or Binance state.',
+      note: 'This endpoint never changes user size, margin, leverage, trade plans or Binance state.',
     },
   });
 }
@@ -566,7 +570,10 @@ export async function handleResearchReadRequest(
   }
   try {
     if (benchmarkMatch) {
-      return benchmarkResponse(env, decodeURIComponent(benchmarkMatch[1] ?? ''));
+      return benchmarkResponse(
+        env,
+        decodeURIComponent(benchmarkMatch[1] ?? ''),
+      );
     }
     return sizingResponse(env);
   } catch {
