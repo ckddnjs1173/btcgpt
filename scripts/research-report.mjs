@@ -24,6 +24,7 @@ async function relay(path) {
 
 const readiness = await relay('/v1/research/readiness');
 const feedback = await relay('/v1/research/feedback');
+const decisionQuality = await relay('/v1/research/decision-quality');
 const sizing = await relay('/v1/research/performance-sizing');
 const benchmarks = [];
 for (const experimentId of experimentIds) {
@@ -36,11 +37,12 @@ for (const experimentId of experimentIds) {
 }
 
 const report = {
-  version: 'research-report-v1',
+  version: 'research-report-v2',
   generatedAt: Date.now(),
   relayUrl,
   readiness,
   feedback,
+  decisionQuality,
   sizing,
   benchmarks,
   paidApiCallMade: false,
@@ -69,7 +71,16 @@ const lines = [
   `- Scored replay runs: ${value('readiness.body.inventory.scoredRuns')}`,
   `- Closed linked trades with Net R: ${value('readiness.body.inventory.closedLinkedTradesWithNetR')}`,
   '',
-  '## Live performance feedback',
+  '## Original GPT decision quality',
+  '',
+  `- Finalized cases: ${value('decisionQuality.body.finalizedCases')}`,
+  `- ENTER samples: ${value('decisionQuality.body.overall.enterSamples')}`,
+  `- ENTER 30m correct rate: ${value('decisionQuality.body.overall.enterCorrectRate')}`,
+  `- ENTER median signed return bps: ${value('decisionQuality.body.overall.medianEnterSignedReturnBps30m')}`,
+  `- WAIT/NO_TRADE samples: ${value('decisionQuality.body.overall.abstainSamples')}`,
+  `- WAIT/NO_TRADE median opportunity bps: ${value('decisionQuality.body.overall.medianAbstainOpportunityBps30m')}`,
+  '',
+  '## Executed-trade performance feedback',
   '',
   `- Status: ${value('feedback.body.status')}`,
   `- Mean Net R: ${value('feedback.body.performance.meanNetR')}`,
