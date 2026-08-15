@@ -285,8 +285,7 @@ export async function attachReplayCaseToDecision(
   )
     .bind(input.decisionId, input.marketGeneratedAt, markPrice)
     .run();
-  if (!outcomeResult.success)
-    throw new Error('D1_REPLAY_OUTCOME_INIT_FAILED');
+  if (!outcomeResult.success) throw new Error('D1_REPLAY_OUTCOME_INIT_FAILED');
   return true;
 }
 
@@ -472,7 +471,9 @@ export async function handleReplayReadRequest(
 ): Promise<Response | null> {
   if (request.method !== 'GET') return null;
   const url = new URL(request.url);
-  const match = url.pathname.match(/^\/v1\/replay\/case\/([^/]+)\/(input|outcome)$/);
+  const match = url.pathname.match(
+    /^\/v1\/replay\/case\/([^/]+)\/(input|outcome)$/,
+  );
   if (!match) return null;
   if (!authorized(request, env.ACTION_READ_KEY))
     return json({ error: 'UNAUTHORIZED' }, 401);
