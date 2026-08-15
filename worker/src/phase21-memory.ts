@@ -94,7 +94,8 @@ function normalizedFeature(name: string, value: number): number {
   if (name.includes('volumeZScore')) return Math.tanh(value / 3);
   if (name.includes('impactBpsPerBtc')) return Math.tanh(value / 25);
   if (name.includes('nextMacroEventMinutes')) return Math.tanh(value / 120);
-  if (name.includes('Bps') || name.includes('bps')) return Math.tanh(value / 50);
+  if (name.includes('Bps') || name.includes('bps'))
+    return Math.tanh(value / 50);
   if (
     name.includes('Percent') ||
     name.includes('Pct') ||
@@ -242,9 +243,8 @@ export async function buildTradingMemory(
   const current = buildMarketFingerprint(snapshot);
   if (!env.DB || !current) return unavailable(now);
 
-  const statement = env.DB
-    .prepare(
-      `SELECT
+  const statement = env.DB.prepare(
+    `SELECT
         f.decision_id AS decisionId,
         f.market_generated_at AS marketGeneratedAt,
         f.payload AS fingerprintPayload,
@@ -272,13 +272,12 @@ export async function buildTradingMemory(
          AND f.snapshot_id <> ?
        ORDER BY f.market_generated_at DESC
        LIMIT ?`,
-    )
-    .bind(
-      current.marketGeneratedAt,
-      current.marketGeneratedAt,
-      current.snapshotId,
-      MAX_CANDIDATES,
-    ) as unknown as D1AllStatement;
+  ).bind(
+    current.marketGeneratedAt,
+    current.marketGeneratedAt,
+    current.snapshotId,
+    MAX_CANDIDATES,
+  ) as unknown as D1AllStatement;
 
   try {
     const queryResult = await statement.all<MemoryRow>();
