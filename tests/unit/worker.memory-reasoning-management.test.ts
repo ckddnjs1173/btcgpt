@@ -131,10 +131,7 @@ function fingerprintSnapshot(
 }
 
 function fullCrossMarket() {
-  const quote = (
-    venue: 'BINANCE_USDM' | 'COINBASE_SPOT',
-    symbol: string,
-  ) => ({
+  const quote = (venue: 'BINANCE_USDM' | 'COINBASE_SPOT', symbol: string) => ({
     venue,
     symbol,
     lastPrice: 100,
