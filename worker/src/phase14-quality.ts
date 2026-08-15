@@ -98,9 +98,7 @@ export function calculateTradeQuality(input: {
   if (markPrice === null) return null;
 
   const directionalEntryDrift =
-    plan.side === 'LONG'
-      ? actualEntry - plan.entry
-      : plan.entry - actualEntry;
+    plan.side === 'LONG' ? actualEntry - plan.entry : plan.entry - actualEntry;
   const entryDriftBps = (directionalEntryDrift / plan.entry) * 10_000;
 
   const favorableDistance = Math.max(
