@@ -79,7 +79,10 @@ function boolean(value: unknown): boolean | null {
 
 function numberArray(value: unknown): number[] {
   return Array.isArray(value)
-    ? value.filter((item): item is number => typeof item === 'number' && Number.isFinite(item))
+    ? value.filter(
+        (item): item is number =>
+          typeof item === 'number' && Number.isFinite(item),
+      )
     : [];
 }
 
@@ -130,9 +133,8 @@ async function loadTradeQuality(
 ): Promise<QualityRow | null> {
   if (!env.DB || !planId) return null;
   try {
-    return await env.DB
-      .prepare(
-        `SELECT
+    return await env.DB.prepare(
+      `SELECT
           decision_id AS decisionId,
           mfe_bps AS mfeBps,
           mae_bps AS maeBps,
@@ -146,7 +148,7 @@ async function loadTradeQuality(
          FROM decision_trade_lineage
          WHERE plan_id = ?
          LIMIT 1`,
-      )
+    )
       .bind(planId)
       .first<QualityRow>();
   } catch {
@@ -167,9 +169,13 @@ export async function buildPositionManagementContext(
     'positionManagementAvailable',
   );
   const activePlan = asRecord(at(snapshot, 'trading', 'activePlan'));
-  const activePaperTrade = asRecord(at(snapshot, 'trading', 'activePaperTrade'));
+  const activePaperTrade = asRecord(
+    at(snapshot, 'trading', 'activePaperTrade'),
+  );
   const activeLiveTrade = asRecord(at(snapshot, 'trading', 'activeLiveTrade'));
-  const livePosition = asRecord(at(snapshot, 'trading', 'liveManual', 'position'));
+  const livePosition = asRecord(
+    at(snapshot, 'trading', 'liveManual', 'position'),
+  );
   const snapshotPosition = asRecord(at(snapshot, 'position'));
   const position = livePosition ?? snapshotPosition;
   const activeTrade = activePaperTrade ?? activeLiveTrade;
@@ -177,25 +183,36 @@ export async function buildPositionManagementContext(
   const positionSide = text(position?.side);
   const tradeSide = text(activeTrade?.side);
   const planSide = text(activePlan?.side);
-  const side = positionSide && positionSide !== 'FLAT' ? positionSide : tradeSide ?? planSide;
+  const side =
+    positionSide && positionSide !== 'FLAT'
+      ? positionSide
+      : (tradeSide ?? planSide);
   const entryPrice =
-    number(activeTrade?.entryPrice) ?? number(position?.entryPrice) ?? number(activePlan?.entry);
+    number(activeTrade?.entryPrice) ??
+    number(position?.entryPrice) ??
+    number(activePlan?.entry);
   const markPrice =
     number(position?.markPrice) ??
     number(activeTrade?.lastMarkPrice) ??
     number(at(snapshot, 'marketState', 'markPrice'));
   const remainingQuantity =
-    number(activeTrade?.remainingQuantity) ?? number(position?.quantity) ?? null;
+    number(activeTrade?.remainingQuantity) ??
+    number(position?.quantity) ??
+    null;
   const leverage =
-    number(position?.leverage) ?? number(activeTrade?.leverage) ?? number(activePlan?.leverage);
+    number(position?.leverage) ??
+    number(activeTrade?.leverage) ??
+    number(activePlan?.leverage);
   const liquidationPrice = number(position?.liquidationPrice);
   const stopPrice = number(activePlan?.stop) ?? number(position?.stopPrice);
-  const targets = numberArray(activePlan?.targets).length > 0
-    ? numberArray(activePlan?.targets)
-    : numberArray(position?.targetPrices);
+  const targets =
+    numberArray(activePlan?.targets).length > 0
+      ? numberArray(activePlan?.targets)
+      : numberArray(position?.targetPrices);
   const openedAt =
     number(activeTrade?.openedAt) ?? number(position?.openedAt) ?? null;
-  const holdingMinutes = openedAt !== null ? Math.max(0, now - openedAt) / 60_000 : null;
+  const holdingMinutes =
+    openedAt !== null ? Math.max(0, now - openedAt) / 60_000 : null;
   const planId = text(activePlan?.id) ?? text(activeTrade?.planId);
   const tradeQuality = await loadTradeQuality(env, planId);
   const risk = riskMetrics({
@@ -207,16 +224,40 @@ export async function buildPositionManagementContext(
   });
 
   const stopLossCoverageRatio = number(
-    at(snapshot, 'trading', 'liveManual', 'protectiveCoverage', 'stopLossCoverageRatio'),
+    at(
+      snapshot,
+      'trading',
+      'liveManual',
+      'protectiveCoverage',
+      'stopLossCoverageRatio',
+    ),
   );
   const takeProfitCoverageRatio = number(
-    at(snapshot, 'trading', 'liveManual', 'protectiveCoverage', 'takeProfitCoverageRatio'),
+    at(
+      snapshot,
+      'trading',
+      'liveManual',
+      'protectiveCoverage',
+      'takeProfitCoverageRatio',
+    ),
   );
   const hasFullStopCoverage = boolean(
-    at(snapshot, 'trading', 'liveManual', 'protectiveCoverage', 'hasFullStopCoverage'),
+    at(
+      snapshot,
+      'trading',
+      'liveManual',
+      'protectiveCoverage',
+      'hasFullStopCoverage',
+    ),
   );
   const hasFullTakeProfitCoverage = boolean(
-    at(snapshot, 'trading', 'liveManual', 'protectiveCoverage', 'hasFullTakeProfitCoverage'),
+    at(
+      snapshot,
+      'trading',
+      'liveManual',
+      'protectiveCoverage',
+      'hasFullTakeProfitCoverage',
+    ),
   );
   const planMatchesPosition = boolean(
     at(snapshot, 'trading', 'liveManual', 'planMatchesPosition'),
@@ -224,11 +265,15 @@ export async function buildPositionManagementContext(
 
   const active =
     lifecycleStage === 'MANAGING' ||
-    (remainingQuantity !== null && remainingQuantity > 0 && sideSign(side) !== null);
+    (remainingQuantity !== null &&
+      remainingQuantity > 0 &&
+      sideSign(side) !== null);
   const flags: string[] = [];
-  if (active && managementAvailable === false) flags.push('MANAGEMENT_DATA_BLOCKED');
+  if (active && managementAvailable === false)
+    flags.push('MANAGEMENT_DATA_BLOCKED');
   if (active && hasFullStopCoverage === false) flags.push('STOP_COVERAGE_GAP');
-  if (active && planMatchesPosition === false) flags.push('PLAN_POSITION_MISMATCH');
+  if (active && planMatchesPosition === false)
+    flags.push('PLAN_POSITION_MISMATCH');
   if (active && risk.distanceToStopR !== null && risk.distanceToStopR <= 0.25) {
     flags.push('STOP_DISTANCE_LE_0_25R');
   }
