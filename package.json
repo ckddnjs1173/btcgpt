@@ -26,7 +26,7 @@
     "replay:batch:prepare": "node scripts/replay-batch-prepare.mjs",
     "replay:batch:ingest": "node scripts/replay-batch-ingest.mjs",
     "format": "prettier --write .",
-    "format:check": "node scripts/print-phase25-format.mjs && prettier --check .",
+    "format:check": "prettier --check .",
     "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite"
   },
   "keywords": [
