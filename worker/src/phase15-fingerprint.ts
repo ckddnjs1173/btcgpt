@@ -59,7 +59,10 @@ function booleanAt(root: RecordLike | null, ...path: string[]): number | null {
   return asBooleanNumber(at(root, ...path));
 }
 
-function bpsDistance(value: number | null, reference: number | null): number | null {
+function bpsDistance(
+  value: number | null,
+  reference: number | null,
+): number | null {
   return value !== null && reference !== null && reference !== 0
     ? ((value - reference) / reference) * 10_000
     : null;
@@ -114,10 +117,26 @@ function addTimeframeFeatures(
 ): void {
   const prefix = `tf.${timeframe}`;
   const indicatorPath = ['timeframes', timeframe, 'indicators'];
-  features[`${prefix}.return1Pct`] = numberAt(root, ...indicatorPath, 'return1');
-  features[`${prefix}.return3Pct`] = numberAt(root, ...indicatorPath, 'return3');
-  features[`${prefix}.return12Pct`] = numberAt(root, ...indicatorPath, 'return12');
-  features[`${prefix}.atrPercent`] = numberAt(root, ...indicatorPath, 'atrPercent');
+  features[`${prefix}.return1Pct`] = numberAt(
+    root,
+    ...indicatorPath,
+    'return1',
+  );
+  features[`${prefix}.return3Pct`] = numberAt(
+    root,
+    ...indicatorPath,
+    'return3',
+  );
+  features[`${prefix}.return12Pct`] = numberAt(
+    root,
+    ...indicatorPath,
+    'return12',
+  );
+  features[`${prefix}.atrPercent`] = numberAt(
+    root,
+    ...indicatorPath,
+    'atrPercent',
+  );
   features[`${prefix}.realizedVolatilityPct`] = numberAt(
     root,
     ...indicatorPath,
@@ -147,9 +166,21 @@ function addScalpFeatures(
   const prefix = `scalp.${timeframe}`;
   const path = ['scalpContext', 'candles', timeframe];
   features[`${prefix}.bodyRatio`] = numberAt(root, ...path, 'bodyRatio');
-  features[`${prefix}.upperWickRatio`] = numberAt(root, ...path, 'upperWickRatio');
-  features[`${prefix}.lowerWickRatio`] = numberAt(root, ...path, 'lowerWickRatio');
-  features[`${prefix}.closeLocation`] = numberAt(root, ...path, 'closeLocation');
+  features[`${prefix}.upperWickRatio`] = numberAt(
+    root,
+    ...path,
+    'upperWickRatio',
+  );
+  features[`${prefix}.lowerWickRatio`] = numberAt(
+    root,
+    ...path,
+    'lowerWickRatio',
+  );
+  features[`${prefix}.closeLocation`] = numberAt(
+    root,
+    ...path,
+    'closeLocation',
+  );
   const emaSlope = numberAt(root, ...path, 'ema20SlopePerCandle');
   features[`${prefix}.ema20SlopeBpsPerCandle`] =
     emaSlope !== null && markPrice !== null && markPrice !== 0
@@ -205,10 +236,13 @@ function addOrderFlowFeatures(
   );
 }
 
-export function buildMarketFingerprint(snapshot: unknown): MarketFingerprint | null {
+export function buildMarketFingerprint(
+  snapshot: unknown,
+): MarketFingerprint | null {
   const root = asRecord(snapshot);
   if (!root) return null;
-  const snapshotId = typeof root.snapshotId === 'string' ? root.snapshotId : null;
+  const snapshotId =
+    typeof root.snapshotId === 'string' ? root.snapshotId : null;
   const marketGeneratedAt = asNumber(root.generatedAt);
   if (!snapshotId || marketGeneratedAt === null) return null;
 
@@ -219,7 +253,11 @@ export function buildMarketFingerprint(snapshot: unknown): MarketFingerprint | n
   const features: Record<string, number | null> = {};
 
   features['market.spreadBps'] = numberAt(root, 'marketState', 'spreadBps');
-  features['market.basisPercent'] = numberAt(root, 'marketState', 'basisPercent');
+  features['market.basisPercent'] = numberAt(
+    root,
+    'marketState',
+    'basisPercent',
+  );
   const fundingRate = numberAt(root, 'marketState', 'fundingRate');
   features['market.fundingRateBps'] =
     fundingRate === null ? null : fundingRate * 10_000;
@@ -240,9 +278,21 @@ export function buildMarketFingerprint(snapshot: unknown): MarketFingerprint | n
   for (const window of ['15s', '1m', '5m'] as const)
     addOrderFlowFeatures(features, root, window);
 
-  features['depth.imbalance20'] = numberAt(root, 'orderFlow', 'orderBookImbalance20');
-  features['depth.imbalance50'] = numberAt(root, 'orderFlow', 'orderBookImbalance50');
-  features['depth.imbalance100'] = numberAt(root, 'orderFlow', 'orderBookImbalance100');
+  features['depth.imbalance20'] = numberAt(
+    root,
+    'orderFlow',
+    'orderBookImbalance20',
+  );
+  features['depth.imbalance50'] = numberAt(
+    root,
+    'orderFlow',
+    'orderBookImbalance50',
+  );
+  features['depth.imbalance100'] = numberAt(
+    root,
+    'orderFlow',
+    'orderBookImbalance100',
+  );
   features['depth.imbalanceChange5s'] = numberAt(
     root,
     'scalpContext',
@@ -301,7 +351,12 @@ export function buildMarketFingerprint(snapshot: unknown): MarketFingerprint | n
 
   for (const window of ['1m', '5m', '15m'] as const) {
     const longNotional = numberAt(root, 'liquidations', window, 'longNotional');
-    const shortNotional = numberAt(root, 'liquidations', window, 'shortNotional');
+    const shortNotional = numberAt(
+      root,
+      'liquidations',
+      window,
+      'shortNotional',
+    );
     features[`liquidation.${window}.skew`] = liquidationSkew(
       longNotional,
       shortNotional,
@@ -314,13 +369,21 @@ export function buildMarketFingerprint(snapshot: unknown): MarketFingerprint | n
       );
   }
 
-  features['risk.highRiskNews'] = booleanAt(root, 'riskContext', 'highRiskNews');
+  features['risk.highRiskNews'] = booleanAt(
+    root,
+    'riskContext',
+    'highRiskNews',
+  );
   features['risk.binanceCriticalNotice'] = booleanAt(
     root,
     'riskContext',
     'binanceCriticalNotice',
   );
-  features['risk.onchainAnomaly'] = booleanAt(root, 'riskContext', 'onchainAnomaly');
+  features['risk.onchainAnomaly'] = booleanAt(
+    root,
+    'riskContext',
+    'onchainAnomaly',
+  );
   const macroRemainingMs = numberAt(
     root,
     'riskContext',
@@ -399,7 +462,9 @@ async function saveCachedFingerprint(
 
 async function cleanupFingerprintCache(env: Env, now: number): Promise<void> {
   if (!env.DB) return;
-  await env.DB.prepare('DELETE FROM snapshot_fingerprint_cache WHERE cached_at < ?')
+  await env.DB.prepare(
+    'DELETE FROM snapshot_fingerprint_cache WHERE cached_at < ?',
+  )
     .bind(now - FINGERPRINT_CACHE_TTL_MS)
     .run();
 }
@@ -435,7 +500,8 @@ async function loadCachedFingerprint(
   )
     .bind(snapshotId, marketGeneratedAt)
     .first<CachedFingerprintRow>();
-  if (!row || row.fingerprintVersion !== MARKET_FINGERPRINT_VERSION) return null;
+  if (!row || row.fingerprintVersion !== MARKET_FINGERPRINT_VERSION)
+    return null;
   try {
     const parsed = JSON.parse(row.payload) as MarketFingerprint;
     return parsed.snapshotId === snapshotId &&
