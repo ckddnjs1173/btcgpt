@@ -600,7 +600,9 @@
             "description": "Validated calculation",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/PlanValidationResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/PlanValidationResponse"
+                }
               }
             }
           },
@@ -723,7 +725,9 @@
             "description": "Idempotent retry of an already stored identical decision",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/DecisionRecordResult" }
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionRecordResult"
+                }
               }
             }
           },
@@ -731,7 +735,9 @@
             "description": "Decision recorded",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/DecisionRecordResult" }
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionRecordResult"
+                }
               }
             }
           },
