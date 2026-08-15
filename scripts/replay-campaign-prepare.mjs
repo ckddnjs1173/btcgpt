@@ -13,7 +13,7 @@ if (!relayUrl || !actionKey || !specPath) {
 }
 
 const spec = JSON.parse(await readFile(specPath, 'utf8'));
-const registry = spec.registry;
+const registryInput = spec.registry ?? {};
 const instructionsPath = String(
   spec.instructionsPath ?? 'worker/openapi/GPT_INSTRUCTIONS.md',
 );
@@ -31,8 +31,21 @@ const sourceAnalysisMode = spec.sourceAnalysisMode
   ? String(spec.sourceAnalysisMode)
   : null;
 
-if (!registry?.experimentId || !registry?.model) {
-  throw new Error('registry.experimentId and registry.model are required.');
+const requiredRegistryStrings = [
+  'experimentId',
+  'name',
+  'model',
+  'instructionVersion',
+  'contextPackVersion',
+  'analysisMode',
+];
+for (const key of requiredRegistryStrings) {
+  if (typeof registryInput[key] !== 'string' || !registryInput[key].trim()) {
+    throw new Error(`registry.${key} is required.`);
+  }
+}
+if (!['FAST', 'VERIFY', 'DEEP'].includes(registryInput.analysisMode)) {
+  throw new Error('registry.analysisMode must be FAST, VERIFY or DEEP.');
 }
 if (!Number.isInteger(sampleSize) || sampleSize < 1 || sampleSize > 500) {
   throw new Error('sampleSize must be an integer between 1 and 500.');
@@ -40,6 +53,29 @@ if (!Number.isInteger(sampleSize) || sampleSize < 1 || sampleSize > 500) {
 if (decisionClasses.length === 0 || decisionClasses.length > 9) {
   throw new Error('decisionClasses must contain between 1 and 9 values.');
 }
+
+const registry = {
+  experimentId: String(registryInput.experimentId),
+  name: String(registryInput.name),
+  ...(registryInput.replayVersion
+    ? { replayVersion: String(registryInput.replayVersion) }
+    : {}),
+  ...(registryInput.evaluatorVersion
+    ? { evaluatorVersion: String(registryInput.evaluatorVersion) }
+    : {}),
+  provider: 'OPENAI',
+  model: String(registryInput.model),
+  ...(registryInput.modelVersion === null ||
+  typeof registryInput.modelVersion === 'string'
+    ? { modelVersion: registryInput.modelVersion }
+    : {}),
+  instructionVersion: String(registryInput.instructionVersion),
+  contextPackVersion: String(registryInput.contextPackVersion),
+  analysisMode: String(registryInput.analysisMode),
+  enabledSources: Array.isArray(registryInput.enabledSources)
+    ? registryInput.enabledSources.map(String).slice(0, 40)
+    : [],
+};
 
 const instructions = (await readFile(instructionsPath, 'utf8')).trim();
 if (!instructions) throw new Error('The selected instructions file is empty.');
@@ -148,6 +184,7 @@ const selectionManifest = {
   paidExecutionApproved: false,
   requestedSampleSize: sampleSize,
   selectedSampleSize: selected.length,
+  experimentId: registry.experimentId,
   sourceFilters: {
     decisionClasses,
     contextPackVersion,
