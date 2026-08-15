@@ -2,8 +2,12 @@ import type { Env } from './index';
 import { handler as phase20Handler } from './phase20';
 import { handleResearchReadRequest } from './phase24-25-research';
 import { capturePlanLeverageFromSnapshot } from './phase25-leverage';
+import { handleResearchOpsRequest } from './research-ops';
 
 export async function handler(request: Request, env: Env): Promise<Response> {
+  const researchOpsResponse = await handleResearchOpsRequest(request, env);
+  if (researchOpsResponse) return researchOpsResponse;
+
   const researchResponse = await handleResearchReadRequest(request, env);
   if (researchResponse) return researchResponse;
 
