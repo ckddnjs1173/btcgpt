@@ -104,7 +104,11 @@ if (benchmarks.length > 0) {
   }
 }
 
-await writeFile('research-report.json', `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+await writeFile(
+  'research-report.json',
+  `${JSON.stringify(report, null, 2)}\n`,
+  'utf8',
+);
 await writeFile('research-report.md', `${lines.join('\n')}\n`, 'utf8');
 console.log('Wrote research-report.json and research-report.md.');
 console.log('No paid OpenAI API call was made.');
