@@ -1,0 +1,21 @@
+{
+  "provider": "MANUAL",
+  "registry": {
+    "experimentId": "baseline-context-v1",
+    "name": "Baseline replay with context-v1",
+    "provider": "MANUAL",
+    "model": "not-called",
+    "modelVersion": null,
+    "instructionVersion": "baseline-v1",
+    "contextPackVersion": "context-v1",
+    "analysisMode": "FAST",
+    "enabledSources": [
+      "BINANCE_BTC_LOCAL",
+      "BINANCE_USDM_CROSS_MARKET",
+      "COINBASE_SPOT",
+      "ROUTED_EXTERNAL_CONTEXT"
+    ]
+  },
+  "decisionIds": ["replace-with-finalized-decision-id"],
+  "instructions": "Analyze the frozen BTC futures market state using only supplied data. Produce a structured trading judgment without using current or future information."
+}
