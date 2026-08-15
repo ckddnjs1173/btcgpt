@@ -54,6 +54,10 @@ class MemoryD1 {
             ,
             snapshotStatus,
             snapshotToRecordLatencyMs,
+            ,
+            ,
+            ,
+            ,
             payload,
           ] = values as [
             string,
@@ -70,6 +74,10 @@ class MemoryD1 {
             string | null,
             'CURRENT' | 'SUPERSEDED',
             number,
+            string,
+            number | null,
+            number | null,
+            string,
             string,
           ];
           this.decisions.set(decisionId, {
