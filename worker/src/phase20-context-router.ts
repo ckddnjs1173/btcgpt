@@ -1,7 +1,19 @@
 import type { Env } from './index';
 import type { CrossMarketContext } from './phase17-cross-market';
+import {
+  buildTradingMemory,
+  type TradingMemoryContext,
+} from './phase21-memory';
+import {
+  buildAdaptiveReasoningPolicy,
+  type AdaptiveReasoningPolicy,
+} from './phase22-reasoning';
+import {
+  buildPositionManagementContext,
+  type PositionManagementContext,
+} from './phase23-management';
 
-export const CONTEXT_PACK_VERSION = 'context-v1';
+export const CONTEXT_PACK_VERSION = 'context-v2';
 const MAX_EXTERNAL_ITEMS = 12;
 
 type RecordLike = Record<string, unknown>;
@@ -31,6 +43,9 @@ type ContextPack = {
     selectedItems: Array<Record<string, unknown>>;
     totalCandidateItems: number;
   };
+  tradingMemory: TradingMemoryContext;
+  reasoningPolicy: AdaptiveReasoningPolicy;
+  positionManagement: PositionManagementContext;
   routing: {
     maxExternalItems: number;
     selectionPolicy: string;
@@ -41,6 +56,8 @@ type ContextPack = {
     crossMarket: number;
     externalAvailable: boolean;
     btcDecisionGateQuality: string | null;
+    memoryStatus: TradingMemoryContext['status'];
+    managementStatus: PositionManagementContext['status'];
   };
 };
 
@@ -258,15 +275,33 @@ export async function buildContextPack(
 ): Promise<ContextPack> {
   const external = await loadExternalContext(env);
   const externalRoot = asRecord(external?.payload ?? null);
+  const selectedItems = selectedExternalItems(external?.payload ?? null);
   const candidates = Array.isArray(externalRoot?.items)
     ? externalRoot.items.length
     : 0;
+  const [tradingMemory, positionManagement] = await Promise.all([
+    buildTradingMemory(env, snapshot, now),
+    buildPositionManagementContext(env, snapshot, now),
+  ]);
+  const reasoningPolicy = buildAdaptiveReasoningPolicy({
+    snapshot,
+    memory: tradingMemory,
+    crossMarket,
+    selectedExternalItemCount: selectedItems.length,
+  });
+
   const sourceSet = new Set<string>(['BINANCE_BTC_LOCAL']);
   if (crossMarket.completeness > 0) {
     sourceSet.add('BINANCE_USDM_CROSS_MARKET');
     sourceSet.add('COINBASE_SPOT');
   }
-  for (const item of selectedExternalItems(external?.payload ?? null)) {
+  if (tradingMemory.status === 'READY' || tradingMemory.status === 'SPARSE') {
+    sourceSet.add('TRADING_MEMORY');
+  }
+  if (positionManagement.status !== 'FLAT') {
+    sourceSet.add('TRADE_QUALITY_TELEMETRY');
+  }
+  for (const item of selectedItems) {
     if (typeof item.source === 'string') sourceSet.add(item.source);
   }
 
@@ -282,19 +317,23 @@ export async function buildContextPack(
       status: text(externalRoot?.status) ?? 'UNAVAILABLE',
       ageMs: external ? Math.max(0, now - external.generatedAt) : null,
       riskContext: externalRoot?.riskContext ?? at(snapshot, 'riskContext'),
-      selectedItems: selectedExternalItems(external?.payload ?? null),
+      selectedItems,
       totalCandidateItems: candidates,
     },
+    tradingMemory,
+    reasoningPolicy,
+    positionManagement,
     routing: {
       maxExternalItems: MAX_EXTERNAL_ITEMS,
       selectionPolicy:
-        'BTC relevance, trust tier, then recency; no local directional score',
+        'BTC relevance, trust tier, recency, historical similarity and task-specific management telemetry; no local directional score',
       omitted: [
         'full candle arrays',
         'full order book levels',
         'duplicate external articles',
         'local bullish/bearish labels',
-        'future replay outcomes',
+        'local LONG/SHORT score',
+        'future replay outcomes for the current case',
       ],
       sourceSet: [...sourceSet].sort(),
     },
@@ -302,6 +341,8 @@ export async function buildContextPack(
       crossMarket: crossMarket.completeness,
       externalAvailable: external !== null,
       btcDecisionGateQuality: text(at(snapshot, 'decisionGates', 'quality')),
+      memoryStatus: tradingMemory.status,
+      managementStatus: positionManagement.status,
     },
   };
 }

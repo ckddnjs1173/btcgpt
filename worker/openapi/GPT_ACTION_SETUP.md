@@ -6,9 +6,9 @@ Use **one current instruction file only**:
 
 `worker/openapi/GPT_INSTRUCTIONS.md`
 
-In the GPT editor, replace the entire Instructions field with that file. Do not append the old Phase 13/confirmation/intelligence appendix files. They are historical migration notes and the editor has an 8,000-character instruction limit.
+In the GPT editor, replace the entire Instructions field with that file. Do not append old Phase 13/confirmation/intelligence appendix files. They are historical migration notes and the editor has an 8,000-character instruction limit.
 
-`GPT_INSTRUCTIONS.md` is intentionally kept below that limit and already contains the current base behavior, decision telemetry, and Phase 20 intelligence-context rules.
+`GPT_INSTRUCTIONS.md` is intentionally kept below that limit and contains the current base behavior, decision telemetry, context-v2 trading memory, adaptive reasoning, and position-management rules.
 
 ## Canonical Action schema
 
@@ -34,7 +34,7 @@ Use API Key authentication with Bearer auth and the existing `ACTION_READ_KEY`. 
 ## New-entry runtime order
 
 1. `getLatestSnapshot`
-2. analyze `decisionGates` and the returned context
+2. analyze `decisionGates`, `intelligenceContext`, and `reasoningPolicy`
 3. if final action is `ENTER_NOW`, `validateTradePlan` with the same `snapshotId`
 4. `recordDecision`
 5. answer the user

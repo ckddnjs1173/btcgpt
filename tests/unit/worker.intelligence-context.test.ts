@@ -24,7 +24,7 @@ function venue(
   } as const;
 }
 
-describe('phase 17-20 intelligence batch', () => {
+describe('phase 17-23 intelligence routing', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -108,7 +108,7 @@ describe('phase 17-20 intelligence batch', () => {
     expect(context.assets.ETH.coinbaseSpot?.lastPrice).toBe(50.2);
   });
 
-  it('routes compact objective context without future labels or local direction scores', async () => {
+  it('routes context v2 without creating a local direction score', async () => {
     const crossMarket = buildCrossMarketContext({
       generatedAt: 2_000,
       binance: {
@@ -145,7 +145,15 @@ describe('phase 17-20 intelligence batch', () => {
       liquidations: {},
       timeframes: {},
       scalpContext: {},
-      position: { side: 'FLAT' },
+      position: { source: 'NONE', side: 'FLAT' },
+      trading: {
+        mode: 'PAPER',
+        lifecycle: { stage: 'FLAT' },
+        activePlan: null,
+        activePaperTrade: null,
+        activeLiveTrade: null,
+        liveManual: { position: null, protectiveCoverage: {} },
+      },
       costSettings: {},
       riskContext: { status: 'NORMAL', highRiskNews: false },
     };
@@ -155,12 +163,17 @@ describe('phase 17-20 intelligence batch', () => {
     } as Env;
     const pack = await buildContextPack(env, snapshot, crossMarket, 2_000);
 
-    expect(pack.version).toBe('context-v1');
+    expect(pack.version).toBe('context-v2');
     expect(pack.snapshotId).toBe('snapshot-a');
     expect(pack.objectiveOnly).toBe(true);
+    expect(pack.tradingMemory.status).toBe('UNAVAILABLE');
+    expect(pack.positionManagement.status).toBe('FLAT');
+    expect(pack.reasoningPolicy.recommendedMode).toBe('VERIFY');
     expect(pack.completeness.crossMarket).toBeGreaterThan(0);
     expect(JSON.stringify(pack)).not.toContain('futurePath');
     expect(JSON.stringify(pack)).not.toContain('bullishScore');
     expect(JSON.stringify(pack)).not.toContain('bearishScore');
+    expect(JSON.stringify(pack)).not.toContain('longScore');
+    expect(JSON.stringify(pack)).not.toContain('shortScore');
   });
 });
