@@ -1,11 +1,17 @@
-import { readFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import prettier from 'prettier';
 
 const file = 'worker/openapi/openapi.json';
+const formattedFile = '/tmp/openapi.formatted.json';
 const source = await readFile(file, 'utf8');
 const config = (await prettier.resolveConfig(file)) ?? {};
 const formatted = await prettier.format(source, { ...config, filepath: file });
+await writeFile(formattedFile, formatted, 'utf8');
 
-console.log('OPENAPI_FORMAT_BEGIN');
-console.log(Buffer.from(formatted, 'utf8').toString('base64'));
-console.log('OPENAPI_FORMAT_END');
+const diff = spawnSync('diff', ['-u', file, formattedFile], {
+  encoding: 'utf8',
+});
+console.log('OPENAPI_FORMAT_DIFF_BEGIN');
+console.log(diff.stdout || 'NO_DIFF');
+console.log('OPENAPI_FORMAT_DIFF_END');
