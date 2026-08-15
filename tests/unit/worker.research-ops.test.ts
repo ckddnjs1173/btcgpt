@@ -33,7 +33,8 @@ type FeedbackBody = {
 };
 
 function countFor(sql: string): number {
-  if (sql.includes('FROM decision_log') && sql.includes('context_pack_version')) return 80;
+  if (sql.includes('FROM decision_log') && sql.includes('context_pack_version'))
+    return 80;
   if (sql.includes('FROM decision_log')) return 100;
   if (sql.includes('FROM replay_cases')) return 75;
   if (sql.includes('FROM replay_case_outcomes')) return 60;
@@ -102,7 +103,8 @@ describe('research feedback loop operations', () => {
               return this;
             },
             first() {
-              if (sql.includes('SELECT plan_leverage')) return Promise.resolve(null);
+              if (sql.includes('SELECT plan_leverage'))
+                return Promise.resolve(null);
               return Promise.resolve({ value: 40 });
             },
             all() {
