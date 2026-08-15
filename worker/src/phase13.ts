@@ -2,6 +2,10 @@ import { z } from 'zod';
 
 import { handler as legacyHandler, type Env } from './index';
 import { syncDecisionLineageFromSnapshot } from './phase13-lineage';
+import {
+  attachMarketFingerprintToDecision,
+  cacheMarketFingerprintFromSnapshot,
+} from './phase15-fingerprint';
 
 const MAX_DECISION_BODY_BYTES = 12_000;
 const FUTURE_TOLERANCE_MS = 5_000;
@@ -261,6 +265,16 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
       if (existing.payload !== normalizedPayload) {
         return json({ error: 'DECISION_ID_CONFLICT' }, 409);
       }
+      try {
+        await attachMarketFingerprintToDecision(env, {
+          decisionId: decision.decisionId,
+          snapshotId: decision.snapshotId,
+          marketGeneratedAt: decision.marketGeneratedAt,
+          linkedAt: existing.recordedAt,
+        });
+      } catch {
+        // Fingerprint telemetry is analytics-only and must not break idempotency.
+      }
       return json({
         ok: true,
         decisionId: decision.decisionId,
@@ -313,6 +327,18 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
       snapshotToRecordLatencyMs,
     );
 
+    try {
+      await attachMarketFingerprintToDecision(env, {
+        decisionId: decision.decisionId,
+        snapshotId: decision.snapshotId,
+        marketGeneratedAt: decision.marketGeneratedAt,
+        fallbackSnapshot: latestPayload,
+        linkedAt: recordedAt,
+      });
+    } catch {
+      // Decision recording remains authoritative if analytics enrichment fails.
+    }
+
     return json(
       {
         ok: true,
@@ -338,14 +364,17 @@ export async function handler(request: Request, env: Env): Promise<Response> {
   const isSnapshotUpload =
     request.method === 'PUT' && url.pathname === '/v1/snapshot/latest';
   if (isSnapshotUpload) {
-    const lineageRequest = request.clone();
+    const analyticsRequest = request.clone();
     const response = await legacyHandler(request, env);
     if (response.ok) {
       try {
-        const snapshot = (await lineageRequest.json()) as unknown;
-        await syncDecisionLineageFromSnapshot(env, snapshot);
+        const snapshot = (await analyticsRequest.json()) as unknown;
+        await Promise.allSettled([
+          cacheMarketFingerprintFromSnapshot(env, snapshot),
+          syncDecisionLineageFromSnapshot(env, snapshot),
+        ]);
       } catch {
-        // Lineage is analytics-only. A sync failure must never break snapshot relay.
+        // Analytics sync must never break the live snapshot relay.
       }
     }
     return response;
