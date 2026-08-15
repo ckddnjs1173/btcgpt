@@ -24,6 +24,10 @@ type StoredLineage = {
   payload: string;
 };
 
+function nullableString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
 class LineageD1 {
   private readonly lineages = new Map<string, StoredLineage>();
 
@@ -111,10 +115,9 @@ class LineageD1 {
             planId: String(planId),
             linkedAt: Number(linkedAt),
             planStatus: String(planStatus),
-            monitoringState:
-              monitoringState === null ? null : String(monitoringState),
-            tradeId: tradeId === null ? null : String(tradeId),
-            tradeStatus: tradeStatus === null ? null : String(tradeStatus),
+            monitoringState: nullableString(monitoringState),
+            tradeId: nullableString(tradeId),
+            tradeStatus: nullableString(tradeStatus),
             realizedNetPnl:
               realizedNetPnl === null ? null : Number(realizedNetPnl),
             payload: String(payload),
