@@ -48,6 +48,8 @@ Paid Batch submission itself is intentionally not automated here. It requires ex
   - computes mean/median Net R, win rate, volatility, one-sided lower confidence bound, 10th percentile, R drawdown, entry drift and MFE/MAE summaries
   - groups descriptive cohorts by analysis mode, confidence band, context pack version and observed leverage bucket
 
+Migration `0011_performance_research.sql` adds `plan_leverage` telemetry to decision/trade lineage and captures leverage from the matching active/last locked plan as lineage continues to update. Existing historical trades can remain `UNKNOWN` when their plan is no longer present in a current snapshot; the system never invents leverage for those rows.
+
 A bounded `candidateRiskMultiplier` is produced only after at least 30 closed trades. It uses shrinkage toward zero and a one-sided confidence bound, and is capped at `1.2x`. This value is research evidence only.
 
 Observed leverage cohorts are descriptive because leverage is confounded with setup, stop distance, margin and liquidation constraints. This batch deliberately does not output an automatic leverage recommendation.
@@ -66,12 +68,14 @@ The research endpoints are not added to the Custom GPT Action schema. They are o
 
 ## Deployment
 
-This batch adds no D1 migration and no desktop runtime change.
+This batch adds one D1 migration and no desktop runtime change.
 
 After merge:
 
 1. `git pull origin main`
-2. `npx wrangler deploy --dry-run`
-3. `npx wrangler deploy`
+2. `npx wrangler d1 migrations list DB --remote`
+3. `npx wrangler d1 migrations apply DB --remote`
+4. `npx wrangler deploy --dry-run`
+5. `npx wrangler deploy`
 
-No GPT Instructions, Action schema, or Action authentication change is required for Phase 24-25 research activation.
+Apply the D1 migration before the Worker deploy. No GPT Instructions, Action schema, or Action authentication change is required for Phase 24-25 research activation.
