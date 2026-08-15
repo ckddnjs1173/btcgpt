@@ -85,7 +85,9 @@ function compactOrderFlow(snapshot: unknown, window: '1m' | '5m' | '15m') {
 }
 
 function compactTimeframe(snapshot: unknown, timeframe: string) {
-  const indicators = asRecord(at(snapshot, 'timeframes', timeframe, 'indicators'));
+  const indicators = asRecord(
+    at(snapshot, 'timeframes', timeframe, 'indicators'),
+  );
   if (!indicators) return null;
   return {
     status: text(at(snapshot, 'timeframes', timeframe, 'status')),
@@ -144,16 +146,8 @@ function btcCore(snapshot: unknown): Record<string, unknown> {
       '1m': compactOrderFlow(snapshot, '1m'),
       '5m': compactOrderFlow(snapshot, '5m'),
       '15m': compactOrderFlow(snapshot, '15m'),
-      orderBookImbalance20: at(
-        snapshot,
-        'orderFlow',
-        'orderBookImbalance20',
-      ),
-      orderBookImbalance50: at(
-        snapshot,
-        'orderFlow',
-        'orderBookImbalance50',
-      ),
+      orderBookImbalance20: at(snapshot, 'orderFlow', 'orderBookImbalance20'),
+      orderBookImbalance50: at(snapshot, 'orderFlow', 'orderBookImbalance50'),
       bidNotional20: at(snapshot, 'orderFlow', 'bidNotional20'),
       askNotional20: at(snapshot, 'orderFlow', 'askNotional20'),
       microPrice: at(snapshot, 'orderFlow', 'microPrice'),
@@ -202,7 +196,9 @@ function relevanceRank(value: unknown): number {
   return { HIGH: 0, MEDIUM: 1, LOW: 2 }[String(value)] ?? 3;
 }
 
-function selectedExternalItems(payload: unknown): Array<Record<string, unknown>> {
+function selectedExternalItems(
+  payload: unknown,
+): Array<Record<string, unknown>> {
   const root = asRecord(payload);
   const rawItems = Array.isArray(root?.items) ? root.items : [];
   return rawItems
