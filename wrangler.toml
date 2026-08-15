@@ -1,5 +1,5 @@
 name = "btc-futures-assistant-relay"
-main = "worker/src/phase20.ts"
+main = "worker/src/phase25.ts"
 compatibility_date = "2026-07-27"
 
 [secrets]
