@@ -2,7 +2,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { App } from './App';
+import { installUxEnhancements } from './uxEnhancements';
 import './styles.css';
+import './ux.css';
 
 const rootElement = document.getElementById('root');
 
@@ -15,3 +17,5 @@ createRoot(rootElement).render(
     <App />
   </StrictMode>,
 );
+
+installUxEnhancements();
