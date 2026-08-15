@@ -19,7 +19,9 @@ const instructions = String(config.instructions ?? '').trim();
 const provider = String(config.provider ?? 'MANUAL').toUpperCase();
 
 if (!registry || !registry.experimentId || decisionIds.length === 0) {
-  throw new Error('Experiment registry config and at least one decisionId are required.');
+  throw new Error(
+    'Experiment registry config and at least one decisionId are required.',
+  );
 }
 
 function sha256(value) {
@@ -193,10 +195,13 @@ async function runOpenAI(replayInput) {
 }
 
 async function registerExperiment() {
+  const promptHash = sha256(instructions).slice(0, 16);
+  const baseInstructionVersion = String(
+    registry.instructionVersion ?? 'replay-instructions',
+  );
   const registered = {
     ...registry,
-    instructionVersion:
-      registry.instructionVersion || `sha256:${sha256(instructions).slice(0, 16)}`,
+    instructionVersion: `${baseInstructionVersion}@${promptHash}`.slice(0, 120),
   };
   return relay('/v1/replay/experiment/register', {
     method: 'POST',
