@@ -49,7 +49,8 @@ try {
   );
   for (const table of requiredTables) {
     const row = tableStatement.get(table);
-    if (!row) throw new Error(`Required D1 table missing after migrations: ${table}`);
+    if (!row)
+      throw new Error(`Required D1 table missing after migrations: ${table}`);
   }
 
   const lineageColumns = database
