@@ -78,15 +78,22 @@ describe('phase 17-20 intelligence batch', () => {
     };
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        const url = String(input);
+      vi.fn((input: string | URL | Request) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
         const key =
           Object.keys(responses).find((candidate) => url.includes(candidate)) ??
           '';
-        return new Response(JSON.stringify(responses[key]), {
-          status: key ? 200 : 404,
-          headers: { 'content-type': 'application/json' },
-        });
+        return Promise.resolve(
+          new Response(JSON.stringify(responses[key]), {
+            status: key ? 200 : 404,
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
       }),
     );
 
