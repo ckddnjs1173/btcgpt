@@ -102,7 +102,6 @@ const outputSchema = z
   });
 
 type ExperimentInput = z.infer<typeof experimentSchema>;
-type RunStartInput = z.infer<typeof runStartSchema>;
 type EvalOutput = z.infer<typeof outputSchema>;
 type HorizonKey = '5m' | '15m' | '30m' | '60m';
 
