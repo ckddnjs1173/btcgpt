@@ -104,4 +104,20 @@ describe('worker OpenAPI', () => {
     );
     expect(json.paths['/v1/snapshot/latest'].put).toBeUndefined();
   });
+
+  it('keeps the canonical Custom GPT instructions within the editor limit', () => {
+    const p = path.join(
+      process.cwd(),
+      'worker',
+      'openapi',
+      'GPT_INSTRUCTIONS.md',
+    );
+    const raw = fs.readFileSync(p, 'utf8');
+
+    expect(Array.from(raw).length).toBeLessThanOrEqual(7_500);
+    expect(raw).toContain('instructionVersion=phase20-v1');
+    expect(raw).toContain('contextPackVersion=context-v1');
+    expect(raw).toContain('recordDecision');
+    expect(raw).toContain('intelligenceContext');
+  });
 });

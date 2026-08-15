@@ -1,43 +1,42 @@
 # GPT Action Setup
 
-## Canonical schema
+## Custom GPT instructions
 
-The Custom GPT must use **one Action configuration only** for this project.
+Use **one current instruction file only**:
 
-Paste the complete contents of:
+`worker/openapi/GPT_INSTRUCTIONS.md`
+
+In the GPT editor, replace the entire Instructions field with that file. Do not append the old Phase 13/confirmation/intelligence appendix files. They are historical migration notes and the editor has an 8,000-character instruction limit.
+
+`GPT_INSTRUCTIONS.md` is intentionally kept below that limit and already contains the current base behavior, decision telemetry, and Phase 20 intelligence-context rules.
+
+## Canonical Action schema
+
+The Custom GPT must use **one Action configuration only**. Paste the complete contents of:
 
 `worker/openapi/openapi.json`
 
-into that Action's OpenAPI schema field.
+into that Action's OpenAPI schema field. Do not split market-data and decision-telemetry schemas into separate Actions.
 
-Do not split market-data and decision-telemetry schemas into separate Actions. The canonical schema intentionally exposes all supported GPT operations from the same Worker origin and the same Bearer credential.
-
-## Expected detected operations
-
-After the schema is accepted, the GPT editor must detect all five operation IDs:
-
+Expected operation IDs:
 1. `getLatestSnapshot`
 2. `getExternalContext`
 3. `validateTradePlan`
 4. `getTradeLifecycle`
 5. `recordDecision`
 
-If `recordDecision` appears but `getLatestSnapshot` does not, the Action was configured with an obsolete telemetry-only schema. Replace the schema with `worker/openapi/openapi.json`.
-
-If `getLatestSnapshot` appears but `recordDecision` does not, the GPT is still using the pre-Phase-13 schema. Pull the latest `main` branch and replace the schema with the current `worker/openapi/openapi.json`.
+If any are missing, replace the Action schema with the current `worker/openapi/openapi.json`.
 
 ## Authentication
 
-Use API Key authentication with Bearer auth and the same `ACTION_READ_KEY` used by the existing Worker Action endpoints.
+Use API Key authentication with Bearer auth and the existing `ACTION_READ_KEY`. Never use `UPLOADER_WRITE_KEY` in the Custom GPT.
 
-Never use `UPLOADER_WRITE_KEY` in the Custom GPT.
-
-## Runtime order for a new-entry question
+## New-entry runtime order
 
 1. `getLatestSnapshot`
-2. analyze the returned snapshot and its `decisionGates`
-3. if the final action is `ENTER_NOW`, call `validateTradePlan` using the same `snapshotId`
-4. call `recordDecision` with the final structured decision
+2. analyze `decisionGates` and the returned context
+3. if final action is `ENTER_NOW`, `validateTradePlan` with the same `snapshotId`
+4. `recordDecision`
 5. answer the user
 
 `recordDecision` is analytics-only telemetry. A telemetry failure must not rewrite the market conclusion or substitute invented trade values.

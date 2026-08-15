@@ -6,3 +6,5 @@ out
 package-lock.json
 docs/PROJECT_SPEC.md
 worker/worker-configuration.d.ts
+worker/openapi/GPT_INSTRUCTIONS*.md
+worker/openapi/GPT_ACTION_SETUP.md
