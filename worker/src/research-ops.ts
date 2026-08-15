@@ -418,10 +418,7 @@ async function feedbackResponse(env: Env): Promise<Response> {
   });
 }
 
-async function replayCatalogResponse(
-  env: Env,
-  url: URL,
-): Promise<Response> {
+async function replayCatalogResponse(env: Env, url: URL): Promise<Response> {
   const requestedLimit = integerParam(url.searchParams.get('limit'));
   const limit = Math.min(
     MAX_CASE_LIMIT,
@@ -460,8 +457,7 @@ async function replayCatalogResponse(
   if (decision) add('d.decision = ?', decision);
   if (side) add('d.side = ?', side);
   if (analysisMode) add('d.analysis_mode = ?', analysisMode);
-  if (contextPackVersion)
-    add('d.context_pack_version = ?', contextPackVersion);
+  if (contextPackVersion) add('d.context_pack_version = ?', contextPackVersion);
   if (instructionVersion) add('d.instruction_version = ?', instructionVersion);
   if (finalized === 'true') clauses.push('o.finalized_at IS NOT NULL');
   if (finalized === 'false') clauses.push('o.finalized_at IS NULL');
