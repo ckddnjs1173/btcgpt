@@ -115,9 +115,11 @@ describe('worker OpenAPI', () => {
     const raw = fs.readFileSync(p, 'utf8');
 
     expect(Array.from(raw).length).toBeLessThanOrEqual(7_500);
-    expect(raw).toContain('instructionVersion=phase20-v1');
-    expect(raw).toContain('contextPackVersion=context-v1');
+    expect(raw).toContain('instructionVersion=phase23-v1');
+    expect(raw).toContain('contextPackVersion=context-v2');
+    expect(raw).toContain('reasoningPolicy.recommendedMode');
+    expect(raw).toContain('tradingMemory');
+    expect(raw).toContain('positionManagement');
     expect(raw).toContain('recordDecision');
-    expect(raw).toContain('intelligenceContext');
   });
 });
