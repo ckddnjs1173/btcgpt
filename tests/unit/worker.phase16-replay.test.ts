@@ -37,11 +37,7 @@ class SqliteD1 {
   }
 }
 
-function snapshot(
-  snapshotId: string,
-  generatedAt: number,
-  markPrice: number,
-) {
+function snapshot(snapshotId: string, generatedAt: number, markPrice: number) {
   return {
     schemaVersion: 5,
     snapshotId,
@@ -306,9 +302,7 @@ describe('phase 16 replay/eval foundation', () => {
     expect(body.futurePath.maxDownBps30m).toBeCloseTo(-200, 8);
     expect(body.futurePath.returnBps30m).toBeCloseTo(300, 8);
     expect(body.futurePath.returnBps60m).toBeCloseTo(400, 8);
-    expect(body.futurePath.finalizedAt).toBe(
-      marketGeneratedAt + 61 * 60_000,
-    );
+    expect(body.futurePath.finalizedAt).toBe(marketGeneratedAt + 61 * 60_000);
   });
 
   it('protects research replay reads with the Action credential', async () => {
