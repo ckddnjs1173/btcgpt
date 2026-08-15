@@ -97,8 +97,7 @@ function catalogPath(decision) {
     decision,
     limit: '500',
   });
-  if (contextPackVersion)
-    params.set('contextPackVersion', contextPackVersion);
+  if (contextPackVersion) params.set('contextPackVersion', contextPackVersion);
   if (instructionVersion) params.set('instructionVersion', instructionVersion);
   if (sourceAnalysisMode) params.set('analysisMode', sourceAnalysisMode);
   return `/v1/research/cases?${params.toString()}`;
