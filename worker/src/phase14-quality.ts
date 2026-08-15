@@ -20,8 +20,8 @@ export type TradeQualityPlan = {
 
 export type TradeQualityTrade = {
   status: string;
-  entryPrice: number;
-  initialQuantity: number;
+  entryPrice: number | null;
+  initialQuantity: number | null;
   openedAt: number | null;
   closedAt: number | null;
   lastMarkPrice: number | null;
@@ -82,10 +82,9 @@ export function calculateTradeQuality(input: {
   observedAt: number;
 }): TradeQualityTelemetry | null {
   const { plan, trade, currentMarkPrice, previous, observedAt } = input;
-  const actualEntry = previous?.actualEntry ?? trade.entryPrice;
+  const actualEntry = positiveFinite(previous?.actualEntry ?? trade.entryPrice);
   const quantity = positiveFinite(trade.initialQuantity);
-  const entry = positiveFinite(actualEntry);
-  if (quantity === null || entry === null) return null;
+  if (quantity === null || actualEntry === null) return null;
 
   const initialRiskUsdt =
     positiveFinite(plan.estimatedMaxLoss) ??
@@ -93,7 +92,9 @@ export function calculateTradeQuality(input: {
   if (initialRiskUsdt === null) return null;
 
   const closingSample = trade.status === 'CLOSED' ? trade.lastMarkPrice : null;
-  const markPrice = positiveFinite(closingSample ?? currentMarkPrice ?? trade.lastMarkPrice);
+  const markPrice = positiveFinite(
+    closingSample ?? currentMarkPrice ?? trade.lastMarkPrice,
+  );
   if (markPrice === null) return null;
 
   const directionalEntryDrift =
