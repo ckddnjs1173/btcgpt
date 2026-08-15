@@ -6,6 +6,12 @@ import {
   attachMarketFingerprintToDecision,
   cacheMarketFingerprintFromSnapshot,
 } from './phase15-fingerprint';
+import {
+  attachReplayCaseToDecision,
+  handleReplayReadRequest,
+  saveReplaySnapshotLease,
+  updateReplayOutcomesFromSnapshot,
+} from './phase16-replay';
 
 const MAX_DECISION_BODY_BYTES = 12_000;
 const FUTURE_TOLERANCE_MS = 5_000;
@@ -275,6 +281,17 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
       } catch {
         // Fingerprint telemetry is analytics-only and must not break idempotency.
       }
+      let replayCaseCaptured = false;
+      try {
+        replayCaseCaptured = await attachReplayCaseToDecision(env, {
+          decisionId: decision.decisionId,
+          snapshotId: decision.snapshotId,
+          marketGeneratedAt: decision.marketGeneratedAt,
+          capturedAt: existing.recordedAt,
+        });
+      } catch {
+        // Replay capture is analytics-only and must not break idempotency.
+      }
       return json({
         ok: true,
         decisionId: decision.decisionId,
@@ -282,6 +299,7 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
         snapshotStatus: existing.snapshotStatus,
         recordedAt: existing.recordedAt,
         snapshotToRecordLatencyMs: existing.snapshotToRecordLatencyMs,
+        replayCaseCaptured,
       });
     }
 
@@ -339,6 +357,18 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
       // Decision recording remains authoritative if analytics enrichment fails.
     }
 
+    let replayCaseCaptured = false;
+    try {
+      replayCaseCaptured = await attachReplayCaseToDecision(env, {
+        decisionId: decision.decisionId,
+        snapshotId: decision.snapshotId,
+        marketGeneratedAt: decision.marketGeneratedAt,
+        capturedAt: recordedAt,
+      });
+    } catch {
+      // Decision recording remains authoritative if replay enrichment fails.
+    }
+
     return json(
       {
         ok: true,
@@ -347,6 +377,7 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
         snapshotStatus,
         recordedAt,
         snapshotToRecordLatencyMs,
+        replayCaseCaptured,
       },
       201,
     );
@@ -356,10 +387,28 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
 }
 
 export async function handler(request: Request, env: Env): Promise<Response> {
+  const replayReadResponse = await handleReplayReadRequest(request, env);
+  if (replayReadResponse) return replayReadResponse;
+
   const url = new URL(request.url);
   const isDecisionRecord =
     request.method === 'POST' && url.pathname === '/v1/decision/record';
   if (isDecisionRecord) return recordDecision(request, env);
+
+  const isSnapshotRead =
+    request.method === 'GET' && url.pathname === '/v1/snapshot/latest';
+  if (isSnapshotRead) {
+    const response = await legacyHandler(request, env);
+    if (response.ok) {
+      try {
+        const snapshotResponse = (await response.clone().json()) as unknown;
+        await saveReplaySnapshotLease(env, snapshotResponse);
+      } catch {
+        // Replay leasing is analytics-only and must never block a live read.
+      }
+    }
+    return response;
+  }
 
   const isSnapshotUpload =
     request.method === 'PUT' && url.pathname === '/v1/snapshot/latest';
@@ -372,6 +421,7 @@ export async function handler(request: Request, env: Env): Promise<Response> {
         await Promise.allSettled([
           cacheMarketFingerprintFromSnapshot(env, snapshot),
           syncDecisionLineageFromSnapshot(env, snapshot),
+          updateReplayOutcomesFromSnapshot(env, snapshot),
         ]);
       } catch {
         // Analytics sync must never break the live snapshot relay.
