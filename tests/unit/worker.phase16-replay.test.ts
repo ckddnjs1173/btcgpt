@@ -11,6 +11,8 @@ import {
   updateReplayOutcomesFromSnapshot,
 } from '../../worker/src/phase16-replay';
 
+type SqliteInput = string | number | bigint | Uint8Array | null;
+
 class SqliteD1 {
   constructor(private readonly database: DatabaseSync) {}
 
@@ -23,11 +25,11 @@ class SqliteD1 {
         return statement;
       },
       run: () => {
-        prepared.run(...values);
+        prepared.run(...(values as SqliteInput[]));
         return Promise.resolve({ success: true });
       },
       first: <T>(): Promise<T | null> => {
-        const row = prepared.get(...values) as T | undefined;
+        const row = prepared.get(...(values as SqliteInput[])) as T | undefined;
         return Promise.resolve(row ?? null);
       },
     };
