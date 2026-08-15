@@ -3,11 +3,18 @@ import { describe, expect, it } from 'vitest';
 import type { Env } from '../../worker/src/index';
 import { buildMarketFingerprint } from '../../worker/src/phase15-fingerprint';
 import { buildCrossMarketContext } from '../../worker/src/phase17-cross-market';
-import { buildTradingMemory } from '../../worker/src/phase21-memory';
+import {
+  buildTradingMemory,
+  type TradingMemoryContext,
+} from '../../worker/src/phase21-memory';
 import { buildAdaptiveReasoningPolicy } from '../../worker/src/phase22-reasoning';
 import { buildPositionManagementContext } from '../../worker/src/phase23-management';
 
-function fingerprintSnapshot(snapshotId: string, generatedAt: number, shift = 0) {
+function fingerprintSnapshot(
+  snapshotId: string,
+  generatedAt: number,
+  shift = 0,
+) {
   const mark = 100 + shift;
   const indicators = {
     return1: 0.1 + shift / 100,
@@ -124,7 +131,10 @@ function fingerprintSnapshot(snapshotId: string, generatedAt: number, shift = 0)
 }
 
 function fullCrossMarket() {
-  const quote = (venue: 'BINANCE_USDM' | 'COINBASE_SPOT', symbol: string) => ({
+  const quote = (
+    venue: 'BINANCE_USDM' | 'COINBASE_SPOT',
+    symbol: string,
+  ) => ({
     venue,
     symbol,
     lastPrice: 100,
@@ -207,12 +217,12 @@ describe('Phase 21-23 intelligence', () => {
     expect(bound.slice(0, 2)).toEqual([10_000, 10_000]);
     expect(memory.status).toBe('SPARSE');
     expect(memory.analogs).toHaveLength(1);
-    expect(memory.analogs[0].similarity).toBeGreaterThan(0.8);
+    expect(memory.analogs[0]?.similarity ?? 0).toBeGreaterThan(0.8);
     expect(memory.outcomeSummary['15m'].medianReturnBps).toBe(8);
   });
 
   it('escalates reasoning depth for event risk without creating a direction', () => {
-    const memory = {
+    const memory: TradingMemoryContext = {
       version: 'memory-v1',
       status: 'NO_MATCH',
       generatedAt: 1_000,
@@ -220,13 +230,33 @@ describe('Phase 21-23 intelligence', () => {
       comparableCount: 0,
       analogs: [],
       outcomeSummary: {
-        '5m': { sampleCount: 0, medianReturnBps: null, positiveReturnCount: 0, negativeReturnCount: 0 },
-        '15m': { sampleCount: 0, medianReturnBps: null, positiveReturnCount: 0, negativeReturnCount: 0 },
-        '30m': { sampleCount: 0, medianReturnBps: null, positiveReturnCount: 0, negativeReturnCount: 0 },
-        '60m': { sampleCount: 0, medianReturnBps: null, positiveReturnCount: 0, negativeReturnCount: 0 },
+        '5m': {
+          sampleCount: 0,
+          medianReturnBps: null,
+          positiveReturnCount: 0,
+          negativeReturnCount: 0,
+        },
+        '15m': {
+          sampleCount: 0,
+          medianReturnBps: null,
+          positiveReturnCount: 0,
+          negativeReturnCount: 0,
+        },
+        '30m': {
+          sampleCount: 0,
+          medianReturnBps: null,
+          positiveReturnCount: 0,
+          negativeReturnCount: 0,
+        },
+        '60m': {
+          sampleCount: 0,
+          medianReturnBps: null,
+          positiveReturnCount: 0,
+          negativeReturnCount: 0,
+        },
       },
       policy: 'evidence only',
-    } as const;
+    };
     const policy = buildAdaptiveReasoningPolicy({
       snapshot: {
         decisionGates: {
