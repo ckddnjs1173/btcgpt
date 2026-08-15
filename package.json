@@ -23,6 +23,8 @@
     "test:binance-smoke": "node scripts/binance-public-smoke.mjs",
     "test:relay-app-soak": "node scripts/relay-app-soak-monitor.mjs",
     "replay:run": "node scripts/replay-runner.mjs",
+    "replay:batch:prepare": "node scripts/replay-batch-prepare.mjs",
+    "replay:batch:ingest": "node scripts/replay-batch-ingest.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite"
@@ -75,6 +77,7 @@
     "eslint-plugin-react-refresh": "0.5.3",
     "globals": "17.7.0",
     "jsdom": "29.1.1",
+    "pino": "10.3.1",
     "prettier": "3.9.6",
     "typescript": "5.9.3",
     "typescript-eslint": "8.65.0",
