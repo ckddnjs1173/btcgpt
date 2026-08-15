@@ -44,6 +44,15 @@ async function enrichedSnapshot(
   }
 }
 
+async function readDecisionId(request: Request): Promise<string | null> {
+  try {
+    const body = (await request.json()) as { decisionId?: unknown };
+    return typeof body.decisionId === 'string' ? body.decisionId : null;
+  } catch {
+    return null;
+  }
+}
+
 async function recordedDecision(
   request: Request,
   env: Env,
@@ -51,13 +60,7 @@ async function recordedDecision(
   const bodyCopy = request.clone();
   const response = await phase16bHandler(request, env);
   if (!response.ok) return response;
-  let decisionId: string | null = null;
-  try {
-    const body = (await bodyCopy.json()) as { decisionId?: unknown };
-    decisionId = typeof body.decisionId === 'string' ? body.decisionId : null;
-  } catch {
-    return response;
-  }
+  const decisionId = await readDecisionId(bodyCopy);
   if (!decisionId) return response;
   const contextPackCaptured = await attachDecisionContextPack(env, decisionId);
   try {
