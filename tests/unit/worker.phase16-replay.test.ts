@@ -22,13 +22,13 @@ class SqliteD1 {
         values = nextValues;
         return statement;
       },
-      run: async () => {
+      run: () => {
         prepared.run(...values);
-        return { success: true };
+        return Promise.resolve({ success: true });
       },
-      first: async <T>(): Promise<T | null> => {
+      first: <T>(): Promise<T | null> => {
         const row = prepared.get(...values) as T | undefined;
-        return row ?? null;
+        return Promise.resolve(row ?? null);
       },
     };
     return statement;
@@ -304,7 +304,9 @@ describe('phase 16 replay/eval foundation', () => {
     expect(body.futurePath.maxDownBps30m).toBeCloseTo(-200, 8);
     expect(body.futurePath.returnBps30m).toBeCloseTo(300, 8);
     expect(body.futurePath.returnBps60m).toBeCloseTo(400, 8);
-    expect(body.futurePath.finalizedAt).toBe(marketGeneratedAt + 61 * 60_000);
+    expect(body.futurePath.finalizedAt).toBe(
+      marketGeneratedAt + 61 * 60_000,
+    );
   });
 
   it('protects research replay reads with the Action credential', async () => {
