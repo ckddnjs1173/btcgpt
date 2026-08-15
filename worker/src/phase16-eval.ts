@@ -19,7 +19,10 @@ const experimentSchema = z
     instructionVersion: z.string().trim().min(1).max(120),
     contextPackVersion: z.string().trim().min(1).max(120),
     analysisMode: z.enum(['FAST', 'VERIFY', 'DEEP']),
-    enabledSources: z.array(z.string().trim().min(1).max(80)).max(40).default([]),
+    enabledSources: z
+      .array(z.string().trim().min(1).max(80))
+      .max(40)
+      .default([]),
   })
   .strict();
 
@@ -473,7 +476,10 @@ async function startRun(request: Request, env: Env): Promise<Response> {
     run.trialIndex,
   );
   if (trial) {
-    return json({ error: 'EXPERIMENT_TRIAL_ALREADY_EXISTS', runId: trial.runId }, 409);
+    return json(
+      { error: 'EXPERIMENT_TRIAL_ALREADY_EXISTS', runId: trial.runId },
+      409,
+    );
   }
 
   const startedAt = Date.now();
@@ -510,7 +516,10 @@ async function startRun(request: Request, env: Env): Promise<Response> {
   );
 }
 
-async function loadOutcome(env: Env, decisionId: string): Promise<OutcomeRow | null> {
+async function loadOutcome(
+  env: Env,
+  decisionId: string,
+): Promise<OutcomeRow | null> {
   return database(env)
     .prepare(
       `SELECT finalized_at AS finalizedAt,
@@ -915,7 +924,9 @@ export async function handleReplayEvalRequest(
     url.pathname === '/v1/replay/experiment/register';
   const isRunStart =
     request.method === 'POST' && url.pathname === '/v1/replay/run/start';
-  const runOutputMatch = url.pathname.match(/^\/v1\/replay\/run\/([^/]+)\/output$/);
+  const runOutputMatch = url.pathname.match(
+    /^\/v1\/replay\/run\/([^/]+)\/output$/,
+  );
   const runReadMatch = url.pathname.match(/^\/v1\/replay\/run\/([^/]+)$/);
   const summaryMatch = url.pathname.match(
     /^\/v1\/replay\/experiment\/([^/]+)\/summary$/,
