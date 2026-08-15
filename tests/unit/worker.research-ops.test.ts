@@ -32,6 +32,27 @@ type FeedbackBody = {
   policy: { automaticSizingChange: boolean; automaticLeverageChange: boolean };
 };
 
+type CatalogBody = {
+  count: number;
+  cases: Array<{
+    decisionId: string;
+    outcomeFinalized: boolean;
+    outcomeSampleCount: number;
+  }>;
+};
+
+type DecisionQualityBody = {
+  finalizedCases: number;
+  overall: {
+    enterSamples: number;
+    enterCorrectRate: number | null;
+    medianEnterSignedReturnBps30m: number | null;
+    abstainSamples: number;
+    medianAbstainOpportunityBps30m: number | null;
+  };
+  cohorts: { contextPackVersion: Array<{ key: string; totalCases: number }> };
+};
+
 function countFor(sql: string): number {
   if (sql.includes('FROM decision_log') && sql.includes('context_pack_version'))
     return 80;
@@ -135,6 +156,166 @@ describe('research feedback loop operations', () => {
     );
     expect(body.policy.automaticSizingChange).toBe(false);
     expect(body.policy.automaticLeverageChange).toBe(false);
+  });
+
+  it('lists finalized replay cases without exposing future outcome values', async () => {
+    const rows = [
+      {
+        decisionId: 'd-1',
+        snapshotId: 's-1',
+        marketGeneratedAt: 1000,
+        capturedAt: 1100,
+        replayVersion: 'replay-v1',
+        payloadSha256: 'abc',
+        intent: 'NEW_ENTRY',
+        decision: 'WAIT_TRIGGER',
+        side: 'LONG',
+        analysisMode: 'VERIFY',
+        instructionVersion: 'phase23-v1',
+        contextPackVersion: 'context-v2',
+        confidenceBand: 'MEDIUM',
+        fingerprintCompleteness: 0.9,
+        finalizedAt: 10_000,
+        outcomeSampleCount: 50,
+      },
+    ];
+    let boundValues: unknown[] = [];
+    const env = {
+      UPLOADER_WRITE_KEY: 'upload',
+      ACTION_READ_KEY: 'read',
+      DB: {
+        prepare(sql: string) {
+          expect(sql).toContain('FROM replay_cases c');
+          expect(sql).toContain('o.finalized_at IS NOT NULL');
+          return {
+            bind(...values: unknown[]) {
+              boundValues = values;
+              return this;
+            },
+            all() {
+              return Promise.resolve({ success: true, results: rows });
+            },
+          };
+        },
+      },
+    } as unknown as Env;
+
+    const response = await handleResearchOpsRequest(
+      request(
+        '/v1/research/cases?finalized=true&decision=WAIT_TRIGGER&contextPackVersion=context-v2&limit=25',
+      ),
+      env,
+    );
+    expect(response?.status).toBe(200);
+    expect(boundValues).toEqual(['WAIT_TRIGGER', 'context-v2', 25]);
+    const body = (await response?.json()) as CatalogBody;
+    expect(body.count).toBe(1);
+    expect(body.cases[0]).toMatchObject({
+      decisionId: 'd-1',
+      outcomeFinalized: true,
+      outcomeSampleCount: 50,
+    });
+    expect(body.cases[0]).not.toHaveProperty('returnBps30m');
+    expect(body.cases[0]).not.toHaveProperty('maxUpBps30m');
+  });
+
+  it('separates ENTER direction quality from WAIT/NO_TRADE missed opportunity', async () => {
+    const rows = [
+      {
+        decisionId: 'enter-long-win',
+        marketGeneratedAt: 1000,
+        decision: 'ENTER_NOW',
+        side: 'LONG',
+        analysisMode: 'FAST',
+        instructionVersion: 'phase23-v1',
+        contextPackVersion: 'context-v2',
+        confidenceBand: 'MEDIUM',
+        returnBps30m: 20,
+        maxUpBps30m: 30,
+        maxDownBps30m: -5,
+      },
+      {
+        decisionId: 'enter-short-win',
+        marketGeneratedAt: 2000,
+        decision: 'ENTER_NOW',
+        side: 'SHORT',
+        analysisMode: 'FAST',
+        instructionVersion: 'phase23-v1',
+        contextPackVersion: 'context-v2',
+        confidenceBand: 'HIGH',
+        returnBps30m: -10,
+        maxUpBps30m: 6,
+        maxDownBps30m: -18,
+      },
+      {
+        decisionId: 'wait',
+        marketGeneratedAt: 3000,
+        decision: 'WAIT_TRIGGER',
+        side: 'NEUTRAL',
+        analysisMode: 'VERIFY',
+        instructionVersion: 'phase23-v1',
+        contextPackVersion: 'context-v2',
+        confidenceBand: 'LOW',
+        returnBps30m: 4,
+        maxUpBps30m: 40,
+        maxDownBps30m: -12,
+      },
+      {
+        decisionId: 'no-trade',
+        marketGeneratedAt: 4000,
+        decision: 'NO_TRADE',
+        side: 'NEUTRAL',
+        analysisMode: 'VERIFY',
+        instructionVersion: 'phase23-v1',
+        contextPackVersion: 'context-v2',
+        confidenceBand: 'LOW',
+        returnBps30m: -2,
+        maxUpBps30m: 10,
+        maxDownBps30m: -20,
+      },
+    ];
+    const env = {
+      UPLOADER_WRITE_KEY: 'upload',
+      ACTION_READ_KEY: 'read',
+      DB: {
+        prepare(sql: string) {
+          expect(sql).toContain('JOIN replay_case_outcomes');
+          return {
+            all() {
+              return Promise.resolve({ success: true, results: rows });
+            },
+          };
+        },
+      },
+    } as unknown as Env;
+
+    const response = await handleResearchOpsRequest(
+      request('/v1/research/decision-quality'),
+      env,
+    );
+    expect(response?.status).toBe(200);
+    const body = (await response?.json()) as DecisionQualityBody;
+    expect(body.finalizedCases).toBe(4);
+    expect(body.overall.enterSamples).toBe(2);
+    expect(body.overall.enterCorrectRate).toBe(1);
+    expect(body.overall.medianEnterSignedReturnBps30m).toBe(15);
+    expect(body.overall.abstainSamples).toBe(2);
+    expect(body.overall.medianAbstainOpportunityBps30m).toBe(30);
+    expect(body.cohorts.contextPackVersion).toContainEqual(
+      expect.objectContaining({ key: 'context-v2', totalCases: 4 }),
+    );
+  });
+
+  it('rejects invalid replay catalog filters', async () => {
+    const env = {
+      UPLOADER_WRITE_KEY: 'upload',
+      ACTION_READ_KEY: 'read',
+    } as Env;
+    const response = await handleResearchOpsRequest(
+      request('/v1/research/cases?decision=BUY_NOW'),
+      env,
+    );
+    expect(response?.status).toBe(400);
   });
 
   it('requires the existing Action bearer for research operations', async () => {
