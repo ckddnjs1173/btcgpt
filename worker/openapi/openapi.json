@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "BTC Futures Assistant Actions",
-    "version": "5.1.0",
-    "description": "Read-only BTCUSDT schema v5 market, context, lifecycle, and deterministic calculation actions."
+    "version": "5.2.0",
+    "description": "Unified BTCUSDT market, context, lifecycle, deterministic calculation, and analytics-only GPT decision telemetry actions."
   },
   "servers": [
     {
@@ -22,7 +22,14 @@
         "type": "object",
         "required": ["error"],
         "properties": {
-          "error": { "type": "string" }
+          "error": { "type": "string" },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
         },
         "additionalProperties": true
       },
@@ -43,11 +50,6 @@
           "entryAllowed",
           "positionManagementAvailable",
           "quality",
-          "generatedAt",
-          "publishedAt",
-          "ageMs",
-          "marketDataAgeMs",
-          "relayPublishAgeMs",
           "criticalBlockers",
           "degradedSources",
           "missingFields"
@@ -66,32 +68,38 @@
             "type": "array",
             "items": { "type": "string" }
           },
-          "degradedSources": { "type": "array", "items": { "type": "string" } },
-          "missingFields": { "type": "array", "items": { "type": "string" } }
+          "degradedSources": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "missingFields": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
         },
-        "additionalProperties": false
+        "additionalProperties": true
       },
-      "WebSocketHealth": {
+      "TradingState": {
         "type": "object",
-        "required": [
-          "status",
-          "connected",
-          "lastConnectedAt",
-          "lastEventAt",
-          "reconnectCount",
-          "consecutiveFailures",
-          "errorCode"
-        ],
         "properties": {
-          "status": { "type": "string", "enum": ["CONNECTED", "DISCONNECTED"] },
-          "connected": { "type": "boolean" },
-          "lastConnectedAt": { "type": ["integer", "null"] },
-          "lastEventAt": { "type": ["integer", "null"] },
-          "reconnectCount": { "type": "integer" },
-          "consecutiveFailures": { "type": "integer" },
-          "errorCode": { "type": ["string", "null"] }
+          "mode": { "type": "string", "enum": ["PAPER", "LIVE_MANUAL"] },
+          "lifecycle": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "liveManual": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "generatedAt": { "type": "integer" },
+          "relayReceivedAt": { "type": "integer" },
+          "ageMs": { "type": "number" },
+          "relayStatus": {
+            "type": "string",
+            "enum": ["NORMAL", "DELAYED", "STALE"]
+          }
         },
-        "additionalProperties": false
+        "additionalProperties": true
       },
       "MarketSnapshot": {
         "type": "object",
@@ -103,7 +111,6 @@
           "market",
           "generatedAt",
           "decisionGates",
-          "connections",
           "marketState",
           "orderFlow",
           "sourceHealth",
@@ -122,73 +129,72 @@
           "decisionGates": { "$ref": "#/components/schemas/DecisionGates" },
           "connections": {
             "type": "object",
-            "required": ["publicWebSocket", "marketWebSocket"],
-            "properties": {
-              "publicWebSocket": {
-                "$ref": "#/components/schemas/WebSocketHealth"
-              },
-              "marketWebSocket": {
-                "$ref": "#/components/schemas/WebSocketHealth"
-              }
-            }
-          },
-          "strategy": { "type": "object", "additionalProperties": true },
-          "marketState": { "type": "object", "additionalProperties": true },
-          "orderFlow": {
-            "type": "object",
-            "required": [
-              "orderBookSynchronized",
-              "orderBookSyncState",
-              "orderBookLevelCount"
-            ],
-            "properties": {
-              "orderBookSynchronized": { "type": "boolean" },
-              "orderBookSyncState": {
-                "type": "string",
-                "enum": [
-                  "FETCHING_SNAPSHOT",
-                  "WAITING_FOR_BRIDGE",
-                  "SYNCHRONIZED",
-                  "RETRY_SCHEDULED"
-                ]
-              },
-              "orderBookLevelCount": { "type": "integer", "minimum": 0 },
-              "sessionCvd": { "type": "number" },
-              "rollingCvd4h": { "type": "number" }
-            },
             "additionalProperties": true
           },
-          "openInterest": { "type": "object", "additionalProperties": true },
-          "sentiment": { "type": "object", "additionalProperties": true },
-          "liquidations": { "type": "object", "additionalProperties": true },
-          "position": { "type": "object", "additionalProperties": true },
-          "account": { "type": "object", "additionalProperties": true },
-          "costSettings": { "type": "object", "additionalProperties": true },
+          "strategy": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "marketState": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "orderFlow": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "openInterest": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "sentiment": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "liquidations": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "position": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "account": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "costSettings": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "productFilters": {
             "type": ["object", "null"],
             "additionalProperties": true
           },
-          "sourceHealth": { "type": "object", "additionalProperties": true },
-          "timeframes": { "type": "object", "additionalProperties": true },
-          "riskContext": { "type": "object", "additionalProperties": true },
-          "scalpContext": { "type": "object", "additionalProperties": true },
+          "sourceHealth": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "timeframes": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "riskContext": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "scalpContext": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "trading": { "$ref": "#/components/schemas/TradingState" }
         },
         "additionalProperties": true
       },
       "ExternalContext": {
         "type": "object",
-        "required": [
-          "schemaVersion",
-          "generatedAt",
-          "status",
-          "horizon",
-          "items",
-          "sourceHealth",
-          "riskContext"
-        ],
         "properties": {
-          "schemaVersion": { "type": "integer", "const": 2 },
+          "schemaVersion": { "type": "integer" },
           "generatedAt": { "type": "integer" },
           "relayReceivedAt": { "type": "integer" },
           "ageMs": { "type": "number" },
@@ -199,12 +205,21 @@
           },
           "items": {
             "type": "array",
-            "items": { "type": "object", "additionalProperties": true }
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
           },
-          "sourceHealth": { "type": "object", "additionalProperties": true },
-          "riskContext": { "type": "object", "additionalProperties": true }
+          "sourceHealth": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "riskContext": {
+            "type": "object",
+            "additionalProperties": true
+          }
         },
-        "additionalProperties": false
+        "additionalProperties": true
       },
       "TradePlan": {
         "type": "object",
@@ -276,17 +291,8 @@
       },
       "PlanValidationResponse": {
         "type": "object",
-        "required": [
-          "ok",
-          "errors",
-          "warnings",
-          "quantity",
-          "initialMargin",
-          "targets",
-          "calculationSource"
-        ],
         "properties": {
-          "ok": { "type": "boolean", "const": true },
+          "ok": { "type": "boolean" },
           "errors": { "type": "array", "items": { "type": "string" } },
           "warnings": { "type": "array", "items": { "type": "string" } },
           "quantity": { "type": ["number", "null"] },
@@ -297,90 +303,163 @@
           "requestedQuantity": { "type": "number" },
           "estimatedLiquidationPrice": { "type": ["number", "null"] },
           "liquidationDistancePercent": { "type": ["number", "null"] },
-          "maximumAllowed": { "type": "object", "additionalProperties": true },
+          "maximumAllowed": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "targets": {
             "type": "array",
-            "items": { "type": "object", "additionalProperties": true }
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
           },
           "calculationSource": {
             "type": "object",
-            "required": [
-              "snapshotId",
-              "generatedAt",
-              "productFilters",
-              "feeRates",
-              "slippage",
-              "fundingRate"
-            ],
-            "properties": {
-              "snapshotId": { "type": ["string", "null"] },
-              "generatedAt": { "type": "integer" },
-              "productFilters": {
-                "type": "object",
-                "additionalProperties": true
-              },
-              "feeRates": { "type": "object", "additionalProperties": true },
-              "slippage": { "type": "object", "additionalProperties": true },
-              "fundingRate": { "type": "number" }
-            }
+            "additionalProperties": true
           }
         },
         "additionalProperties": true
       },
-      "TradingState": {
+      "DecisionRecord": {
         "type": "object",
-        "required": ["mode", "lifecycle", "liveManual"],
+        "required": [
+          "decisionId",
+          "snapshotId",
+          "marketGeneratedAt",
+          "intent",
+          "decision",
+          "side",
+          "analysisMode",
+          "instructionVersion",
+          "contextPackVersion",
+          "confidenceBand",
+          "planValidation",
+          "targets",
+          "reasonTags",
+          "counterThesisTags"
+        ],
         "properties": {
-          "mode": { "type": "string", "enum": ["PAPER", "LIVE_MANUAL"] },
-          "lifecycle": {
-            "type": "object",
-            "required": [
-              "stage",
-              "mode",
-              "planId",
-              "tradeId",
-              "positionSource",
-              "startedAt",
-              "updatedAt",
-              "blockedReasons"
-            ],
-            "properties": {
-              "stage": {
-                "type": "string",
-                "enum": [
-                  "FLAT",
-                  "WATCHING",
-                  "ENTRY_READY",
-                  "MANAGING",
-                  "CLOSED",
-                  "CANCELLED"
-                ]
-              },
-              "mode": { "type": "string", "enum": ["PAPER", "LIVE_MANUAL"] },
-              "planId": { "type": ["string", "null"] },
-              "tradeId": { "type": ["string", "null"] },
-              "positionSource": {
-                "type": "string",
-                "enum": ["NONE", "PAPER", "BINANCE_READ_ONLY"]
-              },
-              "startedAt": { "type": ["integer", "null"] },
-              "updatedAt": { "type": "integer" },
-              "blockedReasons": {
-                "type": "array",
-                "items": { "type": "string" }
-              }
-            }
-          },
-          "liveManual": { "type": "object", "additionalProperties": true },
-          "generatedAt": { "type": "integer" },
-          "relayReceivedAt": { "type": "integer" },
-          "ageMs": { "type": "number" },
-          "relayStatus": {
+          "decisionId": {
             "type": "string",
-            "enum": ["NORMAL", "DELAYED", "STALE"]
+            "maxLength": 100,
+            "description": "Unique id for this exact GPT decision. Reuse only when retrying the identical record request."
+          },
+          "snapshotId": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "snapshotId returned by the getLatestSnapshot call used for this analysis."
+          },
+          "marketGeneratedAt": {
+            "type": "integer",
+            "description": "generatedAt returned by the same getLatestSnapshot response."
+          },
+          "parentDecisionId": {
+            "type": ["string", "null"],
+            "maxLength": 100,
+            "description": "Known prior decision id when this is an explicit reanalysis; otherwise null."
+          },
+          "intent": {
+            "type": "string",
+            "enum": ["MARKET_ANALYSIS", "NEW_ENTRY", "POSITION_MANAGEMENT"]
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "ENTER_NOW",
+              "WAIT_TRIGGER",
+              "NO_TRADE",
+              "HOLD",
+              "PARTIAL_EXIT",
+              "EXIT",
+              "MOVE_STOP",
+              "CHANGE_TP",
+              "DATA_BLOCKED"
+            ]
+          },
+          "side": {
+            "type": "string",
+            "enum": ["LONG", "SHORT", "NEUTRAL"]
+          },
+          "analysisMode": {
+            "type": "string",
+            "enum": ["FAST", "VERIFY", "DEEP"]
+          },
+          "instructionVersion": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "contextPackVersion": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "confidenceBand": {
+            "type": "string",
+            "enum": ["NONE", "LOW", "MEDIUM", "HIGH"]
+          },
+          "planValidation": {
+            "type": "string",
+            "enum": ["NOT_APPLICABLE", "NOT_RUN", "VALIDATED", "BLOCKED"]
+          },
+          "entry": {
+            "type": ["number", "null"],
+            "exclusiveMinimum": 0
+          },
+          "stop": {
+            "type": ["number", "null"],
+            "exclusiveMinimum": 0
+          },
+          "targets": {
+            "type": "array",
+            "maxItems": 3,
+            "items": { "type": "number", "exclusiveMinimum": 0 }
+          },
+          "triggerSummary": {
+            "type": ["string", "null"],
+            "maxLength": 300,
+            "description": "Short machine-useful trigger summary, not hidden chain-of-thought."
+          },
+          "invalidationSummary": {
+            "type": ["string", "null"],
+            "maxLength": 300,
+            "description": "Short machine-useful invalidation summary, not hidden chain-of-thought."
+          },
+          "reasonTags": {
+            "type": "array",
+            "maxItems": 12,
+            "items": { "type": "string", "maxLength": 60 },
+            "description": "Short structured factual tags only."
+          },
+          "counterThesisTags": {
+            "type": "array",
+            "maxItems": 8,
+            "items": { "type": "string", "maxLength": 60 }
           }
         },
-        "additionalProperties": true
+        "additionalProperties": false
+      },
+      "DecisionRecordResult": {
+        "type": "object",
+        "required": [
+          "ok",
+          "decisionId",
+          "duplicate",
+          "snapshotStatus",
+          "recordedAt",
+          "snapshotToRecordLatencyMs"
+        ],
+        "properties": {
+          "ok": { "type": "boolean", "const": true },
+          "decisionId": { "type": "string" },
+          "duplicate": { "type": "boolean" },
+          "snapshotStatus": {
+            "type": "string",
+            "enum": ["CURRENT", "SUPERSEDED"]
+          },
+          "recordedAt": { "type": "integer" },
+          "snapshotToRecordLatencyMs": { "type": "integer" }
+        },
+        "additionalProperties": false
       }
     }
   },
@@ -571,7 +650,7 @@
             "description": "Storage unavailable",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ValidationFailure" }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -601,7 +680,7 @@
             }
           },
           "404": {
-            "description": "No lifecycle state",
+            "description": "No trading state",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" }
@@ -618,6 +697,92 @@
           },
           "503": {
             "description": "Storage unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/decision/record": {
+      "post": {
+        "operationId": "recordDecision",
+        "summary": "Record the structured result of the current GPT trading decision for later evaluation",
+        "description": "Analytics-only write. Records a decision made from a specific market snapshot. This endpoint cannot place, modify, or cancel exchange orders or change account state.",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DecisionRecord" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent retry of an already stored identical decision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionRecordResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Decision recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionRecordResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid decision payload",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid Action API key",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "409": {
+            "description": "Missing snapshot, metadata mismatch, or conflicting reuse of decisionId",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body too large",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "429": {
+            "description": "Telemetry rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "503": {
+            "description": "Telemetry storage unavailable",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" }
