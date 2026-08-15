@@ -23,7 +23,7 @@
     "test:binance-smoke": "node scripts/binance-public-smoke.mjs",
     "test:relay-app-soak": "node scripts/relay-app-soak-monitor.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format:check": "node scripts/print-phase14-format.mjs && prettier --check .",
     "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite"
   },
   "keywords": [
@@ -56,7 +56,6 @@
     "@electron-forge/plugin-vite": "7.11.2",
     "@electron-forge/shared-types": "7.11.2",
     "@electron/fuses": "1.8.0",
-    "@eslint/js": "10.0.1",
     "@playwright/test": "^1.62.0",
     "@testing-library/jest-dom": "7.0.0",
     "@testing-library/react": "16.3.2",
