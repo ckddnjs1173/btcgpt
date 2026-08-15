@@ -18,10 +18,7 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-async function enrichedSnapshot(
-  request: Request,
-  env: Env,
-): Promise<Response> {
+async function enrichedSnapshot(request: Request, env: Env): Promise<Response> {
   const response = await phase16bHandler(request, env);
   if (!response.ok) return response;
   try {
@@ -53,10 +50,7 @@ async function readDecisionId(request: Request): Promise<string | null> {
   }
 }
 
-async function recordedDecision(
-  request: Request,
-  env: Env,
-): Promise<Response> {
+async function recordedDecision(request: Request, env: Env): Promise<Response> {
   const bodyCopy = request.clone();
   const response = await phase16bHandler(request, env);
   if (!response.ok) return response;
