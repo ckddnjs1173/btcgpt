@@ -106,8 +106,7 @@ Example campaign spec:
     "instructionVersion": "candidate-instructions-v1",
     "contextPackVersion": "context-v2",
     "analysisMode": "FAST",
-    "temperature": null,
-    "reasoningEffort": null,
+    "enabledSources": [],
     "evaluatorVersion": "eval-v1"
   },
   "instructionsPath": "worker/openapi/GPT_INSTRUCTIONS.md",
@@ -116,6 +115,8 @@ Example campaign spec:
   "contextPackVersion": "context-v2"
 }
 ```
+
+The campaign tool normalizes the experiment registry to the strict replay experiment schema. The provider is forced to `OPENAI` because this campaign path produces OpenAI Batch input; unsupported extra registry keys are not forwarded.
 
 With `RELAY_URL` and `ACTION_READ_KEY` set locally:
 
