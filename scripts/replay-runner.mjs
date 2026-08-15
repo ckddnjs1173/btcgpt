@@ -39,7 +39,9 @@ async function relay(path, init = {}) {
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const error = new Error(`Relay ${response.status}: ${JSON.stringify(body)}`);
+    const error = new Error(
+      `Relay ${response.status}: ${JSON.stringify(body)}`,
+    );
     error.status = response.status;
     error.body = body;
     throw error;
@@ -133,7 +135,8 @@ async function runOpenAI(replayInput) {
   }
   const apiKey = process.env.OPENAI_API_KEY ?? '';
   if (!apiKey) throw new Error('OPENAI_API_KEY is required for OPENAI replay.');
-  if (!instructions) throw new Error('instructions are required for OPENAI replay.');
+  if (!instructions)
+    throw new Error('instructions are required for OPENAI replay.');
 
   const startedAt = Date.now();
   const response = await fetch('https://api.openai.com/v1/responses', {
