@@ -66,7 +66,10 @@ function finiteNumber(value: unknown): number | null {
   return Number.isFinite(number) ? number : null;
 }
 
-function ratioBps(numerator: number | null, denominator: number | null): number | null {
+function ratioBps(
+  numerator: number | null,
+  denominator: number | null,
+): number | null {
   if (
     numerator === null ||
     denominator === null ||
@@ -94,7 +97,10 @@ async function getJson(url: string): Promise<unknown> {
   return response.json() as Promise<unknown>;
 }
 
-async function fetchBinance(asset: Asset, observedAt: number): Promise<VenueQuote> {
+async function fetchBinance(
+  asset: Asset,
+  observedAt: number,
+): Promise<VenueQuote> {
   const symbol = `${asset}USDT`;
   const raw = asRecord(
     await getJson(
@@ -113,7 +119,10 @@ async function fetchBinance(asset: Asset, observedAt: number): Promise<VenueQuot
   };
 }
 
-async function fetchCoinbase(asset: Asset, observedAt: number): Promise<VenueQuote> {
+async function fetchCoinbase(
+  asset: Asset,
+  observedAt: number,
+): Promise<VenueQuote> {
   const symbol = `${asset}-USD`;
   const raw = asRecord(
     await getJson(
@@ -169,9 +178,10 @@ export function buildCrossMarketContext(input: {
   ) as Record<Asset, VenueQuote | null>;
   const observedAt = input.generatedAt;
   const totalSlots = ASSETS.length * 2;
-  const populated = [...Object.values(binance), ...Object.values(coinbase)].filter(
-    Boolean,
-  ).length;
+  const populated = [
+    ...Object.values(binance),
+    ...Object.values(coinbase),
+  ].filter(Boolean).length;
 
   return {
     version: CROSS_MARKET_VERSION,
