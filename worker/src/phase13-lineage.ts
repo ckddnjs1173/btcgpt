@@ -42,8 +42,8 @@ type TradeView = {
   id: string;
   planId: string;
   status: string;
-  entryPrice: number;
-  initialQuantity: number;
+  entryPrice: number | null;
+  initialQuantity: number | null;
   openedAt: number | null;
   closedAt: number | null;
   realizedNetPnl: number | null;
@@ -125,22 +125,13 @@ function parseTrade(value: unknown): TradeView | null {
   const id = asString(trade.id);
   const planId = asString(trade.planId);
   const status = asString(trade.status);
-  const entryPrice = asNumber(trade.entryPrice);
-  const initialQuantity = asNumber(trade.initialQuantity);
-  if (
-    !id ||
-    !planId ||
-    !status ||
-    entryPrice === null ||
-    initialQuantity === null
-  )
-    return null;
+  if (!id || !planId || !status) return null;
   return {
     id,
     planId,
     status,
-    entryPrice,
-    initialQuantity,
+    entryPrice: asNullableNumber(trade.entryPrice),
+    initialQuantity: asNullableNumber(trade.initialQuantity),
     openedAt: asNullableNumber(trade.openedAt),
     closedAt: asNullableNumber(trade.closedAt),
     realizedNetPnl: asNullableNumber(trade.realizedNetPnl),
