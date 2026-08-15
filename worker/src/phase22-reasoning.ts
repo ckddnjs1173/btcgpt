@@ -137,7 +137,11 @@ export function buildAdaptiveReasoningPolicy(input: {
     degradedSources.length > 0 ||
     crossMarket.completeness < 0.67 ||
     analogOutcomeDisagreement(memory);
-  const recommendedMode = deepReason ? 'DEEP' : verifyReason ? 'VERIFY' : 'FAST';
+  const recommendedMode = deepReason
+    ? 'DEEP'
+    : verifyReason
+      ? 'VERIFY'
+      : 'FAST';
 
   return {
     version: ADAPTIVE_REASONING_VERSION,
