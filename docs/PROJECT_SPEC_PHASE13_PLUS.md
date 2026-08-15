@@ -1,7 +1,7 @@
 # GPT Trading Intelligence — Phase 13+ 기획 확장
 
 > 상태: Phase 13 이후의 현재 제품 방향을 정의하는 `PROJECT_SPEC.md` 확장 문서
-> 기준일: 2026-08-15
+> 기준일: 2026-08-16
 > 우선순위: 현재 사용자의 명시적 지시에 따라, 이 문서는 Phase 13 이후 범위에서 `PROJECT_SPEC.md`의 충돌하는 과거 범위 제한을 대체한다.
 
 ## 1. 최상위 목표
@@ -105,29 +105,70 @@ Phase 13의 목적은 새로운 전략을 추가하는 것이 아니라 **GPT가
 
 ### Phase 13B — Local Linkage
 
-다음 수직 단위에서 구현한다.
+구현 방향:
 
-- 로컬 SQLite decision mirror 또는 bounded sync
-- `decisionId → planId → tradeId` 연결
+- 로컬/relay lineage로 `decisionId → planId → tradeId` 연결
 - 최초 WAIT → 재분석 → ENTER와 같은 계보를 위한 `parentDecisionId`
-- 승인되지 않은 WAIT/NO_TRADE도 outcome 추적 대상에 유지
+- 승인되지 않은 WAIT/NO_TRADE도 replay outcome 추적 대상에 유지
 - PAPER/LIVE_MANUAL 성과를 별도 집계
 
-Phase 13B 전에는 `recordDecision`을 성과 통계로 직접 해석하지 않는다.
-
-## 7. 이후 Phase 방향
+## 7. Phase 14-23 구현 방향
 
 - Phase 14: MFE/MAE, latency, planned vs actual execution telemetry
 - Phase 15: objective Market Fingerprint
 - Phase 16: historical Replay/Eval Lab
-- Phase 17: cross-market intelligence 실험
+- Phase 17: cross-market intelligence
 - Phase 18: news/event intelligence 강화
 - Phase 19: options intelligence 강화
 - Phase 20: Context Router
 - Phase 21: Trading Memory / Historical Analog
-- Phase 22: adaptive GPT reasoning / critic 실험
+- Phase 22: adaptive GPT reasoning / critic
 - Phase 23: position-management intelligence
-- Phase 24: live Custom GPT vs API research-agent benchmark
-- Phase 25: 충분한 표본 이후 performance-aware sizing/leverage 연구
 
 새 데이터나 GPT 구조는 가능한 한 Replay/Eval에서 baseline 대비 효과를 확인한 뒤 실전 Context로 승격한다.
+
+## 8. Phase 24 — Live Custom GPT vs API Research Agent Benchmark
+
+Phase 24는 실전 Custom GPT를 즉시 교체하는 것이 아니라 **같은 frozen replay case에서 API research agent를 공정하게 비교할 수 있는 운영 연구 계층**을 만든다.
+
+구현 기준:
+
+- 실전 `decision_log`를 baseline으로 유지한다.
+- API 연구 결과는 기존 Replay/Eval registry의 동일 `decisionId`와 비교한다.
+- 비교 지표는 decision/side agreement, 30m directional correctness, signed return bps, WAIT/NO_TRADE opportunity, latency, API cost visibility다.
+- 실제 `realizedNetR`는 실제로 체결·종료되어 lineage가 연결된 trade에서만 사용한다.
+- replay directional bps를 실제 Net R로 표현하지 않는다.
+- 50개 matched case 및 각 arm 20개 directional case 이전에는 충분한 benchmark로 보지 않는다.
+- 표본 gate를 넘겨도 자동 모델 승격은 하지 않고 manual review 대상으로만 표시한다.
+
+OpenAI API 실행 기준:
+
+- sequential Responses API 연구 실행은 `ALLOW_PAID_REPLAY=YES`와 API key가 모두 있어야 한다.
+- Batch용 JSONL은 비용 없이 준비할 수 있다.
+- Batch 제출/실행 자체는 비용 승인을 받은 뒤에만 한다.
+- API research tooling은 실전 desktop/Custom GPT 경로와 분리한다.
+
+## 9. Phase 25 — Performance-aware Sizing / Leverage Research
+
+Phase 25는 **충분한 실제 closed trade 표본이 생긴 뒤 성과를 위험 배분에 어떻게 반영할지 연구하는 계층**이다.
+
+구현 기준:
+
+- `realized_net_r`가 있는 decision-linked closed trade만 분석한다.
+- 최소 30개 closed trade 전에는 sizing candidate를 만들지 않는다.
+- mean/median Net R, win rate, 표준편차, one-sided lower confidence bound, 10th percentile, R drawdown, entry drift, MFE/MAE를 분리한다.
+- analysis mode, confidence band, context pack version, observed leverage 구간별 cohort를 기술적으로 비교한다.
+- risk multiplier candidate는 shrinkage와 confidence bound를 사용하고 최대 1.2x로 제한한다.
+- candidate는 연구 결과일 뿐 실전 계획이나 사용자 입력 규모를 자동 변경하지 않는다.
+- observed leverage cohort는 인과적 leverage 효과가 아니므로 자동 leverage 추천을 만들지 않는다.
+- 실전 sizing/leverage 활성화는 충분한 표본, benchmark 검토, 비용·drawdown 검토와 사용자의 명시적 승인을 모두 요구한다.
+
+## 10. 이후 방향
+
+Phase 24-25 이후에는 새로운 Phase 번호를 빠르게 늘리기보다 다음 feedback loop를 반복한다.
+
+1. live decision과 실제 결과를 축적한다.
+2. API/프롬프트/context 후보를 frozen replay에서 비교한다.
+3. 충분한 표본과 비용-adjusted evidence가 있는 변경만 live 후보로 올린다.
+4. live 적용 후 다시 Net R, drawdown, latency, missed opportunity를 측정한다.
+5. 효과가 없거나 악화된 변경은 되돌린다.
