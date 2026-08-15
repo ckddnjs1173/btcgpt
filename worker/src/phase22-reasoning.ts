@@ -64,7 +64,8 @@ export function buildAdaptiveReasoningPolicy(input: {
   const reasons: string[] = [];
   const criticChecks: string[] = ['COUNTER_THESIS'];
 
-  const quality = String(at(snapshot, 'decisionGates', 'quality') ?? 'RED');
+  const qualityValue = at(snapshot, 'decisionGates', 'quality');
+  const quality = typeof qualityValue === 'string' ? qualityValue : 'RED';
   const criticalBlockers = strings(
     at(snapshot, 'decisionGates', 'criticalBlockers'),
   );
@@ -79,7 +80,9 @@ export function buildAdaptiveReasoningPolicy(input: {
     at(snapshot, 'riskContext', 'nextMacroEvent', 'remainingMs'),
   );
   const macroSoon =
-    macroRemainingMs !== null && macroRemainingMs >= 0 && macroRemainingMs <= 30 * 60_000;
+    macroRemainingMs !== null &&
+    macroRemainingMs >= 0 &&
+    macroRemainingMs <= 30 * 60_000;
 
   if (criticalBlockers.length > 0 || quality === 'RED') {
     reasons.push('DATA_BLOCKED_OR_RED');
