@@ -107,8 +107,14 @@ function ratio(numerator: number, denominator: number): number | null {
 
 async function readinessResponse(env: Env): Promise<Response> {
   const schemaReady = await performanceSchemaReady(env);
-  const decisions = await count(env, 'SELECT COUNT(*) AS value FROM decision_log');
-  const replayCases = await count(env, 'SELECT COUNT(*) AS value FROM replay_cases');
+  const decisions = await count(
+    env,
+    'SELECT COUNT(*) AS value FROM decision_log',
+  );
+  const replayCases = await count(
+    env,
+    'SELECT COUNT(*) AS value FROM replay_cases',
+  );
   const finalizedOutcomes = await count(
     env,
     'SELECT COUNT(*) AS value FROM replay_case_outcomes WHERE finalized_at IS NOT NULL',
@@ -236,7 +242,9 @@ function grouped(
   }
   return [...groups.entries()]
     .map(([key, group]) => cohort(group, key))
-    .sort((a, b) => b.sampleCount - a.sampleCount || a.key.localeCompare(b.key));
+    .sort(
+      (a, b) => b.sampleCount - a.sampleCount || a.key.localeCompare(b.key),
+    );
 }
 
 function leverageBucket(value: number | null): string {
@@ -284,7 +292,9 @@ async function feedbackResponse(env: Env): Promise<Response> {
       const mfeR = finite(row.mfeR);
       return mfeR !== null && mfeR > 0 ? row.realizedNetR / mfeR : null;
     })
-    .filter((value): value is number => value !== null && Number.isFinite(value));
+    .filter(
+      (value): value is number => value !== null && Number.isFinite(value),
+    );
   const entryDrift = rows
     .map((row) => finite(row.entryDriftBps))
     .filter((value): value is number => value !== null);
