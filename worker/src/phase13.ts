@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { handler as legacyHandler, type Env } from './index';
+import { syncDecisionLineageFromSnapshot } from './phase13-lineage';
 
 const MAX_DECISION_BODY_BYTES = 12_000;
 const FUTURE_TOLERANCE_MS = 5_000;
@@ -180,8 +181,9 @@ async function saveDecision(
         decision_id, snapshot_id, market_generated_at, recorded_at,
         intent, decision, side, analysis_mode, instruction_version,
         context_pack_version, confidence_band, parent_decision_id,
-        snapshot_status, snapshot_to_record_latency_ms, payload
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        snapshot_status, snapshot_to_record_latency_ms, plan_validation,
+        entry, stop, targets_json, payload
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       decision.decisionId,
@@ -198,6 +200,10 @@ async function saveDecision(
       decision.parentDecisionId ?? null,
       snapshotStatus,
       snapshotToRecordLatencyMs,
+      decision.planValidation,
+      decision.entry ?? null,
+      decision.stop ?? null,
+      JSON.stringify(decision.targets),
       normalizedPayload,
     )
     .run();
@@ -328,6 +334,23 @@ export async function handler(request: Request, env: Env): Promise<Response> {
   const isDecisionRecord =
     request.method === 'POST' && url.pathname === '/v1/decision/record';
   if (isDecisionRecord) return recordDecision(request, env);
+
+  const isSnapshotUpload =
+    request.method === 'PUT' && url.pathname === '/v1/snapshot/latest';
+  if (isSnapshotUpload) {
+    const lineageRequest = request.clone();
+    const response = await legacyHandler(request, env);
+    if (response.ok) {
+      try {
+        const snapshot = (await lineageRequest.json()) as unknown;
+        await syncDecisionLineageFromSnapshot(env, snapshot);
+      } catch {
+        // Lineage is analytics-only. A sync failure must never break snapshot relay.
+      }
+    }
+    return response;
+  }
+
   return legacyHandler(request, env);
 }
 
