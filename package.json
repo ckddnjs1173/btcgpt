@@ -23,7 +23,7 @@
     "test:binance-smoke": "node scripts/binance-public-smoke.mjs",
     "test:relay-app-soak": "node scripts/relay-app-soak-monitor.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format:check": "node scripts/print-phase15-format.mjs && prettier --check .",
     "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite"
   },
   "keywords": [
