@@ -19,7 +19,9 @@ const decisionIds = Array.isArray(config.decisionIds) ? config.decisionIds : [];
 const instructions = String(config.instructions ?? '').trim();
 
 if (!registry?.experimentId || !registry?.model || decisionIds.length === 0) {
-  throw new Error('registry.experimentId, registry.model and decisionIds are required.');
+  throw new Error(
+    'registry.experimentId, registry.model and decisionIds are required.',
+  );
 }
 if (!instructions) throw new Error('instructions are required.');
 
