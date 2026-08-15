@@ -1,0 +1,84 @@
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(8, 13, 23, 0.92);
+  backdrop-filter: blur(14px);
+}
+
+.app-quick-nav {
+  position: fixed;
+  top: 50%;
+  right: 12px;
+  z-index: 50;
+  display: grid;
+  gap: 7px;
+  transform: translateY(-50%);
+  border: 1px solid #263348;
+  border-radius: 14px;
+  padding: 8px;
+  background: rgba(10, 16, 27, 0.94);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(12px);
+}
+
+.app-quick-nav button {
+  min-width: 72px;
+  border: 1px solid #33425a;
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: #111d2e;
+  color: #aab6c8;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.app-quick-nav button:hover {
+  border-color: rgba(247, 147, 26, 0.62);
+  color: #ffbe68;
+}
+
+.workspace-grid,
+.gpt-panel,
+.account-panel,
+.settings-layout {
+  scroll-margin-top: 104px;
+}
+
+.gpt-panel pre {
+  max-height: 150px;
+}
+
+.gpt-panel .text-preview {
+  max-height: 110px;
+}
+
+@media (min-width: 1380px) {
+  .app-quick-nav {
+    right: calc((100vw - 1180px) / 2 - 96px);
+  }
+}
+
+@media (max-width: 900px) {
+  .app-quick-nav {
+    top: auto;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    transform: none;
+  }
+
+  .app-quick-nav button {
+    min-width: 0;
+    padding: 9px 5px;
+  }
+
+  .workspace-grid,
+  .gpt-panel,
+  .account-panel,
+  .settings-layout {
+    scroll-margin-top: 116px;
+  }
+}
