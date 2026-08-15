@@ -140,8 +140,8 @@ async function findExistingLineage(
   env: Env,
   planId: string,
 ): Promise<ExistingLineageRow | null> {
-  return env.DB!
-    .prepare(
+  return env
+    .DB!.prepare(
       `SELECT decision_id AS decisionId, linked_at AS linkedAt
        FROM decision_trade_lineage WHERE plan_id = ?`,
     )
@@ -153,8 +153,8 @@ async function findMatchingDecision(
   env: Env,
   plan: PlanView,
 ): Promise<DecisionMatchRow | null> {
-  return env.DB!
-    .prepare(
+  return env
+    .DB!.prepare(
       `SELECT decision_id AS decisionId, recorded_at AS recordedAt
        FROM decision_log
        WHERE decision = 'ENTER_NOW'
@@ -216,8 +216,8 @@ async function upsertLineage(
         }
       : null,
   });
-  const result = await env.DB!
-    .prepare(
+  const result = await env
+    .DB!.prepare(
       `INSERT INTO decision_trade_lineage (
         decision_id, plan_id, mode, link_method, linked_at,
         plan_locked_at, plan_status, monitoring_state, triggered_at,
@@ -304,7 +304,8 @@ export async function syncDecisionLineageFromSnapshot(
     const existing = await findExistingLineage(env, plan.id);
     const match = existing ?? (await findMatchingDecision(env, plan));
     if (!match) continue;
-    const trade = trades.find((candidate) => candidate.planId === plan.id) ?? null;
+    const trade =
+      trades.find((candidate) => candidate.planId === plan.id) ?? null;
     await upsertLineage(env, {
       decisionId: match.decisionId,
       linkedAt: existing?.linkedAt ?? observedAt,
