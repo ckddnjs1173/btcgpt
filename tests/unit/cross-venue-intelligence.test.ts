@@ -81,6 +81,8 @@ describe('cross-venue intelligence', () => {
     expect(result.interpretationBoundary).toBe(
       'BINANCE_USDT_PERP_VS_COINBASE_USD_SPOT_REFERENCE_ONLY',
     );
+    expect(result.assets.BTC?.coinbaseProductId).toBe('BTC-USD');
+    expect(result.assets.BTC?.binanceInstrument).toBe('BTCUSDT');
     expect(result.assets.BTC?.quoteCurrencyMismatch).toBe(true);
     expect(result.assets.BTC?.derived.perpSpotReferenceSpreadBps).toBeCloseTo(
       100,
