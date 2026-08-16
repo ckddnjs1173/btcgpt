@@ -20,6 +20,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Align patch staging
+        run: python scripts/tmp-onchain-provider-hotfix.py
       - name: Apply on-chain/provider patch
         run: python scripts/tmp-onchain-provider-foundation.py
       - name: Format changed source
