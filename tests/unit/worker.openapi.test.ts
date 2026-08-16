@@ -94,6 +94,15 @@ interface OpenApiDocument {
           objectiveOnly: { const: boolean };
         };
       };
+      OnchainV1: {
+        additionalProperties: boolean;
+        required: string[];
+        properties: {
+          version: { const: string };
+          objectiveOnly: { const: boolean };
+          role: { const: string };
+        };
+      };
     };
   };
 }
@@ -104,7 +113,7 @@ describe('worker OpenAPI', () => {
     const raw = fs.readFileSync(p, 'utf8');
     const json = JSON.parse(raw) as OpenApiDocument;
 
-    expect(json.info.version).toBe('5.7.0');
+    expect(json.info.version).toBe('5.8.0');
     expect(json.servers).toEqual([
       {
         url: 'https://btc-futures-assistant-relay.btcgpt-ck1173.workers.dev',
@@ -244,6 +253,19 @@ describe('worker OpenAPI', () => {
     expect(
       json.components.schemas.DeribitOptionsV2.properties.objectiveOnly.const,
     ).toBe(true);
+    expect(json.components.schemas.OnchainV1.additionalProperties).toBe(false);
+    expect(json.components.schemas.OnchainV1.required).toContain(
+      'networkDaily',
+    );
+    expect(json.components.schemas.OnchainV1.properties.version.const).toBe(
+      'onchain-v1',
+    );
+    expect(
+      json.components.schemas.OnchainV1.properties.objectiveOnly.const,
+    ).toBe(true);
+    expect(json.components.schemas.OnchainV1.properties.role.const).toBe(
+      'BACKGROUND_REGIME_ONLY',
+    );
     expect(json.paths['/v1/snapshot/latest'].put).toBeUndefined();
   });
 

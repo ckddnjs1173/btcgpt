@@ -41,6 +41,7 @@ type ContextPack = {
     ageMs: number | null;
     riskContext: unknown;
     optionsV2: unknown;
+    onchainV1: unknown;
     selectedItems: Array<Record<string, unknown>>;
     totalCandidateItems: number;
   };
@@ -57,6 +58,7 @@ type ContextPack = {
     crossMarket: number;
     externalAvailable: boolean;
     optionsAvailable: boolean;
+    onchainAvailable: boolean;
     btcDecisionGateQuality: string | null;
     memoryStatus: TradingMemoryContext['status'];
     managementStatus: PositionManagementContext['status'];
@@ -307,6 +309,7 @@ export async function buildContextPack(
     if (typeof item.source === 'string') sourceSet.add(item.source);
   }
   if (asRecord(externalRoot?.optionsV2)) sourceSet.add('DERIBIT_OPTIONS_V2');
+  if (asRecord(externalRoot?.onchainV1)) sourceSet.add('ONCHAIN_V1');
 
   return {
     version: CONTEXT_PACK_VERSION,
@@ -321,6 +324,7 @@ export async function buildContextPack(
       ageMs: external ? Math.max(0, now - external.generatedAt) : null,
       riskContext: externalRoot?.riskContext ?? at(snapshot, 'riskContext'),
       optionsV2: externalRoot?.optionsV2 ?? null,
+      onchainV1: externalRoot?.onchainV1 ?? null,
       selectedItems,
       totalCandidateItems: candidates,
     },
@@ -345,6 +349,7 @@ export async function buildContextPack(
       crossMarket: crossMarket.completeness,
       externalAvailable: external !== null,
       optionsAvailable: asRecord(externalRoot?.optionsV2) !== null,
+      onchainAvailable: asRecord(externalRoot?.onchainV1) !== null,
       btcDecisionGateQuality: text(at(snapshot, 'decisionGates', 'quality')),
       memoryStatus: tradingMemory.status,
       managementStatus: positionManagement.status,
