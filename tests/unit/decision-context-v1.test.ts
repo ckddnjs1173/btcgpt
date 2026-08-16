@@ -49,10 +49,15 @@ function minimalSnapshot(): MarketSnapshot {
 
 describe('decision-context-v1 transport', () => {
   it('keeps market intelligence inside the same compact relay snapshot', () => {
-    const compact = createCompactRelaySnapshot(minimalSnapshot(), localMarket());
+    const compact = createCompactRelaySnapshot(
+      minimalSnapshot(),
+      localMarket(),
+    );
 
     expect(compact.snapshot.snapshotId).toBe('snap-v1');
-    expect(compact.snapshot.marketIntelligence?.version).toBe('local-market-v1');
+    expect(compact.snapshot.marketIntelligence?.version).toBe(
+      'local-market-v1',
+    );
     expect(compact.snapshot.marketIntelligence?.generatedAt).toBe(NOW);
     expect(compact.byteLength).toBeLessThan(RELAY_SNAPSHOT_MAX_BYTES);
   });
@@ -89,14 +94,21 @@ describe('relay freshness compatibility', () => {
       },
     };
 
-    const stale = applyRelayFreshness(snapshot, NOW - 31_000, NOW - 30_000, NOW);
+    const stale = applyRelayFreshness(
+      snapshot,
+      NOW - 31_000,
+      NOW - 30_000,
+      NOW,
+    );
     const gates = stale.decisionGates as Record<string, unknown>;
 
     expect(gates.entryAllowed).toBe(false);
     expect(gates.marketAnalysisAvailable).toBe(false);
     expect(gates.positionManagementAvailable).toBe(false);
     expect(gates.criticalBlockers).toContain('RELAY_SNAPSHOT_STALE');
-    expect(JSON.stringify(stale)).not.toMatch(/longSignal|shortSignal|buySignal|sellSignal/i);
+    expect(JSON.stringify(stale)).not.toMatch(
+      /longSignal|shortSignal|buySignal|sellSignal/i,
+    );
   });
 
   it('keeps position management available in the entry-stale window', () => {
@@ -116,7 +128,12 @@ describe('relay freshness compatibility', () => {
       },
     };
 
-    const delayed = applyRelayFreshness(snapshot, NOW - 20_000, NOW - 19_000, NOW);
+    const delayed = applyRelayFreshness(
+      snapshot,
+      NOW - 20_000,
+      NOW - 19_000,
+      NOW,
+    );
     const gates = delayed.decisionGates as Record<string, unknown>;
 
     expect(gates.entryAllowed).toBe(false);

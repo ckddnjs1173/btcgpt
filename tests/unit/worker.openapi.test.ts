@@ -99,9 +99,7 @@ describe('worker OpenAPI', () => {
     );
 
     expect(
-      json.paths['/v1/decision-context/latest'].get[
-        'x-openai-isConsequential'
-      ],
+      json.paths['/v1/decision-context/latest'].get['x-openai-isConsequential'],
     ).toBe(false);
     expect(
       json.paths['/v1/snapshot/latest'].get['x-openai-isConsequential'],

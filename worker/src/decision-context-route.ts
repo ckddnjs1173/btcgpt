@@ -77,7 +77,9 @@ export async function handleDecisionContextRequest(
       actionStartedAt,
       generatedAt: Date.now(),
     });
-    const bytes = new TextEncoder().encode(JSON.stringify(responseBody)).byteLength;
+    const bytes = new TextEncoder().encode(
+      JSON.stringify(responseBody),
+    ).byteLength;
     if (bytes > MAX_RESPONSE_BYTES)
       return json({ error: 'RESPONSE_TOO_LARGE', bytes }, 500);
     return json(responseBody);

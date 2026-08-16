@@ -47,7 +47,9 @@ export function buildDecisionContext(input: {
   const cryptoMarket = localMarket(input.snapshot);
   const decisionGates = record(input.contextPack.btcCore.decisionGates) ?? {};
   const marketAgeMs =
-    marketGeneratedAt === null ? null : Math.max(0, generatedAt - marketGeneratedAt);
+    marketGeneratedAt === null
+      ? null
+      : Math.max(0, generatedAt - marketGeneratedAt);
   const marketToRelayMs =
     marketGeneratedAt === null
       ? null

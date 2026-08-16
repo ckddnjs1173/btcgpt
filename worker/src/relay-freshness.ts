@@ -17,14 +17,15 @@ export function applyRelayFreshness(
   };
 
   const originalDecisionGates = payload.decisionGates as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   if (originalDecisionGates) {
     const criticalBlockers = [
-      ...((originalDecisionGates.criticalBlockers as string[] | undefined) ?? []),
+      ...((originalDecisionGates.criticalBlockers as string[] | undefined) ??
+        []),
     ];
     const degradedSources = [
-      ...((originalDecisionGates.degradedSources as string[] | undefined) ?? []),
+      ...((originalDecisionGates.degradedSources as string[] | undefined) ??
+        []),
     ];
     let marketAnalysisAvailable =
       originalDecisionGates.marketAnalysisAvailable === true;

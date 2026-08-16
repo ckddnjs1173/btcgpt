@@ -20,9 +20,7 @@
     "schemas": {
       "ErrorResponse": {
         "type": "object",
-        "required": [
-          "error"
-        ],
+        "required": ["error"],
         "properties": {
           "error": {
             "type": "string"
@@ -39,11 +37,7 @@
       },
       "ValidationFailure": {
         "type": "object",
-        "required": [
-          "ok",
-          "errors",
-          "warnings"
-        ],
+        "required": ["ok", "errors", "warnings"],
         "properties": {
           "ok": {
             "type": "boolean",
@@ -87,20 +81,13 @@
           },
           "quality": {
             "type": "string",
-            "enum": [
-              "GREEN",
-              "YELLOW",
-              "RED"
-            ]
+            "enum": ["GREEN", "YELLOW", "RED"]
           },
           "generatedAt": {
             "type": "integer"
           },
           "publishedAt": {
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "ageMs": {
             "type": "number"
@@ -109,10 +96,7 @@
             "type": "number"
           },
           "relayPublishAgeMs": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": ["number", "null"]
           },
           "criticalBlockers": {
             "type": "array",
@@ -140,10 +124,7 @@
         "properties": {
           "mode": {
             "type": "string",
-            "enum": [
-              "PAPER",
-              "LIVE_MANUAL"
-            ]
+            "enum": ["PAPER", "LIVE_MANUAL"]
           },
           "lifecycle": {
             "type": "object",
@@ -164,11 +145,7 @@
           },
           "relayStatus": {
             "type": "string",
-            "enum": [
-              "NORMAL",
-              "DELAYED",
-              "STALE"
-            ]
+            "enum": ["NORMAL", "DELAYED", "STALE"]
           }
         },
         "additionalProperties": true
@@ -261,10 +238,7 @@
             "additionalProperties": true
           },
           "productFilters": {
-            "type": [
-              "object",
-              "null"
-            ],
+            "type": ["object", "null"],
             "additionalProperties": true
           },
           "sourceHealth": {
@@ -309,11 +283,7 @@
           },
           "horizon": {
             "type": "string",
-            "enum": [
-              "INTRADAY",
-              "SWING",
-              "MACRO"
-            ]
+            "enum": ["INTRADAY", "SWING", "MACRO"]
           },
           "items": {
             "type": "array",
@@ -353,10 +323,7 @@
           },
           "side": {
             "type": "string",
-            "enum": [
-              "LONG",
-              "SHORT"
-            ]
+            "enum": ["LONG", "SHORT"]
           },
           "entry": {
             "type": "number",
@@ -386,18 +353,12 @@
           },
           "entryOrderType": {
             "type": "string",
-            "enum": [
-              "MAKER",
-              "TAKER"
-            ],
+            "enum": ["MAKER", "TAKER"],
             "default": "TAKER"
           },
           "exitOrderType": {
             "type": "string",
-            "enum": [
-              "MAKER",
-              "TAKER"
-            ],
+            "enum": ["MAKER", "TAKER"],
             "default": "TAKER"
           },
           "expectedFundingPeriods": {
@@ -450,49 +411,28 @@
             }
           },
           "quantity": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": ["number", "null"]
           },
           "maxLoss": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": ["number", "null"]
           },
           "estimatedMaxLoss": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": ["number", "null"]
           },
           "notional": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": ["number", "null"]
           },
           "initialMargin": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": ["number", "null"]
           },
           "requestedQuantity": {
             "type": "number"
           },
           "estimatedLiquidationPrice": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": ["number", "null"]
           },
           "liquidationDistancePercent": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": ["number", "null"]
           },
           "maximumAllowed": {
             "type": "object",
@@ -546,20 +486,13 @@
             "description": "marketGeneratedAt from the same live Decision Context used for this decision."
           },
           "parentDecisionId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 100,
             "description": "Known prior decision id when this is an explicit reanalysis; otherwise null."
           },
           "intent": {
             "type": "string",
-            "enum": [
-              "MARKET_ANALYSIS",
-              "NEW_ENTRY",
-              "POSITION_MANAGEMENT"
-            ]
+            "enum": ["MARKET_ANALYSIS", "NEW_ENTRY", "POSITION_MANAGEMENT"]
           },
           "decision": {
             "type": "string",
@@ -577,19 +510,11 @@
           },
           "side": {
             "type": "string",
-            "enum": [
-              "LONG",
-              "SHORT",
-              "NEUTRAL"
-            ]
+            "enum": ["LONG", "SHORT", "NEUTRAL"]
           },
           "analysisMode": {
             "type": "string",
-            "enum": [
-              "FAST",
-              "VERIFY",
-              "DEEP"
-            ]
+            "enum": ["FAST", "VERIFY", "DEEP"]
           },
           "instructionVersion": {
             "type": "string",
@@ -601,34 +526,18 @@
           },
           "confidenceBand": {
             "type": "string",
-            "enum": [
-              "NONE",
-              "LOW",
-              "MEDIUM",
-              "HIGH"
-            ]
+            "enum": ["NONE", "LOW", "MEDIUM", "HIGH"]
           },
           "planValidation": {
             "type": "string",
-            "enum": [
-              "NOT_APPLICABLE",
-              "NOT_RUN",
-              "VALIDATED",
-              "BLOCKED"
-            ]
+            "enum": ["NOT_APPLICABLE", "NOT_RUN", "VALIDATED", "BLOCKED"]
           },
           "entry": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": ["number", "null"],
             "exclusiveMinimum": 0
           },
           "stop": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": ["number", "null"],
             "exclusiveMinimum": 0
           },
           "targets": {
@@ -640,18 +549,12 @@
             }
           },
           "triggerSummary": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 300,
             "description": "Short machine-useful trigger summary, not hidden chain-of-thought."
           },
           "invalidationSummary": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 300,
             "description": "Short machine-useful invalidation summary, not hidden chain-of-thought."
           },
@@ -698,10 +601,7 @@
           },
           "snapshotStatus": {
             "type": "string",
-            "enum": [
-              "CURRENT",
-              "SUPERSEDED"
-            ]
+            "enum": ["CURRENT", "SUPERSEDED"]
           },
           "recordedAt": {
             "type": "integer"
@@ -734,22 +634,13 @@
             "type": "string"
           },
           "venue": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "instrument": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "sourceEventAt": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0
           },
           "collectorReceivedAt": {
@@ -765,10 +656,7 @@
             "minimum": 0
           },
           "collectorLagMs": {
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "processingLagMs": {
             "type": "integer",
@@ -786,21 +674,11 @@
           },
           "coverage": {
             "type": "string",
-            "enum": [
-              "EXHAUSTIVE",
-              "SNAPSHOT",
-              "SAMPLED",
-              "UNKNOWN"
-            ]
+            "enum": ["EXHAUSTIVE", "SNAPSHOT", "SAMPLED", "UNKNOWN"]
           },
           "status": {
             "type": "string",
-            "enum": [
-              "NORMAL",
-              "DEGRADED",
-              "STALE",
-              "UNAVAILABLE"
-            ]
+            "enum": ["NORMAL", "DEGRADED", "STALE", "UNAVAILABLE"]
           }
         }
       },
@@ -825,26 +703,14 @@
           },
           "freshnessClass": {
             "type": "string",
-            "enum": [
-              "CORE_BLOCKING",
-              "AUX_DEGRADED",
-              "AUX_OPTIONAL"
-            ]
+            "enum": ["CORE_BLOCKING", "AUX_DEGRADED", "AUX_OPTIONAL"]
           },
           "status": {
             "type": "string",
-            "enum": [
-              "NORMAL",
-              "DEGRADED",
-              "STALE",
-              "UNAVAILABLE"
-            ]
+            "enum": ["NORMAL", "DEGRADED", "STALE", "UNAVAILABLE"]
           },
           "ageMs": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0
           },
           "normalMaxAgeMs": {
@@ -859,10 +725,7 @@
             "type": "boolean"
           },
           "lastSuccessAt": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0
           },
           "consecutiveFailures": {
@@ -891,10 +754,7 @@
         "properties": {
           "symbol": {
             "type": "string",
-            "enum": [
-              "ETHUSDT",
-              "SOLUSDT"
-            ]
+            "enum": ["ETHUSDT", "SOLUSDT"]
           },
           "generatedAt": {
             "type": "integer",
@@ -913,109 +773,57 @@
             ],
             "properties": {
               "lastPrice": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "markPrice": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "bidPrice": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "askPrice": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "spreadBps": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "fundingRate": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               }
             }
           },
           "returnsBps": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "15s",
-              "30s",
-              "1m",
-              "3m",
-              "5m",
-              "15m",
-              "1h"
-            ],
+            "required": ["15s", "30s", "1m", "3m", "5m", "15m", "1h"],
             "properties": {
               "15s": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "30s": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "1m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "3m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "5m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "15m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "1h": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               }
             }
           },
           "flow": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "15s",
-              "1m",
-              "5m",
-              "cumulativeDeltaNotional"
-            ],
+            "required": ["15s", "1m", "5m", "cumulativeDeltaNotional"],
             "properties": {
               "15s": {
                 "$ref": "#/components/schemas/CompactFlowWindow"
@@ -1050,73 +858,40 @@
                 "minimum": 0
               },
               "depthImbalance20": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "microPrice": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               }
             }
           },
           "openInterest": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "current",
-              "notional",
-              "observedAt",
-              "changesPercent"
-            ],
+            "required": ["current", "notional", "observedAt", "changesPercent"],
             "properties": {
               "current": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "notional": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "observedAt": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
+                "type": ["integer", "null"]
               },
               "changesPercent": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "1m",
-                  "5m",
-                  "15m"
-                ],
+                "required": ["1m", "5m", "15m"],
                 "properties": {
                   "1m": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   },
                   "5m": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   },
                   "15m": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   }
                 }
               }
@@ -1125,10 +900,7 @@
           "liquidations": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "5m",
-              "15m"
-            ],
+            "required": ["5m", "15m"],
             "properties": {
               "5m": {
                 "$ref": "#/components/schemas/ObservedLiquidationWindow"
@@ -1143,25 +915,15 @@
       "CompactFlowWindow": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "normalizedDelta",
-          "buyRatio",
-          "tradesPerSecond"
-        ],
+        "required": ["normalizedDelta", "buyRatio", "tradesPerSecond"],
         "properties": {
           "normalizedDelta": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": ["number", "null"],
             "minimum": -1,
             "maximum": 1
           },
           "buyRatio": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": ["number", "null"],
             "minimum": 0,
             "maximum": 1
           },
@@ -1195,9 +957,7 @@
           },
           "coverage": {
             "type": "string",
-            "enum": [
-              "SNAPSHOT"
-            ]
+            "enum": ["SNAPSHOT"]
           }
         }
       },
@@ -1219,10 +979,7 @@
           },
           "tier": {
             "type": "string",
-            "enum": [
-              "SENTIMENT_CORE",
-              "DYNAMIC"
-            ]
+            "enum": ["SENTIMENT_CORE", "DYNAMIC"]
           },
           "generatedAt": {
             "type": "integer",
@@ -1231,137 +988,73 @@
           "market": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "lastPrice",
-              "markPrice",
-              "spreadBps",
-              "fundingRate"
-            ],
+            "required": ["lastPrice", "markPrice", "spreadBps", "fundingRate"],
             "properties": {
               "lastPrice": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "markPrice": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "spreadBps": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "fundingRate": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               }
             }
           },
           "returnsBps": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "1m",
-              "3m",
-              "5m",
-              "15m",
-              "1h"
-            ],
+            "required": ["1m", "3m", "5m", "15m", "1h"],
             "properties": {
               "1m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "3m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "5m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "15m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "1h": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               }
             }
           },
           "delta": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "1m",
-              "5m",
-              "15m"
-            ],
+            "required": ["1m", "5m", "15m"],
             "properties": {
               "1m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "5m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "15m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               }
             }
           },
           "openInterestChangePercent": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "1m",
-              "5m",
-              "15m"
-            ],
+            "required": ["1m", "5m", "15m"],
             "properties": {
               "1m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "5m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               },
               "15m": {
-                "type": [
-                  "number",
-                  "null"
-                ]
+                "type": ["number", "null"]
               }
             }
           }
@@ -1434,9 +1127,7 @@
         "properties": {
           "version": {
             "type": "string",
-            "enum": [
-              "local-market-v1"
-            ]
+            "enum": ["local-market-v1"]
           },
           "generatedAt": {
             "type": "integer",
@@ -1444,17 +1135,12 @@
           },
           "objectiveOnly": {
             "type": "boolean",
-            "enum": [
-              true
-            ]
+            "enum": [true]
           },
           "leadCore": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "ETHUSDT",
-              "SOLUSDT"
-            ],
+            "required": ["ETHUSDT", "SOLUSDT"],
             "properties": {
               "ETHUSDT": {
                 "oneOf": [
@@ -1515,17 +1201,11 @@
         ],
         "properties": {
           "marketAgeMs": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0
           },
           "marketToRelayMs": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0
           },
           "relayToActionStartMs": {
@@ -1553,16 +1233,10 @@
             "type": "boolean"
           },
           "cryptoMarketGeneratedAt": {
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "cryptoMarketAgeMs": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0
           },
           "auxiliaryEvidenceHealth": {
@@ -1605,9 +1279,7 @@
         "properties": {
           "version": {
             "type": "string",
-            "enum": [
-              "decision-context-v1"
-            ]
+            "enum": ["decision-context-v1"]
           },
           "generatedAt": {
             "type": "integer",
@@ -1615,21 +1287,13 @@
           },
           "objectiveOnly": {
             "type": "boolean",
-            "enum": [
-              true
-            ]
+            "enum": [true]
           },
           "snapshotId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "marketGeneratedAt": {
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "relayReceivedAt": {
             "type": "integer",
@@ -1767,11 +1431,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "enum": [
-                "INTRADAY",
-                "SWING",
-                "MACRO"
-              ]
+              "enum": ["INTRADAY", "SWING", "MACRO"]
             }
           }
         ],
