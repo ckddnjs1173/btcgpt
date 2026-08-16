@@ -1,0 +1,299 @@
+name: Temporary Trigger Precision Patcher
+
+on:
+  push:
+    branches:
+      - agent/trigger-position-precision
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: agent/trigger-position-precision
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Patch contracts, lifecycle, UI, Worker and OpenAPI
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'missing expected block in {path}: {old[:80]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # Shared contracts: re-export the structured GPT trigger contract.
+          p = Path('src/shared/contracts.ts')
+          text = p.read_text(encoding='utf-8')
+          prefix = """import type {\n  ApprovedPlanMonitoring,\n  StructuredTriggerInput,\n} from './trading/structured-trigger';\nexport type {\n  ApprovedPlanMonitoring,\n  ApprovedPlanMonitoringState,\n  ApprovedPlanPriceCondition,\n  StructuredTriggerInput,\n  StructuredTriggerType,\n} from './trading/structured-trigger';\n\n"""
+          if not text.startswith('import type'):
+              text = prefix + text
+          old = """export type ApprovedPlanPriceCondition = 'AT_OR_ABOVE' | 'AT_OR_BELOW';\nexport type ApprovedPlanMonitoringState =\n  'WATCHING' | 'TRIGGERED' | 'INVALIDATED' | 'EXPIRED' | 'CANCELLED';\nexport interface ApprovedPlanMonitoring {\n  referencePrice: 'MARK_PRICE';\n  triggerCondition: ApprovedPlanPriceCondition;\n  triggerPrice: number;\n  invalidationCondition: ApprovedPlanPriceCondition;\n  invalidationPrice: number;\n  expiresAt: number;\n  state: ApprovedPlanMonitoringState;\n  triggeredAt: number | null;\n  invalidatedAt: number | null;\n  expiredAt: number | null;\n  cancelledAt: number | null;\n}\n\n"""
+          if old in text:
+              text = text.replace(old, '', 1)
+          text = text.replace(
+              "export interface LockTradePlanInput extends PositionCalculationInput {\n  targets?: number[];\n}",
+              "export interface LockTradePlanInput extends PositionCalculationInput {\n  targets?: number[];\n  trigger?: StructuredTriggerInput;\n}",
+              1,
+          )
+          text = text.replace(
+              "export type TradeLifecycleStage =\n  'FLAT' | 'WATCHING' | 'ENTRY_READY' | 'MANAGING' | 'CLOSED' | 'CANCELLED';",
+              "export type TradeLifecycleStage =\n  | 'FLAT'\n  | 'WATCHING'\n  | 'REANALYSIS_REQUIRED'\n  | 'ENTRY_READY'\n  | 'MANAGING'\n  | 'CLOSED'\n  | 'CANCELLED';",
+              1,
+          )
+          p.write_text(text, encoding='utf-8')
+
+          # Zod lock-plan schema accepts, but never authors, a GPT trigger.
+          p = Path('src/shared/schemas.ts')
+          text = p.read_text(encoding='utf-8')
+          if "./trading/structured-trigger" not in text:
+              text = text.replace(
+                  "import { z } from 'zod';\n",
+                  "import { z } from 'zod';\n\nimport { structuredTriggerInputSchema } from './trading/structured-trigger';\n",
+                  1,
+              )
+          text = text.replace(
+              """export const lockTradePlanInputSchema = positionCalculationInputSchema.extend({\n  targets: z\n    .array(z.number().positive().max(10_000_000))\n    .min(1)\n    .max(3)\n    .optional(),\n});""",
+              """export const lockTradePlanInputSchema = positionCalculationInputSchema.extend({\n  targets: z\n    .array(z.number().positive().max(10_000_000))\n    .min(1)\n    .max(3)\n    .optional(),\n  trigger: structuredTriggerInputSchema.optional(),\n});""",
+              1,
+          )
+          p.write_text(text, encoding='utf-8')
+
+          # IPC plan locking no longer derives a trigger from entry/stop/current price.
+          p = Path('src/main/ipc/register-handlers.ts')
+          text = p.read_text(encoding='utf-8')
+          if "armStructuredTrigger" not in text:
+              text = text.replace(
+                  "import { buildTradingState } from '../trading/build-state';\n\nconst APPROVED_PLAN_DEFAULT_TTL_MS = 30 * 60_000;",
+                  "import { buildTradingState } from '../trading/build-state';\nimport { armStructuredTrigger } from '../../shared/trading/structured-trigger';",
+                  1,
+              )
+          text = text.replace(
+              """      const referencePrice =\n        snapshot.marketState.markPrice ?? snapshot.marketState.lastPrice;\n      if (!referencePrice) throw new Error('PLAN_REFERENCE_PRICE_REQUIRED');\n""",
+              '',
+              1,
+          )
+          old_monitor = """        monitoring: {\n          referencePrice: 'MARK_PRICE',\n          triggerCondition:\n            input.entry >= referencePrice ? 'AT_OR_ABOVE' : 'AT_OR_BELOW',\n          triggerPrice: input.entry,\n          invalidationCondition:\n            input.stop >= referencePrice ? 'AT_OR_ABOVE' : 'AT_OR_BELOW',\n          invalidationPrice: input.stop,\n          expiresAt: lockedAt + APPROVED_PLAN_DEFAULT_TTL_MS,\n          state: 'WATCHING',\n          triggeredAt: null,\n          invalidatedAt: null,\n          expiredAt: null,\n          cancelledAt: null,\n        },"""
+          new_monitor = """        monitoring: input.trigger\n          ? armStructuredTrigger(input.trigger, lockedAt)\n          : undefined,"""
+          if old_monitor not in text:
+              raise SystemExit('missing old auto-monitoring block')
+          text = text.replace(old_monitor, new_monitor, 1)
+          text = text.replace(
+              """    if (plan.monitoring?.state !== 'TRIGGERED')\n      throw new Error('PAPER_PLAN_TRIGGER_REQUIRED');""",
+              """    if (plan.monitoring?.state === 'TRIGGERED')\n      throw new Error('TRIGGER_REANALYSIS_REQUIRED');\n    if (plan.monitoring) throw new Error('PAPER_PLAN_TRIGGER_STILL_ARMED');""",
+              1,
+          )
+          p.write_text(text, encoding='utf-8')
+
+          # Lifecycle: trigger is not entry-ready; fresh immediate plan is.
+          replace_once(
+              'src/main/trading/build-state.ts',
+              """  const lifecycleStage =\n    paperTrade || liveTrades.active || account.position\n      ? ('MANAGING' as const)\n      : plan?.status === 'LOCKED' && plan.monitoring?.state === 'TRIGGERED'\n        ? ('ENTRY_READY' as const)\n        : plan?.status === 'LOCKED'\n          ? ('WATCHING' as const)\n          : lastPlan?.status === 'CANCELLED'\n            ? ('CANCELLED' as const)\n            : lastPlan?.status === 'CLOSED' ||\n                lastCompletedPaperTrade ||\n                liveTrades.lastCompleted\n              ? ('CLOSED' as const)\n              : ('FLAT' as const);""",
+              """  const lifecycleStage =\n    paperTrade || liveTrades.active || account.position\n      ? ('MANAGING' as const)\n      : plan?.status === 'LOCKED' && plan.monitoring?.state === 'TRIGGERED'\n        ? ('REANALYSIS_REQUIRED' as const)\n        : plan?.status === 'LOCKED' && plan.monitoring\n          ? ('WATCHING' as const)\n          : plan?.status === 'LOCKED'\n            ? ('ENTRY_READY' as const)\n            : lastPlan?.status === 'CANCELLED'\n              ? ('CANCELLED' as const)\n              : lastPlan?.status === 'CLOSED' ||\n                  lastCompletedPaperTrade ||\n                  liveTrades.lastCompleted\n                ? ('CLOSED' as const)\n                : ('FLAT' as const);""",
+          )
+
+          # Renderer: optional GPT WAIT contract JSON; immediate plan stays immediate.
+          p = Path('src/renderer/App.tsx')
+          text = p.read_text(encoding='utf-8')
+          if 'StructuredTriggerInput' not in text:
+              text = text.replace(
+                  "  UserSettings,\n} from '../shared/contracts';",
+                  "  UserSettings,\n  StructuredTriggerInput,\n} from '../shared/contracts';",
+                  1,
+              )
+          text = text.replace(
+              """  const [calculation, setCalculation] =\n    useState<PositionCalculationResult | null>(null);""",
+              """  const [calculation, setCalculation] =\n    useState<PositionCalculationResult | null>(null);\n  const [triggerContractText, setTriggerContractText] = useState('');""",
+              1,
+          )
+          old_lock = """  const lockPlan = useCallback(async () => {\n    try {\n      if (!window.desktopApi.lockTradePlan)\n        throw new Error('계획 고정 API 미지원');\n      await window.desktopApi.lockTradePlan({\n        side: calculator.side,\n        entry: Number(calculator.entry),\n        stop: Number(calculator.stop),\n        target: Number(calculator.target),\n        targets: [Number(calculator.target)],\n        leverage: Number(calculator.leverage),\n        sizeMode: calculator.sizeMode,\n        sizeValue: Number(calculator.sizeValue),\n        entryOrderType: calculator.entryOrderType,\n        exitOrderType: calculator.exitOrderType,\n      });\n      setResult({\n        ok: true,\n        message: '검증된 계획을 고정하고 30분 객관 가격 감시를 시작했습니다.',\n      });\n      await refresh();\n    } catch (error) {\n      setResult({\n        ok: false,\n        message: error instanceof Error ? error.message : '계획 고정 실패',\n      });\n    }\n  }, [calculator, refresh]);"""
+          new_lock = """  const lockPlan = useCallback(async () => {\n    try {\n      if (!window.desktopApi.lockTradePlan)\n        throw new Error('계획 고정 API 미지원');\n      const trigger = triggerContractText.trim()\n        ? (JSON.parse(triggerContractText) as StructuredTriggerInput)\n        : undefined;\n      await window.desktopApi.lockTradePlan({\n        side: calculator.side,\n        entry: Number(calculator.entry),\n        stop: Number(calculator.stop),\n        target: Number(calculator.target),\n        targets: [Number(calculator.target)],\n        leverage: Number(calculator.leverage),\n        sizeMode: calculator.sizeMode,\n        sizeValue: Number(calculator.sizeValue),\n        entryOrderType: calculator.entryOrderType,\n        exitOrderType: calculator.exitOrderType,\n        trigger,\n      });\n      if (trigger) setTriggerContractText('');\n      setResult({\n        ok: true,\n        message: trigger\n          ? 'GPT가 작성한 WAIT trigger 계약을 승인·고정했습니다. 프로그램은 조건 충족만 감시하며 자동 진입하지 않습니다.'\n          : '최신 검증을 통과한 즉시 진입 계획을 고정했습니다.',\n      });\n      await refresh();\n    } catch (error) {\n      setResult({\n        ok: false,\n        message: error instanceof Error ? error.message : '계획 고정 실패',\n      });\n    }\n  }, [calculator, refresh, triggerContractText]);"""
+          if old_lock not in text:
+              raise SystemExit('missing renderer lockPlan block')
+          text = text.replace(old_lock, new_lock, 1)
+          text = text.replace(
+              """          {settings.tradingMode === 'PAPER' &&\n            snapshot?.trading.activePlan?.status === 'LOCKED' &&\n            snapshot.trading.activePlan.monitoring?.state === 'TRIGGERED' && (\n              <button onClick={() => void enterPaperTrade()}>\n                트리거 충족 계획으로 PAPER 진입\n              </button>\n            )}""",
+              """          {snapshot?.trading.lifecycle.stage === 'REANALYSIS_REQUIRED' && (\n            <button onClick={() => void copyAndOpen()}>\n              트리거 충족 · 최신 GPT 재분석 열기\n            </button>\n          )}\n          {settings.tradingMode === 'PAPER' &&\n            snapshot?.trading.activePlan?.status === 'LOCKED' &&\n            !snapshot.trading.activePlan.monitoring && (\n              <button onClick={() => void enterPaperTrade()}>\n                검증된 즉시 계획으로 PAPER 진입\n              </button>\n            )}""",
+              1,
+          )
+          text = text.replace(
+              """            <button\n              disabled={!calculation?.valid}\n              onClick={() => void lockPlan()}\n            >\n              검증값으로 계획 고정\n            </button>""",
+              """            <textarea\n              aria-label=\"GPT WAIT trigger contract JSON\"\n              value={triggerContractText}\n              onChange={(event) => setTriggerContractText(event.target.value)}\n              placeholder=\"WAIT_TRIGGER일 때 GPT가 제공한 triggerContract JSON만 선택적으로 붙여넣기\"\n              rows={7}\n            />\n            <small>\n              비워 두면 최신 검증을 통과한 즉시 계획입니다. JSON을 넣으면 GPT가 작성한 조건만 감시하며, TRIGGERED 후 반드시 GPT 재분석이 필요합니다.\n            </small>\n            <button\n              disabled={!calculation?.valid}\n              onClick={() => void lockPlan()}\n            >\n              검증값으로 계획 고정\n            </button>""",
+              1,
+          )
+          text = text.replace("'5초 heartbeat 정상'", "'2초 heartbeat 정상'", 1)
+          p.write_text(text, encoding='utf-8')
+
+          # Worker route registration.
+          p = Path('worker/src/index.ts')
+          text = p.read_text(encoding='utf-8')
+          if 'handlePositionAdjustmentRequest' not in text:
+              text = text.replace(
+                  "import { handleDecisionContextRequest } from './decision-context-route';\n",
+                  "import { handleDecisionContextRequest } from './decision-context-route';\nimport { handlePositionAdjustmentRequest } from './position-adjustment-route';\n",
+                  1,
+              )
+              anchor = """  if (\n    url.pathname === '/v1/decision-context/latest' &&\n    request.method === 'GET'\n  )\n    return handleDecisionContextRequest(request, env);\n"""
+              insertion = anchor + """\n  if (\n    url.pathname === '/v1/position-adjustment/validate' &&\n    request.method === 'POST'\n  )\n    return handlePositionAdjustmentRequest(request, env);\n"""
+              if anchor not in text:
+                  raise SystemExit('missing decision context route anchor')
+              text = text.replace(anchor, insertion, 1)
+          p.write_text(text, encoding='utf-8')
+
+          # GPT instructions: WAIT trigger is authored by GPT, position changes are validated.
+          p = Path('worker/openapi/GPT_INSTRUCTIONS.md')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(
+              "6. 방향별 trigger 최대 2개. 조건 미충족이면 `WAIT_TRIGGER`; 없는 숫자를 채우지 않는다.",
+              "6. `WAIT_TRIGGER`이면 프로그램이 만들지 않은 GPT-authored `triggerContract` 1개를 함께 제시한다. 가격 비교·확인시간·무효화·만료·maxChaseBps만 구조화하며 TRIGGERED는 진입 허가가 아니라 최신 `getDecisionSnapshot` 재분석 요구다.",
+              1,
+          )
+          text = text.replace(
+              "- 부분청산/종료는 Reduce-Only, remainingQuantity 초과 금지. stepSize 불일치 수량 확정 금지.",
+              "- `PARTIAL_EXIT|EXIT|MOVE_STOP|CHANGE_TP`의 정확한 Binance 입력값을 말하기 전 `validatePositionAdjustment`를 같은 snapshotId로 호출한다. 반환된 aligned 수량/가격·Reduce-Only·remainingQuantity·coverage를 그대로 사용하고 validation 실패나 snapshot 변경이면 새 관리값을 확정하지 않는다.\n- 부분청산/종료는 Reduce-Only, remainingQuantity 초과 금지. stepSize 불일치 수량 확정 금지.",
+              1,
+          )
+          text = text.replace(
+              "WAIT/NO_TRADE: `[지금 입력하지 않음] 행동 / 버튼 누르지 않음 / Size·TP·SL 공란 / 재확인 조건 최대 2개`.",
+              "WAIT/NO_TRADE: `[지금 입력하지 않음] 행동 / 버튼 누르지 않음 / Size·TP·SL 공란 / 재확인 조건 최대 2개`. WAIT_TRIGGER이면 `triggerContract` JSON에 `authoredBy=GPT`, triggerId, decisionId, sourceSnapshotId, triggerType, MARK_PRICE 비교조건/가격, confirmWindowSec, 무효화조건/가격, expiresAt, maxChaseBps를 포함한다.",
+              1,
+          )
+          p.write_text(text, encoding='utf-8')
+
+          # OpenAPI v5.4: deterministic, non-consequential position adjustment validator.
+          p = Path('worker/openapi/openapi.json')
+          doc = json.loads(p.read_text(encoding='utf-8'))
+          doc['info']['version'] = '5.4.0'
+          doc['paths']['/v1/position-adjustment/validate'] = {
+              'post': {
+                  'operationId': 'validatePositionAdjustment',
+                  'summary': 'Validate a GPT-selected open-position adjustment without placing orders',
+                  'description': 'Pure validation/calculation for PARTIAL_EXIT, EXIT, MOVE_STOP, or CHANGE_TP against the exact latest snapshot and current read-only/manual position. Never creates or changes an exchange order.',
+                  'security': [{'actionKey': []}],
+                  'x-openai-isConsequential': False,
+                  'requestBody': {
+                      'required': True,
+                      'content': {'application/json': {'schema': {'$ref': '#/components/schemas/PositionAdjustmentRequest'}}},
+                  },
+                  'responses': {
+                      '200': {'description': 'Validation result', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/PositionAdjustmentResponse'}}}},
+                      '400': {'description': 'Invalid request', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/ErrorResponse'}}}},
+                      '401': {'description': 'Unauthorized', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/ErrorResponse'}}}},
+                      '409': {'description': 'Snapshot changed', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/PositionAdjustmentResponse'}}}},
+                      '503': {'description': 'Storage unavailable', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/ErrorResponse'}}}},
+                  },
+              }
+          }
+          schemas = doc['components']['schemas']
+          schemas['PositionAdjustmentTargetInput'] = {
+              'type': 'object', 'additionalProperties': False,
+              'required': ['price', 'requestedPercent'],
+              'properties': {
+                  'price': {'type': 'number', 'exclusiveMinimum': 0},
+                  'requestedPercent': {'type': 'number', 'exclusiveMinimum': 0, 'maximum': 100},
+              },
+          }
+          schemas['PositionAdjustmentRequest'] = {
+              'type': 'object', 'additionalProperties': False,
+              'required': ['snapshotId', 'action'],
+              'properties': {
+                  'snapshotId': {'type': 'string', 'description': 'Exact snapshotId from the current Decision Context.'},
+                  'action': {'type': 'string', 'enum': ['PARTIAL_EXIT', 'EXIT', 'MOVE_STOP', 'CHANGE_TP']},
+                  'requestedQuantity': {'type': 'number', 'exclusiveMinimum': 0},
+                  'requestedPercent': {'type': 'number', 'exclusiveMinimum': 0, 'maximum': 100},
+                  'stopPrice': {'type': 'number', 'exclusiveMinimum': 0},
+                  'targets': {'type': 'array', 'minItems': 1, 'maxItems': 3, 'items': {'$ref': '#/components/schemas/PositionAdjustmentTargetInput'}},
+                  'exitOrderType': {'type': 'string', 'enum': ['MAKER', 'TAKER'], 'default': 'TAKER'},
+              },
+          }
+          schemas['ValidatedAdjustmentTarget'] = {
+              'type': 'object', 'additionalProperties': False,
+              'required': ['requestedPrice', 'alignedPrice', 'requestedPercent', 'alignedQuantity', 'notional'],
+              'properties': {
+                  'requestedPrice': {'type': 'number'}, 'alignedPrice': {'type': 'number'},
+                  'requestedPercent': {'type': 'number'}, 'alignedQuantity': {'type': 'number'}, 'notional': {'type': 'number'},
+              },
+          }
+          schemas['ProjectedProtection'] = {
+              'type': 'object', 'additionalProperties': False,
+              'required': ['stopLossQuantity', 'takeProfitQuantity', 'stopLossCoverageRatio', 'takeProfitCoverageRatio'],
+              'properties': {
+                  'stopLossQuantity': {'type': 'number'}, 'takeProfitQuantity': {'type': 'number'},
+                  'stopLossCoverageRatio': {'type': ['number', 'null']},
+                  'takeProfitCoverageRatio': {'type': ['number', 'null']},
+              },
+          }
+          schemas['PositionAdjustmentResponse'] = {
+              'type': 'object', 'additionalProperties': False,
+              'required': ['ok', 'errors'],
+              'properties': {
+                  'ok': {'type': 'boolean'}, 'errors': {'type': 'array', 'items': {'type': 'string'}},
+                  'warnings': {'type': 'array', 'items': {'type': 'string'}},
+                  'snapshotId': {'type': ['string', 'null']}, 'requestedSnapshotId': {'type': 'string'},
+                  'currentSnapshotId': {'type': ['string', 'null']}, 'marketGeneratedAt': {'type': ['number', 'null']},
+                  'positionSource': {'type': 'string'}, 'side': {'type': 'string', 'enum': ['LONG', 'SHORT']},
+                  'currentQuantity': {'type': 'number'}, 'markPrice': {'type': 'number'},
+                  'action': {'type': 'string', 'enum': ['PARTIAL_EXIT', 'EXIT', 'MOVE_STOP', 'CHANGE_TP']},
+                  'reduceOnlyRequired': {'type': 'boolean', 'const': True},
+                  'requestedQuantity': {'type': ['number', 'null']}, 'alignedQuantity': {'type': ['number', 'null']},
+                  'remainingQuantity': {'type': 'number'}, 'requestedStopPrice': {'type': ['number', 'null']},
+                  'alignedStopPrice': {'type': ['number', 'null']},
+                  'targets': {'type': 'array', 'items': {'$ref': '#/components/schemas/ValidatedAdjustmentTarget'}},
+                  'estimatedFee': {'type': ['number', 'null']}, 'estimatedSlippage': {'type': ['number', 'null']},
+                  'projectedProtection': {'$ref': '#/components/schemas/ProjectedProtection'},
+                  'filters': {'type': 'object', 'additionalProperties': False, 'required': ['tickSize', 'stepSize', 'minQuantity', 'minNotional'], 'properties': {
+                      'tickSize': {'type': 'number'}, 'stepSize': {'type': 'number'}, 'minQuantity': {'type': 'number'}, 'minNotional': {'type': 'number'}
+                  }},
+              },
+          }
+          p.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
+      - name: Format changed files
+        run: >-
+          npx prettier --write
+          src/shared/contracts.ts
+          src/shared/schemas.ts
+          src/shared/trading/structured-trigger.ts
+          src/shared/calculations/position-adjustment.ts
+          src/main/ipc/register-handlers.ts
+          src/main/trading/approved-plan-monitor.ts
+          src/main/trading/build-state.ts
+          src/renderer/App.tsx
+          worker/src/index.ts
+          worker/src/position-adjustment-route.ts
+          worker/openapi/openapi.json
+          worker/openapi/GPT_INSTRUCTIONS.md
+          tests/unit/trigger-position-precision.test.ts
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src worker tests
+          if git diff --cached --quiet; then
+            echo "No patch changes"
+            exit 0
+          fi
+          git commit -m "feat: wire structured triggers and position adjustment validation"
+          git push origin HEAD:agent/trigger-position-precision
