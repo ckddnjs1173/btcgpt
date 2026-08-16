@@ -12,6 +12,8 @@ import type {
 } from '../../shared/contracts';
 import { logger } from '../logging/logger';
 import { fetchRss, item, officialFeeds, sourceAdapters } from './adapters';
+import { deribitOptionsContextItem, fetchDeribitOptionsV2 } from './options-v2';
+import type { DeribitOptionsIntelligenceV2 } from '../../shared/options-intelligence';
 
 type SourceName =
   | 'BINANCE_ANNOUNCEMENT'
@@ -72,6 +74,7 @@ export class ExternalContextService {
   private announcementPing: NodeJS.Timeout | null = null;
   private stopped = true;
   private updatedAt: number | null = null;
+  private deribitOptionsV2: DeribitOptionsIntelligenceV2 | null = null;
 
   constructor(
     private readonly naverCredentials: () => {
@@ -206,6 +209,7 @@ export class ExternalContextService {
       items,
       sourceHealth,
       riskContext: this.riskContext(now, sourceHealth),
+      optionsV2: this.deribitOptionsV2,
     };
   }
 
@@ -216,8 +220,11 @@ export class ExternalContextService {
     const state = this.health[source];
     try {
       let records: ExternalContextItem[] = [];
-      if (source === 'DERIBIT') records = await sourceAdapters.deribit();
-      else if (source === 'MEMPOOL_SPACE')
+      if (source === 'DERIBIT') {
+        const optionsV2 = await fetchDeribitOptionsV2();
+        this.deribitOptionsV2 = optionsV2;
+        records = [deribitOptionsContextItem(optionsV2)];
+      } else if (source === 'MEMPOOL_SPACE')
         records = await sourceAdapters.mempool();
       else if (source === 'COIN_METRICS_COMMUNITY')
         records = await sourceAdapters.coinMetrics();

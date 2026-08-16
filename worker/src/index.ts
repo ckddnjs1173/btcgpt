@@ -172,6 +172,7 @@ const contextSnapshotSchema = z
     items: z.array(contextItemSchema).max(120),
     sourceHealth: z.record(z.string(), z.unknown()),
     riskContext: riskContextSchema,
+    optionsV2: z.unknown().nullable().optional(),
   })
   .strict();
 const contextUploadSchema = z

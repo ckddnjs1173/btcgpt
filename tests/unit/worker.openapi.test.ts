@@ -86,6 +86,14 @@ interface OpenApiDocument {
         additionalProperties: boolean;
         required: string[];
       };
+      DeribitOptionsV2: {
+        additionalProperties: boolean;
+        required: string[];
+        properties: {
+          version: { const: string };
+          objectiveOnly: { const: boolean };
+        };
+      };
     };
   };
 }
@@ -96,7 +104,7 @@ describe('worker OpenAPI', () => {
     const raw = fs.readFileSync(p, 'utf8');
     const json = JSON.parse(raw) as OpenApiDocument;
 
-    expect(json.info.version).toBe('5.6.0');
+    expect(json.info.version).toBe('5.7.0');
     expect(json.servers).toEqual([
       {
         url: 'https://btc-futures-assistant-relay.btcgpt-ck1173.workers.dev',
@@ -224,6 +232,18 @@ describe('worker OpenAPI', () => {
     expect(json.components.schemas.CrossVenueIntelligence.required).toContain(
       'interpretationBoundary',
     );
+    expect(json.components.schemas.DeribitOptionsV2.additionalProperties).toBe(
+      false,
+    );
+    expect(json.components.schemas.DeribitOptionsV2.required).toContain(
+      'skew25Delta',
+    );
+    expect(
+      json.components.schemas.DeribitOptionsV2.properties.version.const,
+    ).toBe('deribit-options-v2');
+    expect(
+      json.components.schemas.DeribitOptionsV2.properties.objectiveOnly.const,
+    ).toBe(true);
     expect(json.paths['/v1/snapshot/latest'].put).toBeUndefined();
   });
 
