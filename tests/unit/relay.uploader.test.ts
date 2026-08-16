@@ -50,8 +50,7 @@ describe('RelayUploader snapshot settings', () => {
     }
   });
 
-  it('serializes heartbeat uploads so an older request cannot finish last', async () => {
-    vi.useFakeTimers();
+  it('serializes uploads so an older request cannot finish last', async () => {
     const resolvers: Array<() => void> = [];
     const fetchMock = vi.fn(
       () =>
@@ -65,14 +64,18 @@ describe('RelayUploader snapshot settings', () => {
       uploadKey: 'x'.repeat(32),
     });
 
-    uploader.start();
+    const firstUpload = uploader.uploadOnce();
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    await vi.advanceTimersByTimeAsync(5_000);
+
+    await uploader.uploadOnce();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+
     resolvers.shift()?.();
+    await firstUpload;
+
+    const secondUpload = uploader.uploadOnce();
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     resolvers.shift()?.();
-    uploader.stop();
-    vi.useRealTimers();
+    await secondUpload;
   });
 });
