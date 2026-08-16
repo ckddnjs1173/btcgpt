@@ -37,6 +37,8 @@ export const evidenceCoverageSchema = z.enum([
 export type EvidenceCoverage = z.infer<typeof evidenceCoverageSchema>;
 
 const epochMsSchema = z.number().int().nonnegative();
+const finiteNumberSchema = z.number().finite();
+const nullableFiniteNumberSchema = finiteNumberSchema.nullable();
 const symbolSchema = z
   .string()
   .trim()
@@ -129,6 +131,128 @@ export const cryptoAssetObservationBaseSchema = z
 export type CryptoAssetObservationBase = z.infer<
   typeof cryptoAssetObservationBaseSchema
 >;
+
+const returnWindowsSchema = z
+  .object({
+    '15s': nullableFiniteNumberSchema,
+    '30s': nullableFiniteNumberSchema,
+    '1m': nullableFiniteNumberSchema,
+    '3m': nullableFiniteNumberSchema,
+    '5m': nullableFiniteNumberSchema,
+    '15m': nullableFiniteNumberSchema,
+    '1h': nullableFiniteNumberSchema,
+  })
+  .strict();
+
+const leadTradeFlowWindowSchema = z
+  .object({
+    sampleCount: z.number().int().nonnegative(),
+    buyNotional: z.number().nonnegative(),
+    sellNotional: z.number().nonnegative(),
+    totalNotional: z.number().nonnegative(),
+    signedDeltaNotional: finiteNumberSchema,
+    normalizedDelta: z.number().min(-1).max(1).nullable(),
+    buyRatio: z.number().min(0).max(1).nullable(),
+    tradesPerSecond: z.number().nonnegative(),
+  })
+  .strict();
+
+const leadOpenInterestChangesSchema = z
+  .object({
+    '30s': nullableFiniteNumberSchema,
+    '1m': nullableFiniteNumberSchema,
+    '3m': nullableFiniteNumberSchema,
+    '5m': nullableFiniteNumberSchema,
+    '15m': nullableFiniteNumberSchema,
+  })
+  .strict();
+
+const leadLiquidationWindowSchema = z
+  .object({
+    observedLongNotional: z.number().nonnegative(),
+    observedShortNotional: z.number().nonnegative(),
+    eventCount: z.number().int().nonnegative(),
+    coverage: z.literal('SNAPSHOT'),
+  })
+  .strict();
+
+const closedOneMinuteCandleSchema = z
+  .object({
+    openTime: epochMsSchema,
+    closeTime: epochMsSchema,
+    open: z.number().positive(),
+    high: z.number().positive(),
+    low: z.number().positive(),
+    close: z.number().positive(),
+    volume: z.number().nonnegative(),
+    quoteVolume: z.number().nonnegative(),
+    tradeCount: z.number().int().nonnegative(),
+    takerBuyQuoteVolume: z.number().nonnegative(),
+    closed: z.literal(true),
+  })
+  .strict();
+
+export const leadAssetObservationSchema = cryptoAssetObservationBaseSchema
+  .extend({
+    symbol: z.enum(['ETHUSDT', 'SOLUSDT']),
+    baseAsset: z.enum(['ETH', 'SOL']),
+    quoteAsset: z.literal('USDT'),
+    venue: z.literal('BINANCE_USDM'),
+    instrumentType: z.literal('PERPETUAL'),
+    tier: z.literal('LEAD_CORE'),
+    market: z
+      .object({
+        lastPrice: z.number().positive().nullable(),
+        markPrice: z.number().positive().nullable(),
+        indexPrice: z.number().positive().nullable(),
+        bidPrice: z.number().positive().nullable(),
+        askPrice: z.number().positive().nullable(),
+        spreadBps: nullableFiniteNumberSchema,
+        fundingRate: nullableFiniteNumberSchema,
+        nextFundingTime: epochMsSchema.nullable(),
+      })
+      .strict(),
+    latestClosed1m: closedOneMinuteCandleSchema.nullable(),
+    returnsBps: returnWindowsSchema,
+    tradeFlow: z
+      .object({
+        '15s': leadTradeFlowWindowSchema,
+        '30s': leadTradeFlowWindowSchema,
+        '1m': leadTradeFlowWindowSchema,
+        '3m': leadTradeFlowWindowSchema,
+        '5m': leadTradeFlowWindowSchema,
+        '15m': leadTradeFlowWindowSchema,
+        cumulativeDeltaNotional: finiteNumberSchema,
+      })
+      .strict(),
+    microstructure: z
+      .object({
+        depthLevels: z.literal(20),
+        bidNotional20: z.number().nonnegative(),
+        askNotional20: z.number().nonnegative(),
+        depthImbalance20: z.number().min(-1).max(1).nullable(),
+        microPrice: z.number().positive().nullable(),
+        depthObservedAt: epochMsSchema.nullable(),
+      })
+      .strict(),
+    openInterest: z
+      .object({
+        current: z.number().nonnegative().nullable(),
+        notional: z.number().nonnegative().nullable(),
+        observedAt: epochMsSchema.nullable(),
+        changesPercent: leadOpenInterestChangesSchema,
+      })
+      .strict(),
+    liquidations: z
+      .object({
+        '1m': leadLiquidationWindowSchema,
+        '5m': leadLiquidationWindowSchema,
+        '15m': leadLiquidationWindowSchema,
+      })
+      .strict(),
+  })
+  .strict();
+export type LeadAssetObservation = z.infer<typeof leadAssetObservationSchema>;
 
 export const cryptoMarketFoundationSchema = z
   .object({

@@ -10,6 +10,7 @@ import { AppDatabase } from './db/database';
 import { registerIpcHandlers } from './ipc/register-handlers';
 import { logger } from './logging/logger';
 import { MarketDataService } from './market/service';
+import { LeadCoreMarketService } from './market/multicoin/lead-service';
 import type { SnapshotOptions } from './market/snapshot';
 import { createCompactRelaySnapshot } from './market/compact-snapshot';
 import { generateSnapshot } from './market/snapshot';
@@ -45,6 +46,7 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let database: AppDatabase | null = null;
 let marketData: MarketDataService | null = null;
+let leadCoreMarket: LeadCoreMarketService | null = null;
 let relayUploader: RelayUploader | null = null;
 let accountService: AccountService | null = null;
 let notificationMonitor: OperationalNotificationMonitor | null = null;
@@ -87,6 +89,8 @@ app.on('will-quit', () => {
   accountService = null;
   relayUploader?.stop();
   relayUploader = null;
+  leadCoreMarket?.stop();
+  leadCoreMarket = null;
   marketData?.stop();
   marketData = null;
   contextUploader?.stop();
@@ -115,6 +119,7 @@ void app.whenReady().then(() => {
     openAtLogin: database.readUserSettings().autoStart,
   });
   marketData = new MarketDataService(database);
+  leadCoreMarket = new LeadCoreMarketService();
   const naverStore = new NaverCredentialStore(database);
   const accountCredentialStore = new CredentialStore(database);
   externalContext = new ExternalContextService(
@@ -239,7 +244,7 @@ void app.whenReady().then(() => {
     },
     isTrayReady: () => tray !== null && !tray.isDestroyed(),
   });
-  if (process.env.BTC_E2E_DISABLE_MARKET !== '1')
+  if (process.env.BTC_E2E_DISABLE_MARKET !== '1') {
     void marketData.start().catch((error: unknown) => {
       logger.error(
         {
@@ -252,6 +257,8 @@ void app.whenReady().then(() => {
         'Market data service failed to start',
       );
     });
+    leadCoreMarket.start();
+  }
   externalContext.start();
   const environmentRelay =
     process.env.BTC_RELAY_URL && process.env.BTC_RELAY_UPLOAD_KEY
@@ -295,11 +302,14 @@ void app.whenReady().then(() => {
   powerMonitor.on('resume', () => {
     if (quitting || resumeRecoveryInProgress) return;
     resumeRecoveryInProgress = true;
-    logger.info('System resumed; restarting live market and account streams');
+    logger.info(
+      'System resumed; restarting live market, lead-core, and account streams',
+    );
     try {
+      leadCoreMarket?.stop();
       marketData?.stop();
       accountService?.stop();
-      if (process.env.BTC_E2E_DISABLE_MARKET !== '1')
+      if (process.env.BTC_E2E_DISABLE_MARKET !== '1') {
         void marketData
           ?.start()
           .catch((error: unknown) => {
@@ -317,7 +327,8 @@ void app.whenReady().then(() => {
           .finally(() => {
             resumeRecoveryInProgress = false;
           });
-      else resumeRecoveryInProgress = false;
+        leadCoreMarket?.start();
+      } else resumeRecoveryInProgress = false;
       accountService?.start();
     } catch (error) {
       resumeRecoveryInProgress = false;
