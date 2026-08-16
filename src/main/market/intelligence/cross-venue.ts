@@ -123,6 +123,18 @@ export function buildCrossVenueIntelligence(input: {
   };
 }): CrossVenueIntelligence {
   const generatedAt = input.snapshot.generatedAt;
+  const provenance = Object.values(input.coinbase)
+    .flatMap((observation) => observation?.provenance ?? [])
+    .sort((left, right) => right.collectorReceivedAt - left.collectorReceivedAt)
+    .filter(
+      (row, index, rows) =>
+        rows.findIndex(
+          (candidate) =>
+            candidate.source === row.source &&
+            candidate.instrument === row.instrument,
+        ) === index,
+    )
+    .slice(0, 24);
   return crossVenueIntelligenceSchema.parse({
     version: 'cross-venue-v1',
     generatedAt,
@@ -177,5 +189,6 @@ export function buildCrossVenueIntelligence(input: {
           input.lead.SOLUSDT?.tradeFlow['5m'].normalizedDelta ?? null,
       }),
     },
+    provenance,
   });
 }
