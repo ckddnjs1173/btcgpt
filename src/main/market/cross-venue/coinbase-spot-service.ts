@@ -137,14 +137,12 @@ export class CoinbaseSpotMarketService {
     'ETH-USD': 0,
     'SOL-USD': 0,
   };
-  private readonly level2Sequences: Record<
-    CoinbaseSpotProduct,
-    number | null
-  > = {
-    'BTC-USD': null,
-    'ETH-USD': null,
-    'SOL-USD': null,
-  };
+  private readonly level2Sequences: Record<CoinbaseSpotProduct, number | null> =
+    {
+      'BTC-USD': null,
+      'ETH-USD': null,
+      'SOL-USD': null,
+    };
   private readonly status: Record<CoinbaseSpotProduct, ProductStatus> = {
     'BTC-USD': this.emptyStatus(),
     'ETH-USD': this.emptyStatus(),
@@ -165,7 +163,10 @@ export class CoinbaseSpotMarketService {
     this.stopping = false;
     const runId = ++this.runGeneration;
     for (const product of COINBASE_SPOT_PRODUCTS) this.connect(product, runId);
-    this.healthTimer = setInterval(() => this.checkHealth(runId), HEALTH_CHECK_MS);
+    this.healthTimer = setInterval(
+      () => this.checkHealth(runId),
+      HEALTH_CHECK_MS,
+    );
   }
 
   stop(): void {
