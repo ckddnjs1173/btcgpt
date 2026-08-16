@@ -204,7 +204,8 @@ describe('worker OpenAPI', () => {
     expect(raw).toContain('getDecisionSnapshot');
     expect(raw).toContain('validatePositionAdjustment');
     expect(raw).toContain('triggerContract');
-    expect(raw).toContain('REANALYSIS');
+    expect(raw).toContain('TRIGGERED');
+    expect(raw).toContain('재분석');
     expect(raw).toContain('instructionVersion=decision-context-v1');
     expect(raw).toContain('contextPackVersion=decision-context-v1');
     expect(raw).not.toContain('instructionVersion=phase23-v1');
