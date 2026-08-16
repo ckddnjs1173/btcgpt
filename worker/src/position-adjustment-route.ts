@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { validatePositionAdjustment } from '../../src/shared/calculations/position-adjustment';
+import { loadLatestSnapshotRow } from './latest-snapshot-store';
 import { applyRelayFreshness } from './relay-freshness';
 import type { Env } from './index';
 
@@ -25,12 +26,6 @@ const requestSchema = z
 
 const recordSchema = z.record(z.string(), z.unknown());
 const MAX_REQUEST_BYTES = 16_000;
-
-type SnapshotRow = {
-  raw: string;
-  generatedAt: number;
-  receivedAt: number;
-};
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -62,14 +57,6 @@ function finite(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-async function loadSnapshot(env: Env): Promise<SnapshotRow | null> {
-  if (!env.DB) throw new Error('DB_UNAVAILABLE');
-  return env.DB.prepare(
-    `SELECT payload AS raw, generated_at AS generatedAt,
-      received_at AS receivedAt FROM latest_snapshot WHERE id = 1`,
-  ).first<SnapshotRow>();
-}
-
 export async function handlePositionAdjustmentRequest(
   request: Request,
   env: Env,
@@ -93,9 +80,9 @@ export async function handlePositionAdjustmentRequest(
   })();
   if (!parsed) return json({ ok: false, errors: ['INVALID_REQUEST'] }, 400);
 
-  let stored: SnapshotRow | null;
+  let stored: Awaited<ReturnType<typeof loadLatestSnapshotRow>>;
   try {
-    stored = await loadSnapshot(env);
+    stored = await loadLatestSnapshotRow(env);
   } catch {
     return json({ error: 'STORAGE_UNAVAILABLE' }, 503);
   }
