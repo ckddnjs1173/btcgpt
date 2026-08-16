@@ -85,6 +85,7 @@ describe('cross-venue intelligence', () => {
     expect(result.assets.BTC?.derived.perpSpotReferenceSpreadBps).toBeCloseTo(
       100,
     );
+    expect(result.assets.BTC?.derived).not.toHaveProperty('arbitrageSpreadBps');
     expect(result.assets.BTC?.derived.returnDifferenceBps['1m']).toBeCloseTo(
       20,
     );
