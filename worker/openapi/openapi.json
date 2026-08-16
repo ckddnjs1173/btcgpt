@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "BTC Futures Assistant Actions",
-    "version": "5.2.0",
+    "version": "5.3.0",
     "description": "Unified BTCUSDT market, context, lifecycle, deterministic calculation, and analytics-only GPT decision telemetry actions."
   },
   "servers": [
@@ -22,7 +22,9 @@
         "type": "object",
         "required": ["error"],
         "properties": {
-          "error": { "type": "string" },
+          "error": {
+            "type": "string"
+          },
           "issues": {
             "type": "array",
             "items": {
@@ -37,9 +39,22 @@
         "type": "object",
         "required": ["ok", "errors", "warnings"],
         "properties": {
-          "ok": { "type": "boolean", "const": false },
-          "errors": { "type": "array", "items": { "type": "string" } },
-          "warnings": { "type": "array", "items": { "type": "string" } }
+          "ok": {
+            "type": "boolean",
+            "const": false
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         },
         "additionalProperties": false
       },
@@ -55,26 +70,51 @@
           "missingFields"
         ],
         "properties": {
-          "marketAnalysisAvailable": { "type": "boolean" },
-          "entryAllowed": { "type": "boolean" },
-          "positionManagementAvailable": { "type": "boolean" },
-          "quality": { "type": "string", "enum": ["GREEN", "YELLOW", "RED"] },
-          "generatedAt": { "type": "integer" },
-          "publishedAt": { "type": ["integer", "null"] },
-          "ageMs": { "type": "number" },
-          "marketDataAgeMs": { "type": "number" },
-          "relayPublishAgeMs": { "type": ["number", "null"] },
+          "marketAnalysisAvailable": {
+            "type": "boolean"
+          },
+          "entryAllowed": {
+            "type": "boolean"
+          },
+          "positionManagementAvailable": {
+            "type": "boolean"
+          },
+          "quality": {
+            "type": "string",
+            "enum": ["GREEN", "YELLOW", "RED"]
+          },
+          "generatedAt": {
+            "type": "integer"
+          },
+          "publishedAt": {
+            "type": ["integer", "null"]
+          },
+          "ageMs": {
+            "type": "number"
+          },
+          "marketDataAgeMs": {
+            "type": "number"
+          },
+          "relayPublishAgeMs": {
+            "type": ["number", "null"]
+          },
           "criticalBlockers": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "degradedSources": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "missingFields": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": true
@@ -82,7 +122,10 @@
       "TradingState": {
         "type": "object",
         "properties": {
-          "mode": { "type": "string", "enum": ["PAPER", "LIVE_MANUAL"] },
+          "mode": {
+            "type": "string",
+            "enum": ["PAPER", "LIVE_MANUAL"]
+          },
           "lifecycle": {
             "type": "object",
             "additionalProperties": true
@@ -91,9 +134,15 @@
             "type": "object",
             "additionalProperties": true
           },
-          "generatedAt": { "type": "integer" },
-          "relayReceivedAt": { "type": "integer" },
-          "ageMs": { "type": "number" },
+          "generatedAt": {
+            "type": "integer"
+          },
+          "relayReceivedAt": {
+            "type": "integer"
+          },
+          "ageMs": {
+            "type": "number"
+          },
           "relayStatus": {
             "type": "string",
             "enum": ["NORMAL", "DELAYED", "STALE"]
@@ -118,15 +167,36 @@
           "trading"
         ],
         "properties": {
-          "schemaVersion": { "type": "integer", "const": 5 },
-          "appVersion": { "type": "string" },
-          "snapshotId": { "type": "string" },
-          "symbol": { "type": "string", "const": "BTCUSDT" },
-          "market": { "type": "string", "const": "BINANCE_USDM_PERPETUAL" },
-          "generatedAt": { "type": "integer" },
-          "generatedAtKst": { "type": "string" },
-          "relayReceivedAt": { "type": "integer" },
-          "decisionGates": { "$ref": "#/components/schemas/DecisionGates" },
+          "schemaVersion": {
+            "type": "integer",
+            "const": 5
+          },
+          "appVersion": {
+            "type": "string"
+          },
+          "snapshotId": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string",
+            "const": "BTCUSDT"
+          },
+          "market": {
+            "type": "string",
+            "const": "BINANCE_USDM_PERPETUAL"
+          },
+          "generatedAt": {
+            "type": "integer"
+          },
+          "generatedAtKst": {
+            "type": "string"
+          },
+          "relayReceivedAt": {
+            "type": "integer"
+          },
+          "decisionGates": {
+            "$ref": "#/components/schemas/DecisionGates"
+          },
           "connections": {
             "type": "object",
             "additionalProperties": true
@@ -187,18 +257,30 @@
             "type": "object",
             "additionalProperties": true
           },
-          "trading": { "$ref": "#/components/schemas/TradingState" }
+          "trading": {
+            "$ref": "#/components/schemas/TradingState"
+          }
         },
         "additionalProperties": true
       },
       "ExternalContext": {
         "type": "object",
         "properties": {
-          "schemaVersion": { "type": "integer" },
-          "generatedAt": { "type": "integer" },
-          "relayReceivedAt": { "type": "integer" },
-          "ageMs": { "type": "number" },
-          "status": { "type": "string" },
+          "schemaVersion": {
+            "type": "integer"
+          },
+          "generatedAt": {
+            "type": "integer"
+          },
+          "relayReceivedAt": {
+            "type": "integer"
+          },
+          "ageMs": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
           "horizon": {
             "type": "string",
             "enum": ["INTRADAY", "SWING", "MACRO"]
@@ -237,18 +319,33 @@
         "properties": {
           "snapshotId": {
             "type": "string",
-            "description": "Snapshot used for the decision. Supply getLatestSnapshot.snapshotId so validation can detect a changed market snapshot."
+            "description": "snapshotId from the live decision context used for this analysis. Validation rejects a superseded or mismatched market snapshot."
           },
-          "side": { "type": "string", "enum": ["LONG", "SHORT"] },
-          "entry": { "type": "number", "exclusiveMinimum": 0 },
-          "stop": { "type": "number", "exclusiveMinimum": 0 },
+          "side": {
+            "type": "string",
+            "enum": ["LONG", "SHORT"]
+          },
+          "entry": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "stop": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
           "targets": {
             "type": "array",
             "minItems": 1,
             "maxItems": 3,
-            "items": { "type": "number", "exclusiveMinimum": 0 }
+            "items": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
           },
-          "maxLossUsdt": { "type": "number", "exclusiveMinimum": 0 },
+          "maxLossUsdt": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
           "riskPercent": {
             "type": "number",
             "exclusiveMinimum": 0,
@@ -279,30 +376,64 @@
               "MAX_LOSS_USDT"
             ]
           },
-          "sizeValue": { "type": "number", "exclusiveMinimum": 0 },
+          "sizeValue": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
           "leverage": {
             "type": "integer",
             "minimum": 1,
             "maximum": 150,
             "default": 10
           },
-          "marginMode": { "type": "string", "const": "ISOLATED" }
+          "marginMode": {
+            "type": "string",
+            "const": "ISOLATED"
+          }
         }
       },
       "PlanValidationResponse": {
         "type": "object",
         "properties": {
-          "ok": { "type": "boolean" },
-          "errors": { "type": "array", "items": { "type": "string" } },
-          "warnings": { "type": "array", "items": { "type": "string" } },
-          "quantity": { "type": ["number", "null"] },
-          "maxLoss": { "type": ["number", "null"] },
-          "estimatedMaxLoss": { "type": ["number", "null"] },
-          "notional": { "type": ["number", "null"] },
-          "initialMargin": { "type": ["number", "null"] },
-          "requestedQuantity": { "type": "number" },
-          "estimatedLiquidationPrice": { "type": ["number", "null"] },
-          "liquidationDistancePercent": { "type": ["number", "null"] },
+          "ok": {
+            "type": "boolean"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "quantity": {
+            "type": ["number", "null"]
+          },
+          "maxLoss": {
+            "type": ["number", "null"]
+          },
+          "estimatedMaxLoss": {
+            "type": ["number", "null"]
+          },
+          "notional": {
+            "type": ["number", "null"]
+          },
+          "initialMargin": {
+            "type": ["number", "null"]
+          },
+          "requestedQuantity": {
+            "type": "number"
+          },
+          "estimatedLiquidationPrice": {
+            "type": ["number", "null"]
+          },
+          "liquidationDistancePercent": {
+            "type": ["number", "null"]
+          },
           "maximumAllowed": {
             "type": "object",
             "additionalProperties": true
@@ -348,11 +479,11 @@
           "snapshotId": {
             "type": "string",
             "maxLength": 100,
-            "description": "snapshotId returned by the getLatestSnapshot call used for this analysis."
+            "description": "snapshotId from the exact live Decision Context used for this decision."
           },
           "marketGeneratedAt": {
             "type": "integer",
-            "description": "generatedAt returned by the same getLatestSnapshot response."
+            "description": "marketGeneratedAt from the same live Decision Context used for this decision."
           },
           "parentDecisionId": {
             "type": ["string", "null"],
@@ -412,7 +543,10 @@
           "targets": {
             "type": "array",
             "maxItems": 3,
-            "items": { "type": "number", "exclusiveMinimum": 0 }
+            "items": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
           },
           "triggerSummary": {
             "type": ["string", "null"],
@@ -427,13 +561,19 @@
           "reasonTags": {
             "type": "array",
             "maxItems": 12,
-            "items": { "type": "string", "maxLength": 60 },
+            "items": {
+              "type": "string",
+              "maxLength": 60
+            },
             "description": "Short structured factual tags only."
           },
           "counterThesisTags": {
             "type": "array",
             "maxItems": 8,
-            "items": { "type": "string", "maxLength": 60 }
+            "items": {
+              "type": "string",
+              "maxLength": 60
+            }
           }
         },
         "additionalProperties": false
@@ -449,21 +589,776 @@
           "snapshotToRecordLatencyMs"
         ],
         "properties": {
-          "ok": { "type": "boolean", "const": true },
-          "decisionId": { "type": "string" },
-          "duplicate": { "type": "boolean" },
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "decisionId": {
+            "type": "string"
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
           "snapshotStatus": {
             "type": "string",
             "enum": ["CURRENT", "SUPERSEDED"]
           },
-          "recordedAt": { "type": "integer" },
-          "snapshotToRecordLatencyMs": { "type": "integer" }
+          "recordedAt": {
+            "type": "integer"
+          },
+          "snapshotToRecordLatencyMs": {
+            "type": "integer"
+          }
         },
         "additionalProperties": false
+      },
+      "DataProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "venue",
+          "instrument",
+          "sourceEventAt",
+          "collectorReceivedAt",
+          "generatedAt",
+          "ageMs",
+          "collectorLagMs",
+          "processingLagMs",
+          "metricNature",
+          "coverage",
+          "status"
+        ],
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "venue": {
+            "type": ["string", "null"]
+          },
+          "instrument": {
+            "type": ["string", "null"]
+          },
+          "sourceEventAt": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "collectorReceivedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "generatedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ageMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "collectorLagMs": {
+            "type": ["integer", "null"]
+          },
+          "processingLagMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "metricNature": {
+            "type": "string",
+            "enum": [
+              "OBSERVED",
+              "DERIVED",
+              "ESTIMATED",
+              "POINT_IN_TIME",
+              "REVISED"
+            ]
+          },
+          "coverage": {
+            "type": "string",
+            "enum": ["EXHAUSTIVE", "SNAPSHOT", "SAMPLED", "UNKNOWN"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["NORMAL", "DEGRADED", "STALE", "UNAVAILABLE"]
+          }
+        }
+      },
+      "EvidenceHealth": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sourceKey",
+          "freshnessClass",
+          "status",
+          "ageMs",
+          "normalMaxAgeMs",
+          "usableMaxAgeMs",
+          "requiredForEntry",
+          "lastSuccessAt",
+          "consecutiveFailures",
+          "reconnectCount"
+        ],
+        "properties": {
+          "sourceKey": {
+            "type": "string"
+          },
+          "freshnessClass": {
+            "type": "string",
+            "enum": ["CORE_BLOCKING", "AUX_DEGRADED", "AUX_OPTIONAL"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["NORMAL", "DEGRADED", "STALE", "UNAVAILABLE"]
+          },
+          "ageMs": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "normalMaxAgeMs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "usableMaxAgeMs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "requiredForEntry": {
+            "type": "boolean"
+          },
+          "lastSuccessAt": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "consecutiveFailures": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reconnectCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CompactLeadAsset": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "symbol",
+          "generatedAt",
+          "market",
+          "returnsBps",
+          "flow",
+          "microstructure",
+          "openInterest",
+          "liquidations"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "enum": ["ETHUSDT", "SOLUSDT"]
+          },
+          "generatedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "market": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "lastPrice",
+              "markPrice",
+              "bidPrice",
+              "askPrice",
+              "spreadBps",
+              "fundingRate"
+            ],
+            "properties": {
+              "lastPrice": {
+                "type": ["number", "null"]
+              },
+              "markPrice": {
+                "type": ["number", "null"]
+              },
+              "bidPrice": {
+                "type": ["number", "null"]
+              },
+              "askPrice": {
+                "type": ["number", "null"]
+              },
+              "spreadBps": {
+                "type": ["number", "null"]
+              },
+              "fundingRate": {
+                "type": ["number", "null"]
+              }
+            }
+          },
+          "returnsBps": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["15s", "30s", "1m", "3m", "5m", "15m", "1h"],
+            "properties": {
+              "15s": {
+                "type": ["number", "null"]
+              },
+              "30s": {
+                "type": ["number", "null"]
+              },
+              "1m": {
+                "type": ["number", "null"]
+              },
+              "3m": {
+                "type": ["number", "null"]
+              },
+              "5m": {
+                "type": ["number", "null"]
+              },
+              "15m": {
+                "type": ["number", "null"]
+              },
+              "1h": {
+                "type": ["number", "null"]
+              }
+            }
+          },
+          "flow": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["15s", "1m", "5m", "cumulativeDeltaNotional"],
+            "properties": {
+              "15s": {
+                "$ref": "#/components/schemas/CompactFlowWindow"
+              },
+              "1m": {
+                "$ref": "#/components/schemas/CompactFlowWindow"
+              },
+              "5m": {
+                "$ref": "#/components/schemas/CompactFlowWindow"
+              },
+              "cumulativeDeltaNotional": {
+                "type": "number"
+              }
+            }
+          },
+          "microstructure": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "bidNotional20",
+              "askNotional20",
+              "depthImbalance20",
+              "microPrice"
+            ],
+            "properties": {
+              "bidNotional20": {
+                "type": "number",
+                "minimum": 0
+              },
+              "askNotional20": {
+                "type": "number",
+                "minimum": 0
+              },
+              "depthImbalance20": {
+                "type": ["number", "null"]
+              },
+              "microPrice": {
+                "type": ["number", "null"]
+              }
+            }
+          },
+          "openInterest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["current", "notional", "observedAt", "changesPercent"],
+            "properties": {
+              "current": {
+                "type": ["number", "null"]
+              },
+              "notional": {
+                "type": ["number", "null"]
+              },
+              "observedAt": {
+                "type": ["integer", "null"]
+              },
+              "changesPercent": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["1m", "5m", "15m"],
+                "properties": {
+                  "1m": {
+                    "type": ["number", "null"]
+                  },
+                  "5m": {
+                    "type": ["number", "null"]
+                  },
+                  "15m": {
+                    "type": ["number", "null"]
+                  }
+                }
+              }
+            }
+          },
+          "liquidations": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["5m", "15m"],
+            "properties": {
+              "5m": {
+                "$ref": "#/components/schemas/ObservedLiquidationWindow"
+              },
+              "15m": {
+                "$ref": "#/components/schemas/ObservedLiquidationWindow"
+              }
+            }
+          }
+        }
+      },
+      "CompactFlowWindow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["normalizedDelta", "buyRatio", "tradesPerSecond"],
+        "properties": {
+          "normalizedDelta": {
+            "type": ["number", "null"],
+            "minimum": -1,
+            "maximum": 1
+          },
+          "buyRatio": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "tradesPerSecond": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "ObservedLiquidationWindow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "observedLongNotional",
+          "observedShortNotional",
+          "eventCount",
+          "coverage"
+        ],
+        "properties": {
+          "observedLongNotional": {
+            "type": "number",
+            "minimum": 0
+          },
+          "observedShortNotional": {
+            "type": "number",
+            "minimum": 0
+          },
+          "eventCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "coverage": {
+            "type": "string",
+            "enum": ["SNAPSHOT"]
+          }
+        }
+      },
+      "CompactAltAsset": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "symbol",
+          "tier",
+          "generatedAt",
+          "market",
+          "returnsBps",
+          "delta",
+          "openInterestChangePercent"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string",
+            "enum": ["SENTIMENT_CORE", "DYNAMIC"]
+          },
+          "generatedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "market": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["lastPrice", "markPrice", "spreadBps", "fundingRate"],
+            "properties": {
+              "lastPrice": {
+                "type": ["number", "null"]
+              },
+              "markPrice": {
+                "type": ["number", "null"]
+              },
+              "spreadBps": {
+                "type": ["number", "null"]
+              },
+              "fundingRate": {
+                "type": ["number", "null"]
+              }
+            }
+          },
+          "returnsBps": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["1m", "3m", "5m", "15m", "1h"],
+            "properties": {
+              "1m": {
+                "type": ["number", "null"]
+              },
+              "3m": {
+                "type": ["number", "null"]
+              },
+              "5m": {
+                "type": ["number", "null"]
+              },
+              "15m": {
+                "type": ["number", "null"]
+              },
+              "1h": {
+                "type": ["number", "null"]
+              }
+            }
+          },
+          "delta": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["1m", "5m", "15m"],
+            "properties": {
+              "1m": {
+                "type": ["number", "null"]
+              },
+              "5m": {
+                "type": ["number", "null"]
+              },
+              "15m": {
+                "type": ["number", "null"]
+              }
+            }
+          },
+          "openInterestChangePercent": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["1m", "5m", "15m"],
+            "properties": {
+              "1m": {
+                "type": ["number", "null"]
+              },
+              "5m": {
+                "type": ["number", "null"]
+              },
+              "15m": {
+                "type": ["number", "null"]
+              }
+            }
+          }
+        }
+      },
+      "CompactAltMarket": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "generatedAt",
+          "basketMembers",
+          "sentimentCore",
+          "dynamic",
+          "breadth",
+          "relativeStrength",
+          "rotation"
+        ],
+        "properties": {
+          "generatedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "basketMembers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20
+          },
+          "sentimentCore": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompactAltAsset"
+            },
+            "maxItems": 20
+          },
+          "dynamic": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompactAltAsset"
+            },
+            "maxItems": 20
+          },
+          "breadth": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "relativeStrength": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "rotation": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "LocalMarketIntelligence": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "generatedAt",
+          "objectiveOnly",
+          "leadCore",
+          "altMarket",
+          "evidenceHealth",
+          "provenance"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "enum": ["local-market-v1"]
+          },
+          "generatedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "objectiveOnly": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "leadCore": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ETHUSDT", "SOLUSDT"],
+            "properties": {
+              "ETHUSDT": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/CompactLeadAsset"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "SOLUSDT": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/CompactLeadAsset"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "altMarket": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CompactAltMarket"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidenceHealth": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceHealth"
+            },
+            "maxItems": 128
+          },
+          "provenance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataProvenance"
+            },
+            "maxItems": 32
+          }
+        }
+      },
+      "DecisionTiming": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "marketAgeMs",
+          "marketToRelayMs",
+          "relayToActionStartMs",
+          "contextBuildMs"
+        ],
+        "properties": {
+          "marketAgeMs": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "marketToRelayMs": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "relayToActionStartMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "contextBuildMs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "DecisionEvidence": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "cryptoMarketAvailable",
+          "cryptoMarketGeneratedAt",
+          "cryptoMarketAgeMs",
+          "auxiliaryEvidenceHealth",
+          "provenance"
+        ],
+        "properties": {
+          "cryptoMarketAvailable": {
+            "type": "boolean"
+          },
+          "cryptoMarketGeneratedAt": {
+            "type": ["integer", "null"]
+          },
+          "cryptoMarketAgeMs": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "auxiliaryEvidenceHealth": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceHealth"
+            }
+          },
+          "provenance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataProvenance"
+            }
+          }
+        }
+      },
+      "DecisionContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "generatedAt",
+          "objectiveOnly",
+          "snapshotId",
+          "marketGeneratedAt",
+          "relayReceivedAt",
+          "decisionGates",
+          "btcCore",
+          "cryptoMarket",
+          "crossMarket",
+          "external",
+          "tradingMemory",
+          "reasoningPolicy",
+          "positionManagement",
+          "timing",
+          "evidence",
+          "routing",
+          "completeness"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "enum": ["decision-context-v1"]
+          },
+          "generatedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "objectiveOnly": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "snapshotId": {
+            "type": ["string", "null"]
+          },
+          "marketGeneratedAt": {
+            "type": ["integer", "null"]
+          },
+          "relayReceivedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "decisionGates": {
+            "$ref": "#/components/schemas/DecisionGates"
+          },
+          "btcCore": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "cryptoMarket": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LocalMarketIntelligence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "crossMarket": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "external": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "tradingMemory": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "reasoningPolicy": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "positionManagement": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "timing": {
+            "$ref": "#/components/schemas/DecisionTiming"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/DecisionEvidence"
+          },
+          "routing": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "completeness": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
       }
     }
   },
-  "security": [{ "actionKey": [] }],
+  "security": [
+    {
+      "actionKey": []
+    }
+  ],
   "paths": {
     "/v1/snapshot/latest": {
       "get": {
@@ -475,7 +1370,9 @@
             "description": "Latest snapshot",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/MarketSnapshot" }
+                "schema": {
+                  "$ref": "#/components/schemas/MarketSnapshot"
+                }
               }
             }
           },
@@ -483,7 +1380,9 @@
             "description": "Unauthorized",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -491,7 +1390,9 @@
             "description": "No snapshot",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -499,7 +1400,9 @@
             "description": "Rate limited",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -507,7 +1410,9 @@
             "description": "Storage unavailable",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -535,7 +1440,9 @@
             "description": "External context",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ExternalContext" }
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalContext"
+                }
               }
             }
           },
@@ -543,7 +1450,9 @@
             "description": "Invalid horizon",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -551,7 +1460,9 @@
             "description": "Unauthorized",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -559,7 +1470,9 @@
             "description": "No context",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -567,7 +1480,9 @@
             "description": "Rate limited",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -575,7 +1490,9 @@
             "description": "Storage unavailable",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -591,7 +1508,9 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/TradePlan" }
+              "schema": {
+                "$ref": "#/components/schemas/TradePlan"
+              }
             }
           }
         },
@@ -610,7 +1529,9 @@
             "description": "Invalid plan",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ValidationFailure" }
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailure"
+                }
               }
             }
           },
@@ -618,7 +1539,9 @@
             "description": "Unauthorized",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -626,7 +1549,9 @@
             "description": "Current snapshot cannot validate this plan",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ValidationFailure" }
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailure"
+                }
               }
             }
           },
@@ -634,7 +1559,9 @@
             "description": "Payload too large",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -642,7 +1569,9 @@
             "description": "Rate limited",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -650,7 +1579,9 @@
             "description": "Storage unavailable",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -667,7 +1598,9 @@
             "description": "Lifecycle state",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/TradingState" }
+                "schema": {
+                  "$ref": "#/components/schemas/TradingState"
+                }
               }
             }
           },
@@ -675,7 +1608,9 @@
             "description": "Unauthorized",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -683,7 +1618,9 @@
             "description": "No trading state",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -691,7 +1628,9 @@
             "description": "Rate limited",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -699,7 +1638,9 @@
             "description": "Storage unavailable",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -716,7 +1657,9 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/DecisionRecord" }
+              "schema": {
+                "$ref": "#/components/schemas/DecisionRecord"
+              }
             }
           }
         },
@@ -745,7 +1688,9 @@
             "description": "Invalid decision payload",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -753,7 +1698,9 @@
             "description": "Missing or invalid Action API key",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -761,7 +1708,9 @@
             "description": "Missing snapshot, metadata mismatch, or conflicting reuse of decisionId",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -769,7 +1718,9 @@
             "description": "Request body too large",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -777,7 +1728,9 @@
             "description": "Telemetry rate limit exceeded",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -785,11 +1738,78 @@
             "description": "Telemetry storage unavailable",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
         }
+      }
+    },
+    "/v1/decision-context/latest": {
+      "get": {
+        "operationId": "getDecisionSnapshot",
+        "summary": "Get the compact, freshness-adjusted live decision context",
+        "description": "Primary live GPT decision endpoint. Returns the latest BTC decision core plus objective ETH/SOL lead evidence, dynamic alt-market breadth, cross-market context, memory, reasoning policy, position-management context, evidence health, provenance, and latency telemetry. Auxiliary market evidence never overrides BTC decision gates.",
+        "security": [
+          {
+            "actionKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest compact decision context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionContext"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No snapshot has been relayed yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Decision context exceeded the action response budget",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Stored snapshot or decision context is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
       }
     }
   }
