@@ -1,0 +1,45 @@
+name: Temporary Coinbase Sensor Patcher
+
+on:
+  push:
+    branches:
+      - agent/coinbase-spot-sensor
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/coinbase-spot-sensor
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: python scripts/tmp-bundle7a-patch.py
+      - run: >-
+          npx prettier --write
+          src/shared/decision-context.ts
+          src/shared/cross-venue-intelligence.ts
+          src/main/index.ts
+          src/main/market/intelligence/local-market.ts
+          src/main/market/intelligence/cross-venue.ts
+          src/main/market/cross-venue/coinbase-spot-accumulator.ts
+          src/main/market/cross-venue/coinbase-spot-service.ts
+          worker/openapi/openapi.json
+          worker/openapi/GPT_INSTRUCTIONS.md
+          tests/unit/worker.openapi.test.ts
+          tests/unit/coinbase-spot-sensor.test.ts
+      - name: Commit generated changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src worker tests
+          git commit -m "feat: wire Coinbase spot sensor into decision context" || exit 0
+          git push origin HEAD:agent/coinbase-spot-sensor
