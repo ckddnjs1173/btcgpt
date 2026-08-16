@@ -5,7 +5,8 @@
 1. Read `docs/PROJECT_SPEC.md` before implementation.
 2. For Phase 13 and later, also read `docs/PROJECT_SPEC_PHASE13_PLUS.md`.
 3. `docs/PROJECT_SPEC_PHASE13_PLUS.md` is the user-approved Phase 13+ extension and overrides only the legacy scope statements in `docs/PROJECT_SPEC.md` that conflict with it.
-4. The project specifications and explicit current user instruction take precedence over assumptions.
+4. For Market Intelligence V2 work, also read `docs/MARKET_INTELLIGENCE_V2.md`.
+5. The project specifications and explicit current user instruction take precedence over assumptions.
 
 ## Non-negotiable product boundaries
 
