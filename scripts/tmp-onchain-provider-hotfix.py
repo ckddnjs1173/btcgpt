@@ -12,6 +12,6 @@ s = s.replace(
 )
 s = s.replace(
     "addition = anchor + '\\n- `external.onchainV1`: mempool OBSERVED + daily network REVISED. background/regime 전용이며 scalp trigger/gate 금지.'",
-    "addition = anchor + '\\n- `external.onchainV1`: mempool OBSERVED + network REVISED. 배경 전용; scalp trigger/gate 금지.'",
+    "addition = anchor + '\\n- `external.onchainV1`: mempool OBSERVED + network REVISED. 배경 전용; trigger/gate 금지.'",
 )
 p.write_text(s, encoding='utf-8', newline='\n')
