@@ -1,8 +1,5 @@
 export type PositionAdjustmentAction =
-  | 'PARTIAL_EXIT'
-  | 'EXIT'
-  | 'MOVE_STOP'
-  | 'CHANGE_TP';
+  'PARTIAL_EXIT' | 'EXIT' | 'MOVE_STOP' | 'CHANGE_TP';
 
 export interface PositionAdjustmentTargetInput {
   price: number;
@@ -175,8 +172,7 @@ export function validatePositionAdjustment(
         requestedQuantity,
         context.filters.stepSize,
       );
-      if (alignedQuantity <= EPSILON)
-        errors.push('ALIGNED_QUANTITY_IS_ZERO');
+      if (alignedQuantity <= EPSILON) errors.push('ALIGNED_QUANTITY_IS_ZERO');
       if (alignedQuantity >= currentQuantity - EPSILON)
         errors.push('PARTIAL_EXIT_MUST_LEAVE_POSITION');
       if (alignedQuantity > EPSILON)
@@ -300,9 +296,7 @@ export function validatePositionAdjustment(
       ? context.costSettings.makerFeeRate
       : context.costSettings.takerFeeRate;
   const estimatedFee =
-    orderNotional === null || feeRate === null
-      ? null
-      : orderNotional * feeRate;
+    orderNotional === null || feeRate === null ? null : orderNotional * feeRate;
   const estimatedSlippage =
     orderNotional === null || context.costSettings.exitSlippageBps === null
       ? null

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { handleDecisionContextRequest } from './decision-context-route';
+import { handlePositionAdjustmentRequest } from './position-adjustment-route';
 import {
   calculatePositionPlan,
   isStepAligned,
@@ -452,6 +453,12 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     request.method === 'GET'
   )
     return handleDecisionContextRequest(request, env);
+
+  if (
+    url.pathname === '/v1/position-adjustment/validate' &&
+    request.method === 'POST'
+  )
+    return handlePositionAdjustmentRequest(request, env);
 
   if (url.pathname === '/v1/snapshot/latest' && request.method === 'GET') {
     if (!authorized(request, env.ACTION_READ_KEY))

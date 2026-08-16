@@ -52,8 +52,7 @@ import {
 } from '../../shared/calculations/costs';
 import { randomUUID } from 'node:crypto';
 import { buildTradingState } from '../trading/build-state';
-
-const APPROVED_PLAN_DEFAULT_TTL_MS = 30 * 60_000;
+import { armStructuredTrigger } from '../../shared/trading/structured-trigger';
 
 interface RegisterIpcHandlersOptions {
   database: AppDatabase;
@@ -443,9 +442,6 @@ export function registerIpcHandlers({
         throw new Error(
           `ENTRY_BLOCKED:${snapshot.decisionGates.criticalBlockers.join(',')}`,
         );
-      const referencePrice =
-        snapshot.marketState.markPrice ?? snapshot.marketState.lastPrice;
-      if (!referencePrice) throw new Error('PLAN_REFERENCE_PRICE_REQUIRED');
       const result = validatePositionPlan(input);
       if (
         !result.valid ||
@@ -494,21 +490,9 @@ export function registerIpcHandlers({
         expectedFundingPeriods: input.expectedFundingPeriods,
         snapshotId: snapshot.snapshotId,
         marketGeneratedAt: snapshot.generatedAt,
-        monitoring: {
-          referencePrice: 'MARK_PRICE',
-          triggerCondition:
-            input.entry >= referencePrice ? 'AT_OR_ABOVE' : 'AT_OR_BELOW',
-          triggerPrice: input.entry,
-          invalidationCondition:
-            input.stop >= referencePrice ? 'AT_OR_ABOVE' : 'AT_OR_BELOW',
-          invalidationPrice: input.stop,
-          expiresAt: lockedAt + APPROVED_PLAN_DEFAULT_TTL_MS,
-          state: 'WATCHING',
-          triggeredAt: null,
-          invalidatedAt: null,
-          expiredAt: null,
-          cancelledAt: null,
-        },
+        monitoring: input.trigger
+          ? armStructuredTrigger(input.trigger, lockedAt)
+          : undefined,
         lockedAt,
       };
       const existingPlan = database.readActiveLockedTradePlan(
@@ -538,8 +522,9 @@ export function registerIpcHandlers({
     const plan = database.readActiveLockedTradePlan('PAPER');
     if (!plan || plan.status !== 'LOCKED')
       throw new Error('PAPER_PLAN_REQUIRED');
-    if (plan.monitoring?.state !== 'TRIGGERED')
-      throw new Error('PAPER_PLAN_TRIGGER_REQUIRED');
+    if (plan.monitoring?.state === 'TRIGGERED')
+      throw new Error('TRIGGER_REANALYSIS_REQUIRED');
+    if (plan.monitoring) throw new Error('PAPER_PLAN_TRIGGER_STILL_ARMED');
     if (database.readActivePaperTrade())
       throw new Error('PAPER_TRADE_ALREADY_OPEN');
     const now = Date.now();

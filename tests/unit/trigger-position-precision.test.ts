@@ -129,12 +129,10 @@ describe('deterministic position adjustment validation', () => {
     );
     expect(result.valid).toBe(true);
     expect(result.targets.map((target) => target.alignedPrice)).toEqual([
-      101_000,
-      102_000,
+      101_000, 102_000,
     ]);
     expect(result.targets.map((target) => target.alignedQuantity)).toEqual([
-      0.006,
-      0.006,
+      0.006, 0.006,
     ]);
     expect(result.projectedProtection.takeProfitCoverageRatio).toBeCloseTo(0.6);
     expect(result.warnings).toContain('TAKE_PROFIT_COVERAGE_GAP');

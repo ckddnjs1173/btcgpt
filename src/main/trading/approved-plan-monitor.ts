@@ -157,7 +157,10 @@ export class ApprovedPlanMonitor {
     }
 
     const conditionMatchedAt = monitoring.conditionMatchedAt ?? now;
-    if (monitoring.conditionMatchedAt === null && monitoring.confirmWindowSec > 0)
+    if (
+      monitoring.conditionMatchedAt === null &&
+      monitoring.confirmWindowSec > 0
+    )
       this.saveMonitoring(plan, {
         ...monitoring,
         conditionMatchedAt,

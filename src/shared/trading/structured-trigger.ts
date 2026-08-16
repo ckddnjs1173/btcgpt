@@ -33,15 +33,12 @@ export const structuredTriggerInputSchema = z
     maxChaseBps: z.number().min(0).max(1_000).default(0),
   })
   .strict();
-export type StructuredTriggerInput = z.infer<typeof structuredTriggerInputSchema>;
+export type StructuredTriggerInput = z.infer<
+  typeof structuredTriggerInputSchema
+>;
 
 export type ApprovedPlanMonitoringState =
-  | 'ARMED'
-  | 'WATCHING'
-  | 'TRIGGERED'
-  | 'INVALIDATED'
-  | 'EXPIRED'
-  | 'CANCELLED';
+  'ARMED' | 'WATCHING' | 'TRIGGERED' | 'INVALIDATED' | 'EXPIRED' | 'CANCELLED';
 
 export interface ApprovedPlanMonitoring extends StructuredTriggerInput {
   state: ApprovedPlanMonitoringState;

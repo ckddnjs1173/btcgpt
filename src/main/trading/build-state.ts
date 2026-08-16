@@ -357,16 +357,18 @@ export function buildTradingState(
     paperTrade || liveTrades.active || account.position
       ? ('MANAGING' as const)
       : plan?.status === 'LOCKED' && plan.monitoring?.state === 'TRIGGERED'
-        ? ('ENTRY_READY' as const)
-        : plan?.status === 'LOCKED'
+        ? ('REANALYSIS_REQUIRED' as const)
+        : plan?.status === 'LOCKED' && plan.monitoring
           ? ('WATCHING' as const)
-          : lastPlan?.status === 'CANCELLED'
-            ? ('CANCELLED' as const)
-            : lastPlan?.status === 'CLOSED' ||
-                lastCompletedPaperTrade ||
-                liveTrades.lastCompleted
-              ? ('CLOSED' as const)
-              : ('FLAT' as const);
+          : plan?.status === 'LOCKED'
+            ? ('ENTRY_READY' as const)
+            : lastPlan?.status === 'CANCELLED'
+              ? ('CANCELLED' as const)
+              : lastPlan?.status === 'CLOSED' ||
+                  lastCompletedPaperTrade ||
+                  liveTrades.lastCompleted
+                ? ('CLOSED' as const)
+                : ('FLAT' as const);
   const lifecycleTrade =
     paperTrade ??
     liveTrades.active ??
