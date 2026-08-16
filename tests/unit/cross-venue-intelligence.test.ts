@@ -95,5 +95,8 @@ describe('cross-venue intelligence', () => {
     expect(result.assets.SOL).toBeNull();
     expect(result).not.toHaveProperty('signal');
     expect(result).not.toHaveProperty('recommendedSide');
+    expect(JSON.stringify(result)).not.toMatch(
+      /longSignal|shortSignal|buySignal|sellSignal|bullishScore|bearishScore/i,
+    );
   });
 });
