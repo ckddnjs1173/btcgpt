@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "BTC Futures Assistant Actions",
-    "version": "5.6.0",
+    "version": "5.7.0",
     "description": "Unified BTCUSDT market, context, lifecycle, deterministic calculation, and analytics-only GPT decision telemetry actions."
   },
   "servers": [
@@ -299,6 +299,16 @@
           "riskContext": {
             "type": "object",
             "additionalProperties": true
+          },
+          "optionsV2": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeribitOptionsV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": true
@@ -1344,7 +1354,8 @@
           },
           "external": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "Includes optionsV2 structured Deribit BTC options evidence when available."
           },
           "tradingMemory": {
             "type": "object",
@@ -2229,6 +2240,126 @@
             "maxItems": 24
           }
         }
+      },
+      "DeribitOptionsV2": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "generatedAt",
+          "objectiveOnly",
+          "source",
+          "underlying",
+          "underlyingPrice",
+          "dvol",
+          "atmIv",
+          "termStructure",
+          "skew25Delta",
+          "putCall",
+          "oiByExpiry",
+          "nearbyLargestOiStrikes",
+          "health",
+          "provenance"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "const": "deribit-options-v2"
+          },
+          "generatedAt": {
+            "type": "integer"
+          },
+          "objectiveOnly": {
+            "type": "boolean",
+            "const": true
+          },
+          "source": {
+            "type": "string",
+            "const": "DERIBIT"
+          },
+          "underlying": {
+            "type": "string",
+            "const": "BTC"
+          },
+          "underlyingPrice": {
+            "type": ["number", "null"]
+          },
+          "dvol": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["value", "observedAt"],
+                "properties": {
+                  "value": {
+                    "type": "number"
+                  },
+                  "observedAt": {
+                    "type": "integer"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "atmIv": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Near-expiry, ~7d and ~30d ATM mark IV observations."
+          },
+          "termStructure": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["nearMinusThirtyDayIv", "sevenDayMinusThirtyDayIv"],
+            "properties": {
+              "nearMinusThirtyDayIv": {
+                "type": ["number", "null"]
+              },
+              "sevenDayMinusThirtyDayIv": {
+                "type": ["number", "null"]
+              }
+            }
+          },
+          "skew25Delta": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Approximate 25-delta put/call mark-IV observations; skew is put IV minus call IV."
+          },
+          "putCall": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Observed Deribit BTC option open-interest and 24h volume aggregates."
+          },
+          "oiByExpiry": {
+            "type": "array",
+            "maxItems": 24,
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "nearbyLargestOiStrikes": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "health": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "provenance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataProvenance"
+            }
+          }
+        },
+        "description": "Objective Deribit BTC options-market evidence. It is not a LONG/SHORT, arbitrage, max-pain, or price-target signal."
       }
     }
   },

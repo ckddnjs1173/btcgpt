@@ -40,6 +40,7 @@ type ContextPack = {
     status: string;
     ageMs: number | null;
     riskContext: unknown;
+    optionsV2: unknown;
     selectedItems: Array<Record<string, unknown>>;
     totalCandidateItems: number;
   };
@@ -55,6 +56,7 @@ type ContextPack = {
   completeness: {
     crossMarket: number;
     externalAvailable: boolean;
+    optionsAvailable: boolean;
     btcDecisionGateQuality: string | null;
     memoryStatus: TradingMemoryContext['status'];
     managementStatus: PositionManagementContext['status'];
@@ -304,6 +306,7 @@ export async function buildContextPack(
   for (const item of selectedItems) {
     if (typeof item.source === 'string') sourceSet.add(item.source);
   }
+  if (asRecord(externalRoot?.optionsV2)) sourceSet.add('DERIBIT_OPTIONS_V2');
 
   return {
     version: CONTEXT_PACK_VERSION,
@@ -317,6 +320,7 @@ export async function buildContextPack(
       status: text(externalRoot?.status) ?? 'UNAVAILABLE',
       ageMs: external ? Math.max(0, now - external.generatedAt) : null,
       riskContext: externalRoot?.riskContext ?? at(snapshot, 'riskContext'),
+      optionsV2: externalRoot?.optionsV2 ?? null,
       selectedItems,
       totalCandidateItems: candidates,
     },
@@ -340,6 +344,7 @@ export async function buildContextPack(
     completeness: {
       crossMarket: crossMarket.completeness,
       externalAvailable: external !== null,
+      optionsAvailable: asRecord(externalRoot?.optionsV2) !== null,
       btcDecisionGateQuality: text(at(snapshot, 'decisionGates', 'quality')),
       memoryStatus: tradingMemory.status,
       managementStatus: positionManagement.status,
