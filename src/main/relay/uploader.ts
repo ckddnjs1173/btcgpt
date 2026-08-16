@@ -1,59 +1,63 @@
+import { createHash } from 'node:crypto';
+
+import type {
+  MarketSnapshot,
+  RelayConfigurationInput,
+  RelayStatus,
+} from '../../shared/contracts';
+import type { LocalMarketIntelligence } from '../../shared/decision-context';
 import { logger } from '../logging/logger';
-import type { MarketCache } from '../market/cache';
-import { generateSnapshot, type SnapshotOptions } from '../market/snapshot';
 import {
   createCompactRelaySnapshot,
   RELAY_SNAPSHOT_MAX_BYTES,
 } from '../market/compact-snapshot';
-import type { RelayStatus } from '../../shared/contracts';
+import type { MarketCache } from '../market/cache';
+import { generateSnapshot, type SnapshotOptions } from '../market/snapshot';
 
-export interface RelayConfiguration {
-  baseUrl: string;
-  uploadKey: string;
+export const RELAY_UPLOAD_INTERVAL_MS = 2_000;
+const REQUEST_TIMEOUT_MS = 4_500;
+
+type MarketIntelligenceProvider = (
+  snapshot: MarketSnapshot,
+) => LocalMarketIntelligence | null;
+
+function safeBaseUrl(input: string): string {
+  const parsed = new URL(input);
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:')
+    throw new Error('Relay URL must use http or https');
+  return parsed.toString().replace(/\/$/, '');
 }
 
-class RelayHttpError extends Error {
-  constructor(
-    readonly status: number,
-    readonly workerErrorCode: string,
-  ) {
-    super(`Relay returned HTTP ${status}: ${workerErrorCode}`);
-    this.name = 'RelayHttpError';
-  }
-}
-
-async function readWorkerErrorCode(response: Response): Promise<string> {
-  try {
-    const body: unknown = await response.json();
-    if (
-      body !== null &&
-      typeof body === 'object' &&
-      'error' in body &&
-      typeof body.error === 'string' &&
-      /^[A-Z0-9_]{1,100}$/.test(body.error)
-    )
-      return body.error;
-  } catch {
-    return 'UNPARSEABLE_ERROR_RESPONSE';
-  }
-  return 'INVALID_ERROR_RESPONSE';
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message.slice(0, 300);
+  return 'Unknown relay error';
 }
 
 export class RelayUploader {
   private timer: NodeJS.Timeout | null = null;
-  private stopping = false;
-  private uploading = false;
-  private pendingUpload = false;
+  private stopped = true;
+  private inFlight = false;
+  private readonly baseUrl: string;
+  private readonly uploadKey: string;
+  private readonly getSnapshotOptions: () => SnapshotOptions;
+  private readonly getMarketIntelligence: MarketIntelligenceProvider;
   private status: RelayStatus;
 
   constructor(
     private readonly cache: MarketCache,
-    private readonly configuration: RelayConfiguration,
-    private readonly getSnapshotOptions: () => SnapshotOptions = () => ({}),
+    configuration: RelayConfigurationInput,
+    getSnapshotOptions: () => SnapshotOptions = () => ({}),
+    getMarketIntelligence: MarketIntelligenceProvider = () => null,
   ) {
+    this.baseUrl = safeBaseUrl(configuration.baseUrl);
+    this.uploadKey = configuration.uploadKey.trim();
+    if (this.uploadKey.length < 16)
+      throw new Error('Relay upload key must be at least 16 characters');
+    this.getSnapshotOptions = getSnapshotOptions;
+    this.getMarketIntelligence = getMarketIntelligence;
     this.status = {
       configured: true,
-      baseUrl: configuration.baseUrl,
+      baseUrl: this.baseUrl,
       connected: false,
       lastAttemptAt: null,
       lastSuccessAt: null,
@@ -64,160 +68,89 @@ export class RelayUploader {
   }
 
   start(): void {
-    if (this.timer) return;
-    this.stopping = false;
-    this.requestUpload();
-    this.timer = setInterval(() => this.requestUpload(), 5_000);
+    if (!this.stopped) return;
+    this.stopped = false;
+    void this.uploadOnce();
+    this.timer = setInterval(() => {
+      void this.uploadOnce();
+    }, RELAY_UPLOAD_INTERVAL_MS);
   }
 
   stop(): void {
-    this.stopping = true;
+    this.stopped = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    this.pendingUpload = false;
   }
 
   getStatus(): RelayStatus {
-    return { ...this.status };
+    return structuredClone(this.status);
   }
 
   async testConnection(): Promise<void> {
-    const response = await fetch(
-      new URL('/v1/uploader/status', this.configuration.baseUrl),
-      {
-        headers: {
-          authorization: `Bearer ${this.configuration.uploadKey}`,
-        },
-        signal: AbortSignal.timeout(4_000),
-      },
-    );
+    const response = await fetch(`${this.baseUrl}/v1/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     if (!response.ok)
-      throw new Error(
-        response.status === 401
-          ? 'Relay upload key was rejected'
-          : `Relay readiness returned HTTP ${response.status}`,
-      );
+      throw new Error(`Relay health check failed: HTTP ${response.status}`);
   }
 
-  private requestUpload(): void {
-    if (this.stopping) return;
-    if (this.uploading) {
-      this.pendingUpload = true;
-      return;
-    }
-    void this.runUploadQueue();
-  }
-
-  private async runUploadQueue(): Promise<void> {
-    this.uploading = true;
-    do {
-      this.pendingUpload = false;
-      await this.uploadSnapshot();
-    } while (this.pendingUpload && !this.stopping);
-    this.uploading = false;
-  }
-
-  private async uploadSnapshot(): Promise<void> {
-    if (this.stopping) return;
-    this.status.lastAttemptAt = Date.now();
-    let snapshotId: string | null = null;
-    let compactByteLength: number | null = null;
-    let httpStatus: number | null = null;
-    let workerErrorCode: string | null = null;
+  async uploadOnce(): Promise<void> {
+    if (this.inFlight) return;
+    this.inFlight = true;
+    const attemptAt = Date.now();
+    this.status.lastAttemptAt = attemptAt;
     try {
-      const snapshot = generateSnapshot(this.cache, this.getSnapshotOptions());
-      snapshotId = snapshot.snapshotId;
-      const compact = createCompactRelaySnapshot(snapshot);
-      compactByteLength = compact.byteLength;
-      this.status.lastPayloadBytes = compact.byteLength;
-      if (compact.byteLength >= RELAY_SNAPSHOT_MAX_BYTES) {
-        logger.warn(
-          { snapshotId, sectionBytes: compact.sectionBytes },
-          'Relay compact snapshot exceeds byte limit',
-        );
-        throw new Error('Relay compact snapshot exceeds byte limit');
-      }
-      const payload = compact.json;
-      let lastError: unknown = null;
-      for (let attempt = 0; attempt < 3 && !this.stopping; attempt += 1) {
-        try {
-          const response = await fetch(
-            new URL('/v1/snapshot/latest', this.configuration.baseUrl),
-            {
-              method: 'PUT',
-              headers: {
-                authorization: `Bearer ${this.configuration.uploadKey}`,
-                'content-type': 'application/json',
-              },
-              body: payload,
-              signal: AbortSignal.timeout(4_000),
-            },
-          );
-          if (!response.ok)
-            throw new RelayHttpError(
-              response.status,
-              await readWorkerErrorCode(response),
-            );
-          lastError = null;
-          break;
-        } catch (error) {
-          lastError = error;
-          if (attempt < 2 && !this.stopping)
-            await new Promise((resolve) =>
-              setTimeout(resolve, 500 * 2 ** attempt),
-            );
-        }
-      }
-      if (lastError instanceof Error) throw lastError;
-      if (lastError) throw new Error('Relay upload failed');
-      if (this.stopping) return;
-      this.status = {
-        ...this.status,
-        connected: true,
-        lastSuccessAt: Date.now(),
-        consecutiveFailures: 0,
-        error: null,
-        lastPayloadBytes: compact.byteLength,
-      };
-      logger.info(
-        {
-          snapshotId,
-          compactByteLength: compact.byteLength,
-          accountConnected: snapshot.account.connected,
-          recentTradeCount: compact.snapshot.account.recentTrades.length,
-          forbiddenOrderIdPresent:
-            compact.snapshot.account.recentTrades.some((trade) =>
-              Object.hasOwn(trade, 'orderId'),
-            ) ||
-            compact.snapshot.trading.liveManual.recentTrades.some((trade) =>
-              Object.hasOwn(trade, 'orderId'),
-            ),
-        },
-        'Relay upload succeeded',
+      const fullSnapshot = generateSnapshot(
+        this.cache,
+        this.getSnapshotOptions(),
       );
-    } catch (error) {
-      if (error instanceof RelayHttpError) {
-        httpStatus = error.status;
-        workerErrorCode = error.workerErrorCode;
+      const marketIntelligence = this.getMarketIntelligence(fullSnapshot);
+      const compact = createCompactRelaySnapshot(
+        fullSnapshot,
+        marketIntelligence,
+      );
+      if (compact.byteLength >= RELAY_SNAPSHOT_MAX_BYTES)
+        throw new Error(
+          `Relay snapshot exceeds ${RELAY_SNAPSHOT_MAX_BYTES} bytes after compaction`,
+        );
+      this.status.lastPayloadBytes = compact.byteLength;
+      const response = await fetch(`${this.baseUrl}/v1/snapshot/latest`, {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+          'x-upload-key': this.uploadKey,
+        },
+        body: compact.json,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        const body = (await response.text()).slice(0, 240);
+        throw new Error(
+          `Relay upload failed: HTTP ${response.status}${body ? ` ${body}` : ''}`,
+        );
       }
-      const errorMessage =
-        error instanceof Error ? error.message : 'Relay upload failed';
-      this.status = {
-        ...this.status,
-        connected: false,
-        consecutiveFailures: this.status.consecutiveFailures + 1,
-        error: errorMessage,
-      };
+      this.status.connected = true;
+      this.status.lastSuccessAt = Date.now();
+      this.status.consecutiveFailures = 0;
+      this.status.error = null;
+    } catch (error) {
+      this.status.connected = false;
+      this.status.consecutiveFailures += 1;
+      this.status.error = errorMessage(error);
       logger.warn(
         {
-          httpStatus,
-          workerErrorCode,
-          errorMessage,
-          snapshotId,
-          compactByteLength,
+          relayHostHash: createHash('sha256')
+            .update(this.baseUrl)
+            .digest('hex')
+            .slice(0, 12),
+          consecutiveFailures: this.status.consecutiveFailures,
+          errorMessage: this.status.error,
         },
-        'Relay upload failed',
+        'Relay snapshot upload failed',
       );
+    } finally {
+      this.inFlight = false;
     }
   }
 }

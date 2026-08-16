@@ -5,6 +5,7 @@ import type {
   RelaySanitizedTrade,
   TimeframeSnapshot,
 } from '../../shared/contracts';
+import type { LocalMarketIntelligence } from '../../shared/decision-context';
 
 // Keep one kilobyte below the public 90KB action ceiling and match Worker.
 export const RELAY_SNAPSHOT_MAX_BYTES = 89_000;
@@ -46,9 +47,12 @@ const MINIMUM_CANDLE_LIMITS = {
 } as const;
 
 type CandleLimits = Record<keyof typeof PRIMARY_CANDLE_LIMITS, number>;
+export type RelayDecisionSnapshot = RelayCompactSnapshot & {
+  marketIntelligence?: LocalMarketIntelligence;
+};
 
 export interface CompactSnapshotResult {
-  snapshot: RelayCompactSnapshot;
+  snapshot: RelayDecisionSnapshot;
   json: string;
   byteLength: number;
   sectionBytes: Record<string, number>;
@@ -65,7 +69,7 @@ function compactTimeframe(
 }
 
 function sectionByteLengths(
-  snapshot: RelayCompactSnapshot,
+  snapshot: RelayDecisionSnapshot,
 ): Record<string, number> {
   return Object.fromEntries(
     Object.entries(snapshot).map(([key, value]) => [
@@ -104,8 +108,9 @@ function buildCompactSnapshot(
   limits: CandleLimits,
   recentTradeLimit: number,
   orderLimit: number,
-): RelayCompactSnapshot {
-  return {
+  marketIntelligence?: LocalMarketIntelligence | null,
+): RelayDecisionSnapshot {
+  const snapshot: RelayDecisionSnapshot = {
     ...source,
     timeframes: {
       '1m': compactTimeframe(source.timeframes['1m'], limits['1m']),
@@ -139,16 +144,20 @@ function buildCompactSnapshot(
       },
     },
   };
+  if (marketIntelligence) snapshot.marketIntelligence = marketIntelligence;
+  return snapshot;
 }
 
 export function createCompactRelaySnapshot(
   fullSnapshot: MarketSnapshot,
+  marketIntelligence?: LocalMarketIntelligence | null,
 ): CompactSnapshotResult {
   let snapshot = buildCompactSnapshot(
     fullSnapshot,
     PRIMARY_CANDLE_LIMITS,
     20,
     50,
+    marketIntelligence,
   );
   let json = JSON.stringify(snapshot);
   let byteLength = Buffer.byteLength(json, 'utf8');
@@ -159,13 +168,20 @@ export function createCompactRelaySnapshot(
       FALLBACK_CANDLE_LIMITS,
       10,
       30,
+      marketIntelligence,
     );
     json = JSON.stringify(snapshot);
     byteLength = Buffer.byteLength(json, 'utf8');
   }
 
   if (byteLength >= RELAY_SNAPSHOT_MAX_BYTES) {
-    snapshot = buildCompactSnapshot(fullSnapshot, MINIMUM_CANDLE_LIMITS, 5, 20);
+    snapshot = buildCompactSnapshot(
+      fullSnapshot,
+      MINIMUM_CANDLE_LIMITS,
+      5,
+      20,
+      marketIntelligence,
+    );
     json = JSON.stringify(snapshot);
     byteLength = Buffer.byteLength(json, 'utf8');
   }

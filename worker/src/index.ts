@@ -1,4 +1,6 @@
 import { z } from 'zod';
+
+import { handleDecisionContextRequest } from './decision-context-route';
 import {
   calculatePositionPlan,
   isStepAligned,
@@ -304,7 +306,7 @@ async function save(env: Env, raw: string, generatedAt: number): Promise<void> {
          VALUES (1, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,
            generated_at=excluded.generated_at, received_at=excluded.received_at
-         WHERE excluded.generated_at >= latest_trading_state.generated_at`,
+         WHERE excluded.generated_at >= latest_trading_state.generated_at + 10000`,
       )
       .bind(JSON.stringify(snapshot.trading), generatedAt, receivedAt)
       .run();
@@ -444,6 +446,12 @@ export async function handler(request: Request, env: Env): Promise<Response> {
       return json({ error: 'STORAGE_UNAVAILABLE' }, 503);
     }
   }
+
+  if (
+    url.pathname === '/v1/decision-context/latest' &&
+    request.method === 'GET'
+  )
+    return handleDecisionContextRequest(request, env);
 
   if (url.pathname === '/v1/snapshot/latest' && request.method === 'GET') {
     if (!authorized(request, env.ACTION_READ_KEY))

@@ -12,6 +12,7 @@ import { logger } from './logging/logger';
 import { MarketDataService } from './market/service';
 import { LeadCoreMarketService } from './market/multicoin/lead-service';
 import { AltMarketService } from './market/multicoin/alt-service';
+import { buildLocalDecisionMarketIntelligence } from './market/intelligence/local-market';
 import type { SnapshotOptions } from './market/snapshot';
 import { createCompactRelaySnapshot } from './market/compact-snapshot';
 import { generateSnapshot } from './market/snapshot';
@@ -165,6 +166,15 @@ void app.whenReady().then(() => {
       tradingState,
     };
   };
+  const getLocalMarketIntelligence = (
+    snapshot: ReturnType<typeof generateSnapshot>,
+  ) =>
+    buildLocalDecisionMarketIntelligence({
+      snapshot,
+      leadCoreMarket: leadCoreMarket!,
+      altMarket: altMarket!,
+    });
+
   if (process.env.BTC_COMPACT_DIAGNOSTIC === '1') {
     setTimeout(() => {
       try {
@@ -176,17 +186,20 @@ void app.whenReady().then(() => {
           JSON.stringify(fullSnapshot),
           'utf8',
         );
-        const compact = createCompactRelaySnapshot(fullSnapshot);
+        const compact = createCompactRelaySnapshot(
+          fullSnapshot,
+          getLocalMarketIntelligence(fullSnapshot),
+        );
         logger.info(
           {
             fullBytes,
             compactBytes: compact.byteLength,
             sectionBytes: compact.sectionBytes,
           },
-          'Compact snapshot diagnostic',
+          'Compact decision snapshot diagnostic',
         );
       } catch {
-        logger.warn('Compact snapshot diagnostic unavailable');
+        logger.warn('Compact decision snapshot diagnostic unavailable');
       }
     }, 20_000);
   }
@@ -199,6 +212,7 @@ void app.whenReady().then(() => {
         uploadKey,
       },
       getSnapshotOptions,
+      getLocalMarketIntelligence,
     );
     relayUploader = uploader;
     uploader.start();
