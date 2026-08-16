@@ -1,0 +1,48 @@
+name: Temporary Decision Context Replay Freeze
+
+on:
+  push:
+    branches:
+      - agent/decision-context-replay-freeze
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/decision-context-replay-freeze
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Apply replay freeze patch
+        run: python scripts/tmp-decision-context-replay-freeze.py
+      - name: Format changed source
+        run: >-
+          npx prettier --write
+          worker/src/phase13.ts
+          worker/src/phase16-replay.ts
+          tests/unit/worker.phase16-replay.test.ts
+      - name: Validate
+        run: npm run check
+      - name: Verify formatting
+        run: npm run format:check
+      - name: Package application
+        run: npm run build
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add worker tests
+          if git diff --cached --quiet; then
+            echo "No source changes to commit"
+            exit 0
+          fi
+          git commit -m "fix: freeze Decision Context for replay"
+          git push origin HEAD:agent/decision-context-replay-freeze
