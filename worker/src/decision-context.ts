@@ -5,7 +5,7 @@ import {
   localMarketIntelligenceSchema,
   type LocalMarketIntelligence,
 } from '../../src/shared/decision-context';
-import { buildContextPack } from './phase20-context-router';
+import type { buildContextPack } from './phase20-context-router';
 
 const recordSchema = z.record(z.string(), z.unknown());
 type ContextPack = Awaited<ReturnType<typeof buildContextPack>>;
