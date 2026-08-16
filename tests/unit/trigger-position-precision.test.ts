@@ -27,19 +27,28 @@ const baseContext = {
   },
 };
 
+const triggerInput = {
+  authoredBy: 'GPT' as const,
+  triggerId: 'trigger-1',
+  decisionId: 'decision-1',
+  sourceSnapshotId: 'snapshot-1',
+  triggerType: 'PRICE_CROSS' as const,
+  referencePrice: 'MARK_PRICE' as const,
+  triggerCondition: 'AT_OR_ABOVE' as const,
+  triggerPrice: 101_000,
+  confirmWindowSec: 0,
+  invalidationCondition: 'AT_OR_BELOW' as const,
+  invalidationPrice: 99_000,
+  expiresAt: 2_000,
+  maxChaseBps: 10,
+};
+
 describe('structured WAIT trigger contract', () => {
   it('requires GPT authorship and decision/snapshot lineage', () => {
     const parsed = structuredTriggerInputSchema.safeParse({
-      authoredBy: 'GPT',
-      triggerId: 'trigger-1',
-      decisionId: 'decision-1',
-      sourceSnapshotId: 'snapshot-1',
+      ...triggerInput,
       triggerType: 'BREAKOUT_CONFIRM',
-      referencePrice: 'MARK_PRICE',
-      triggerCondition: 'AT_OR_ABOVE',
-      triggerPrice: 101_000,
       confirmWindowSec: 10,
-      invalidationCondition: 'AT_OR_BELOW',
       invalidationPrice: 99_500,
       expiresAt: 2_000_000,
       maxChaseBps: 12,
@@ -54,28 +63,11 @@ describe('structured WAIT trigger contract', () => {
   });
 
   it('arms only future GPT-authored trigger contracts', () => {
-    const trigger = armStructuredTrigger(
-      {
-        authoredBy: 'GPT',
-        triggerId: 'trigger-1',
-        decisionId: 'decision-1',
-        sourceSnapshotId: 'snapshot-1',
-        triggerType: 'PRICE_CROSS',
-        referencePrice: 'MARK_PRICE',
-        triggerCondition: 'AT_OR_ABOVE',
-        triggerPrice: 101_000,
-        confirmWindowSec: 0,
-        invalidationCondition: 'AT_OR_BELOW',
-        invalidationPrice: 99_000,
-        expiresAt: 2_000,
-        maxChaseBps: 10,
-      },
-      1_000,
-    );
+    const trigger = armStructuredTrigger(triggerInput, 1_000);
     expect(trigger.state).toBe('ARMED');
     expect(trigger.conditionMatchedAt).toBeNull();
     expect(() =>
-      armStructuredTrigger({ ...trigger, expiresAt: 999 }, 1_000),
+      armStructuredTrigger({ ...triggerInput, expiresAt: 999 }, 1_000),
     ).toThrow('TRIGGER_EXPIRES_AT_MUST_BE_IN_FUTURE');
   });
 });
@@ -99,8 +91,11 @@ describe('deterministic position adjustment validation', () => {
 
   it('rejects a partial exit that would leave exchange-invalid dust', () => {
     const result = validatePositionAdjustment(
-      { action: 'PARTIAL_EXIT', requestedQuantity: 0.0195 },
-      baseContext,
+      { action: 'PARTIAL_EXIT', requestedQuantity: 0.019 },
+      {
+        ...baseContext,
+        filters: { ...baseContext.filters, minQuantity: 0.005 },
+      },
     );
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('REMAINING_BELOW_MIN_QUANTITY');
