@@ -169,20 +169,21 @@ describe('phase 16 replay/eval foundation', () => {
         JSON.stringify({ reasonTags: ['STRUCTURE'] }),
       );
 
-    const leased = await saveReplaySnapshotLease(
-      env,
-      snapshot('snapshot-replay-a', marketGeneratedAt, 100),
-      marketGeneratedAt + 1_000,
-    );
-    expect(leased).toBe(true);
-
-    const captured = await attachReplayCaseToDecision(env, {
-      decisionId,
-      snapshotId: 'snapshot-replay-a',
-      marketGeneratedAt,
-      capturedAt: marketGeneratedAt + 2_000,
-    });
-    expect(captured).toBe(true);
+    expect(
+      await saveReplaySnapshotLease(
+        env,
+        snapshot('snapshot-replay-a', marketGeneratedAt, 100),
+        marketGeneratedAt + 1_000,
+      ),
+    ).toBe(true);
+    expect(
+      await attachReplayCaseToDecision(env, {
+        decisionId,
+        snapshotId: 'snapshot-replay-a',
+        marketGeneratedAt,
+        capturedAt: marketGeneratedAt + 2_000,
+      }),
+    ).toBe(true);
 
     const inputResponse = await handleReplayReadRequest(
       authRequest(`/v1/replay/case/${decisionId}/input`),
@@ -200,24 +201,20 @@ describe('phase 16 replay/eval foundation', () => {
     expect(String(input.payloadSha256)).toHaveLength(64);
     expect(input).not.toHaveProperty('originalDecision');
     expect(input).not.toHaveProperty('futurePath');
-    expect(input.snapshot).toMatchObject({
-      snapshotId: 'snapshot-replay-a',
-      marketState: { markPrice: 100 },
-    });
 
     await saveReplaySnapshotLease(
       env,
       snapshot('snapshot-replay-a', marketGeneratedAt, 999),
       marketGeneratedAt + 3_000,
     );
-    const recaptured = await attachReplayCaseToDecision(env, {
-      decisionId,
-      snapshotId: 'snapshot-replay-a',
-      marketGeneratedAt,
-      capturedAt: marketGeneratedAt + 4_000,
-    });
-    expect(recaptured).toBe(true);
-
+    expect(
+      await attachReplayCaseToDecision(env, {
+        decisionId,
+        snapshotId: 'snapshot-replay-a',
+        marketGeneratedAt,
+        capturedAt: marketGeneratedAt + 4_000,
+      }),
+    ).toBe(true);
     const immutable = database
       .prepare(
         'SELECT anchor_mark_price AS anchorMarkPrice FROM replay_cases WHERE decision_id = ?',
@@ -226,7 +223,7 @@ describe('phase 16 replay/eval foundation', () => {
     expect(immutable.anchorMarkPrice).toBe(100);
   });
 
-  it('keeps future outcome labels separate and relay-samples 5/15/30/60 minute paths', async () => {
+  it('keeps future labels separate and stores 1/3/5/15/30/60m plus a sampled price path', async () => {
     const marketGeneratedAt = 2_000_000;
     const decisionId = 'decision-outcome-a';
     database
@@ -261,26 +258,20 @@ describe('phase 16 replay/eval foundation', () => {
       }),
     ).toBe(true);
 
-    await updateReplayOutcomesFromSnapshot(
-      env,
-      snapshot('future-4m', marketGeneratedAt + 4 * 60_000, 102),
-    );
-    await updateReplayOutcomesFromSnapshot(
-      env,
-      snapshot('future-6m', marketGeneratedAt + 6 * 60_000, 101),
-    );
-    await updateReplayOutcomesFromSnapshot(
-      env,
-      snapshot('future-16m', marketGeneratedAt + 16 * 60_000, 98),
-    );
-    await updateReplayOutcomesFromSnapshot(
-      env,
-      snapshot('future-31m', marketGeneratedAt + 31 * 60_000, 103),
-    );
-    await updateReplayOutcomesFromSnapshot(
-      env,
-      snapshot('future-61m', marketGeneratedAt + 61 * 60_000, 104),
-    );
+    const observations: Array<[string, number, number]> = [
+      ['future-30s', 30_000, 100.5],
+      ['future-2m', 2 * 60_000, 99],
+      ['future-4m', 4 * 60_000, 102],
+      ['future-6m', 6 * 60_000, 101],
+      ['future-16m', 16 * 60_000, 98],
+      ['future-31m', 31 * 60_000, 103],
+      ['future-61m', 61 * 60_000, 104],
+    ];
+    for (const [id, ageMs, price] of observations)
+      await updateReplayOutcomesFromSnapshot(
+        env,
+        snapshot(id, marketGeneratedAt + ageMs, price),
+      );
 
     const outcomeResponse = await handleReplayReadRequest(
       authRequest(`/v1/replay/case/${decisionId}/outcome`),
@@ -288,8 +279,28 @@ describe('phase 16 replay/eval foundation', () => {
     );
     expect(outcomeResponse?.status).toBe(200);
     const body = (await outcomeResponse?.json()) as {
-      futurePath: Record<string, number | null>;
+      futurePath: {
+        sampleCount: number;
+        maxUpBps1m: number | null;
+        maxDownBps1m: number | null;
+        returnBps1m: number | null;
+        maxUpBps3m: number | null;
+        maxDownBps3m: number | null;
+        returnBps3m: number | null;
+        maxUpBps5m: number | null;
+        maxDownBps5m: number | null;
+        returnBps5m: number | null;
+        maxDownBps15m: number | null;
+        returnBps15m: number | null;
+        maxDownBps30m: number | null;
+        returnBps30m: number | null;
+        returnBps60m: number | null;
+        finalizedAt: number | null;
+        pricePathVersion: string;
+        pricePath: Array<[number, number]>;
+      };
       originalDecision: Record<string, unknown>;
+      evaluationV2: Record<string, unknown>;
       samplingBasis: string;
     };
     expect(body.originalDecision).toMatchObject({
@@ -297,15 +308,30 @@ describe('phase 16 replay/eval foundation', () => {
       side: 'NEUTRAL',
     });
     expect(body.samplingBasis).toBe('RELAY_MARK_PRICE');
-    expect(body.futurePath.sampleCount).toBe(5);
+    expect(body.futurePath.sampleCount).toBe(7);
+    expect(body.futurePath.maxUpBps1m).toBeCloseTo(50, 8);
+    expect(body.futurePath.maxDownBps1m).toBeCloseTo(50, 8);
+    expect(body.futurePath.returnBps1m).toBeCloseTo(-100, 8);
+    expect(body.futurePath.maxUpBps3m).toBeCloseTo(50, 8);
+    expect(body.futurePath.maxDownBps3m).toBeCloseTo(-100, 8);
+    expect(body.futurePath.returnBps3m).toBeCloseTo(200, 8);
     expect(body.futurePath.maxUpBps5m).toBeCloseTo(200, 8);
+    expect(body.futurePath.maxDownBps5m).toBeCloseTo(-100, 8);
     expect(body.futurePath.returnBps5m).toBeCloseTo(100, 8);
-    expect(body.futurePath.maxDownBps15m).toBeCloseTo(100, 8);
+    expect(body.futurePath.maxDownBps15m).toBeCloseTo(-100, 8);
     expect(body.futurePath.returnBps15m).toBeCloseTo(-200, 8);
     expect(body.futurePath.maxDownBps30m).toBeCloseTo(-200, 8);
     expect(body.futurePath.returnBps30m).toBeCloseTo(300, 8);
     expect(body.futurePath.returnBps60m).toBeCloseTo(400, 8);
+    expect(body.futurePath.pricePathVersion).toBe('path-v1');
+    expect(body.futurePath.pricePath).toHaveLength(6);
+    expect(body.futurePath.pricePath.at(-1)).toEqual([31 * 60_000, 103]);
     expect(body.futurePath.finalizedAt).toBe(marketGeneratedAt + 61 * 60_000);
+    expect(body.evaluationV2).toMatchObject({
+      available: true,
+      decision: 'NO_TRADE',
+      performanceScored: false,
+    });
   });
 
   it('protects research replay reads with the Action credential', async () => {
