@@ -421,6 +421,21 @@ export async function handler(request: Request, env: Env): Promise<Response> {
     request.method === 'POST' && url.pathname === '/v1/decision/record';
   if (isDecisionRecord) return recordDecision(request, env);
 
+  const isDecisionContextRead =
+    request.method === 'GET' && url.pathname === '/v1/decision-context/latest';
+  if (isDecisionContextRead) {
+    const response = await legacyHandler(request, env);
+    if (response.ok) {
+      try {
+        const decisionContext = (await response.clone().json()) as unknown;
+        await saveReplaySnapshotLease(env, decisionContext);
+      } catch {
+        // Replay leasing is analytics-only and must never block a live read.
+      }
+    }
+    return response;
+  }
+
   const isSnapshotRead =
     request.method === 'GET' && url.pathname === '/v1/snapshot/latest';
   if (isSnapshotRead) {

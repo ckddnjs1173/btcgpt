@@ -71,6 +71,33 @@ function snapshot(snapshotId: string, generatedAt: number, markPrice: number) {
   };
 }
 
+function decisionContext(
+  snapshotId: string,
+  marketGeneratedAt: number,
+  markPrice: number,
+  dvol: number,
+) {
+  return {
+    version: 'decision-context-v1',
+    snapshotId,
+    marketGeneratedAt,
+    generatedAt: marketGeneratedAt + 800,
+    btcCore: { marketState: { markPrice } },
+    external: {
+      optionsV2: {
+        version: 'deribit-options-v2',
+        generatedAt: marketGeneratedAt - 2_000,
+        objectiveOnly: true,
+        dvol: { value: dvol, observedAt: marketGeneratedAt - 3_000 },
+      },
+      onchain: {
+        metricNature: 'POINT_IN_TIME',
+        value: 123,
+      },
+    },
+  };
+}
+
 function authRequest(path: string, authenticated = true) {
   return new Request(`https://example.com${path}`, {
     headers: authenticated
@@ -194,6 +221,7 @@ describe('phase 16 replay/eval foundation', () => {
     expect(input).toMatchObject({
       decisionId,
       replayVersion: 'replay-v1',
+      inputBasis: 'MARKET_SNAPSHOT',
       snapshotId: 'snapshot-replay-a',
       marketGeneratedAt,
       anchorMarkPrice: 100,
@@ -221,6 +249,86 @@ describe('phase 16 replay/eval foundation', () => {
       )
       .get(decisionId) as { anchorMarkPrice: number };
     expect(immutable.anchorMarkPrice).toBe(100);
+  });
+
+  it('freezes the exact Decision Context including external evidence for replay', async () => {
+    const marketGeneratedAt = 1_500_000;
+    const decisionId = 'decision-context-freeze';
+    database
+      .prepare(
+        `INSERT INTO decision_log (
+          decision_id, recorded_at, intent, decision, side, analysis_mode,
+          confidence_band, plan_validation, payload
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        decisionId,
+        marketGeneratedAt + 2_000,
+        'MARKET_ANALYSIS',
+        'NO_TRADE',
+        'NEUTRAL',
+        'VERIFY',
+        'MEDIUM',
+        'NOT_APPLICABLE',
+        JSON.stringify({ reasonTags: ['OPTIONS_CONTEXT'] }),
+      );
+
+    expect(
+      await saveReplaySnapshotLease(
+        env,
+        decisionContext('snapshot-context-a', marketGeneratedAt, 100, 55.5),
+        marketGeneratedAt + 1_000,
+      ),
+    ).toBe(true);
+    expect(
+      await attachReplayCaseToDecision(env, {
+        decisionId,
+        snapshotId: 'snapshot-context-a',
+        marketGeneratedAt,
+        capturedAt: marketGeneratedAt + 2_000,
+      }),
+    ).toBe(true);
+
+    // A later provider refresh for the same market anchor must never rewrite
+    // the already-captured replay case.
+    await saveReplaySnapshotLease(
+      env,
+      decisionContext('snapshot-context-a', marketGeneratedAt, 999, 88.8),
+      marketGeneratedAt + 3_000,
+    );
+    await attachReplayCaseToDecision(env, {
+      decisionId,
+      snapshotId: 'snapshot-context-a',
+      marketGeneratedAt,
+      capturedAt: marketGeneratedAt + 4_000,
+    });
+
+    const response = await handleReplayReadRequest(
+      authRequest(`/v1/replay/case/${decisionId}/input`),
+      env,
+    );
+    expect(response?.status).toBe(200);
+    const input = (await response?.json()) as {
+      inputBasis: string;
+      anchorMarkPrice: number;
+      marketGeneratedAt: number;
+      snapshot: {
+        version: string;
+        external: {
+          optionsV2: { dvol: { value: number } };
+          onchain: { metricNature: string; value: number };
+        };
+      };
+    };
+    expect(input.inputBasis).toBe('DECISION_CONTEXT');
+    expect(input.marketGeneratedAt).toBe(marketGeneratedAt);
+    expect(input.anchorMarkPrice).toBe(100);
+    expect(input.snapshot.version).toBe('decision-context-v1');
+    expect(input.snapshot.external.optionsV2.dvol.value).toBe(55.5);
+    expect(input.snapshot.external.onchain).toEqual({
+      metricNature: 'POINT_IN_TIME',
+      value: 123,
+    });
   });
 
   it('keeps future labels separate and stores 1/3/5/15/30/60m plus a sampled price path', async () => {
