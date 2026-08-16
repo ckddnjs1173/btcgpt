@@ -130,8 +130,14 @@ describe('market intelligence foundation', () => {
 
   it('does not allow an older observation to overwrite a newer one', () => {
     const cache = new MultiCoinObservationCache();
-    const newer = observation({ generatedAt: 2_000, collectorReceivedAt: 1_900 });
-    const older = observation({ generatedAt: 1_500, collectorReceivedAt: 1_450 });
+    const newer = observation({
+      generatedAt: 2_000,
+      collectorReceivedAt: 1_900,
+    });
+    const older = observation({
+      generatedAt: 1_500,
+      collectorReceivedAt: 1_450,
+    });
 
     expect(cache.upsert(newer)).toBe('INSERTED');
     expect(cache.upsert(older)).toBe('IGNORED_OLDER');
