@@ -157,7 +157,8 @@ export class CoinbaseSpotAccumulator {
       this.lastPrice === null &&
       this.bidPrice === null &&
       this.askPrice === null &&
-      !this.level2Synchronized
+      !this.level2Synchronized &&
+      this.lastLevel2ReceivedAt === null
     )
       return null;
     this.trim(input.now);
@@ -169,8 +170,12 @@ export class CoinbaseSpotAccumulator {
       .filter(([, quantity]) => quantity > 0)
       .sort((left, right) => left[0] - right[0])
       .slice(0, 20);
-    const bestBid = this.bidPrice ?? topBids[0]?.[0] ?? null;
-    const bestAsk = this.askPrice ?? topAsks[0]?.[0] ?? null;
+    const bestBid = this.level2Synchronized
+      ? (topBids[0]?.[0] ?? null)
+      : (this.bidPrice ?? null);
+    const bestAsk = this.level2Synchronized
+      ? (topAsks[0]?.[0] ?? null)
+      : (this.askPrice ?? null);
     const spreadBps =
       bestBid !== null && bestAsk !== null && bestBid > 0
         ? ((bestAsk - bestBid) / ((bestAsk + bestBid) / 2)) * 10_000
@@ -245,7 +250,8 @@ export class CoinbaseSpotAccumulator {
     price: number;
     quantity: number;
   }): void {
-    if (!finitePositive(update.price) || !Number.isFinite(update.quantity)) return;
+    if (!finitePositive(update.price) || !Number.isFinite(update.quantity))
+      return;
     const book = update.side === 'bid' ? this.bids : this.asks;
     if (update.quantity <= 0) book.delete(update.price);
     else book.set(update.price, update.quantity);
@@ -260,7 +266,10 @@ export class CoinbaseSpotAccumulator {
     const cutoff = now - MAX_HISTORY_MS;
     while (this.prices.length > 0 && (this.prices[0]?.at ?? now) < cutoff)
       this.prices.shift();
-    while (this.trades.length > 0 && (this.trades[0]?.eventTime ?? now) < cutoff)
+    while (
+      this.trades.length > 0 &&
+      (this.trades[0]?.eventTime ?? now) < cutoff
+    )
       this.trades.shift();
   }
 
