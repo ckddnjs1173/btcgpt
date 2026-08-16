@@ -179,15 +179,16 @@ export async function handlePositionAdjustmentRequest(
       takeProfitQuantity: finite(protectiveCoverage?.takeProfitQuantity) ?? 0,
     },
   });
+  const { valid, ...details } = result;
 
   return json({
-    ok: result.valid,
+    ok: valid,
     snapshotId: currentSnapshotId,
     marketGeneratedAt: finite(snapshot.generatedAt),
     positionSource,
     side,
     currentQuantity: quantity,
     markPrice,
-    ...result,
+    ...details,
   });
 }
