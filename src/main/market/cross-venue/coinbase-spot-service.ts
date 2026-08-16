@@ -103,10 +103,6 @@ function parseTime(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function isProduct(value: string): value is CoinbaseSpotProduct {
-  return (COINBASE_SPOT_PRODUCTS as readonly string[]).includes(value);
-}
-
 function errorDetails(error: unknown) {
   return {
     errorName: error instanceof Error ? error.name : 'UnknownError',
