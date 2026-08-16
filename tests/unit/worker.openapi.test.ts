@@ -158,15 +158,16 @@ describe('worker OpenAPI', () => {
     expect(
       json.components.schemas.PositionAdjustmentRequest.additionalProperties,
     ).toBe(false);
-    expect(
-      json.components.schemas.PositionAdjustmentRequest.required,
-    ).toEqual(['snapshotId', 'action']);
+    expect(json.components.schemas.PositionAdjustmentRequest.required).toEqual([
+      'snapshotId',
+      'action',
+    ]);
     expect(
       json.components.schemas.PositionAdjustmentResponse.additionalProperties,
     ).toBe(false);
-    expect(
-      json.components.schemas.PositionAdjustmentResponse.required,
-    ).toEqual(['ok', 'errors']);
+    expect(json.components.schemas.PositionAdjustmentResponse.required).toEqual(
+      ['ok', 'errors'],
+    );
 
     expect(json.components.schemas.TradePlan.required).toContain('targets');
     expect(json.components.schemas.TradePlan.required).not.toContain(

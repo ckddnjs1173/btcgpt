@@ -86,18 +86,15 @@ function snapshot(overrides: Record<string, unknown> = {}) {
 }
 
 function request(body: Record<string, unknown>, ip: string) {
-  return new Request(
-    'https://relay.example/v1/position-adjustment/validate',
-    {
-      method: 'POST',
-      headers: {
-        authorization: 'Bearer read-key',
-        'content-type': 'application/json',
-        'cf-connecting-ip': ip,
-      },
-      body: JSON.stringify(body),
+  return new Request('https://relay.example/v1/position-adjustment/validate', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer read-key',
+      'content-type': 'application/json',
+      'cf-connecting-ip': ip,
     },
-  );
+    body: JSON.stringify(body),
+  });
 }
 
 describe('position adjustment Action', () => {
