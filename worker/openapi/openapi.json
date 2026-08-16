@@ -349,7 +349,7 @@
         "properties": {
           "snapshotId": {
             "type": "string",
-            "description": "Snapshot used for the decision. Supply getLatestSnapshot.snapshotId so validation can detect a changed market snapshot."
+            "description": "snapshotId from the live decision context used for this analysis. Validation rejects a superseded or mismatched market snapshot."
           },
           "side": {
             "type": "string",
@@ -539,11 +539,11 @@
           "snapshotId": {
             "type": "string",
             "maxLength": 100,
-            "description": "snapshotId returned by the getLatestSnapshot call used for this analysis."
+            "description": "snapshotId from the exact live Decision Context used for this decision."
           },
           "marketGeneratedAt": {
             "type": "integer",
-            "description": "generatedAt returned by the same getLatestSnapshot response."
+            "description": "marketGeneratedAt from the same live Decision Context used for this decision."
           },
           "parentDecisionId": {
             "type": [
@@ -2094,7 +2094,7 @@
         "description": "Primary live GPT decision endpoint. Returns the latest BTC decision core plus objective ETH/SOL lead evidence, dynamic alt-market breadth, cross-market context, memory, reasoning policy, position-management context, evidence health, provenance, and latency telemetry. Auxiliary market evidence never overrides BTC decision gates.",
         "security": [
           {
-            "bearerAuth": []
+            "actionKey": []
           }
         ],
         "responses": {
@@ -2148,7 +2148,8 @@
               }
             }
           }
-        }
+        },
+        "x-openai-isConsequential": false
       }
     }
   }
