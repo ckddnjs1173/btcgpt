@@ -27,6 +27,7 @@ function authorized(request: Request, expected: string): boolean {
 }
 
 async function loadSnapshot(env: Env): Promise<SnapshotRow | null> {
+  if (!env.DB) throw new Error('DB_UNAVAILABLE');
   return env.DB.prepare(
     `SELECT payload AS raw, generated_at AS generatedAt,
       received_at AS receivedAt FROM snapshot_latest WHERE id = 1`,
