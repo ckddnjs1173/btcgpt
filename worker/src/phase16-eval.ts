@@ -824,10 +824,10 @@ async function scoreRun(
     '15m': scoreHorizon(output.side, horizonValues(outcome, '15m')),
     '30m': scoreHorizon(output.side, horizonValues(outcome, '30m')),
     '60m': scoreHorizon(output.side, horizonValues(outcome, '60m')),
-  } satisfies Record<HorizonKey, HorizonScore>;
+  } satisfies Record<Exclude<HorizonKey, '1m' | '3m'>, HorizonScore>;
 
   const score = {
-    evaluatorVersion: EVALUATOR_VERSION,
+    evaluatorVersion: run.evaluatorVersion,
     scoreStatus: 'FINAL',
     scoringBasis: 'RELAY_MARK_PRICE',
     decisionClass: decisionClass(output.decision),
