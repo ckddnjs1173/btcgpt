@@ -12,6 +12,7 @@ import { logger } from './logging/logger';
 import { MarketDataService } from './market/service';
 import { LeadCoreMarketService } from './market/multicoin/lead-service';
 import { AltMarketService } from './market/multicoin/alt-service';
+import { CoinbaseSpotMarketService } from './market/cross-venue/coinbase-spot-service';
 import { buildLocalDecisionMarketIntelligence } from './market/intelligence/local-market';
 import type { SnapshotOptions } from './market/snapshot';
 import { createCompactRelaySnapshot } from './market/compact-snapshot';
@@ -50,6 +51,7 @@ let database: AppDatabase | null = null;
 let marketData: MarketDataService | null = null;
 let leadCoreMarket: LeadCoreMarketService | null = null;
 let altMarket: AltMarketService | null = null;
+let coinbaseSpotMarket: CoinbaseSpotMarketService | null = null;
 let relayUploader: RelayUploader | null = null;
 let accountService: AccountService | null = null;
 let notificationMonitor: OperationalNotificationMonitor | null = null;
@@ -92,6 +94,8 @@ app.on('will-quit', () => {
   accountService = null;
   relayUploader?.stop();
   relayUploader = null;
+  coinbaseSpotMarket?.stop();
+  coinbaseSpotMarket = null;
   altMarket?.stop();
   altMarket = null;
   leadCoreMarket?.stop();
@@ -126,6 +130,7 @@ void app.whenReady().then(() => {
   marketData = new MarketDataService(database);
   leadCoreMarket = new LeadCoreMarketService();
   altMarket = new AltMarketService();
+  coinbaseSpotMarket = new CoinbaseSpotMarketService();
   const naverStore = new NaverCredentialStore(database);
   const accountCredentialStore = new CredentialStore(database);
   externalContext = new ExternalContextService(
@@ -173,6 +178,7 @@ void app.whenReady().then(() => {
       snapshot,
       leadCoreMarket: leadCoreMarket!,
       altMarket: altMarket!,
+      coinbaseSpotMarket: coinbaseSpotMarket!,
     });
 
   if (process.env.BTC_COMPACT_DIAGNOSTIC === '1') {
@@ -278,6 +284,7 @@ void app.whenReady().then(() => {
     });
     leadCoreMarket.start();
     altMarket.start();
+    coinbaseSpotMarket.start();
   }
   externalContext.start();
   const environmentRelay =
@@ -323,9 +330,10 @@ void app.whenReady().then(() => {
     if (quitting || resumeRecoveryInProgress) return;
     resumeRecoveryInProgress = true;
     logger.info(
-      'System resumed; restarting live BTC, lead-core, alt-market, and account streams',
+      'System resumed; restarting live BTC, lead-core, alt-market, Coinbase spot, and account streams',
     );
     try {
+      coinbaseSpotMarket?.stop();
       altMarket?.stop();
       leadCoreMarket?.stop();
       marketData?.stop();
@@ -350,6 +358,7 @@ void app.whenReady().then(() => {
           });
         leadCoreMarket?.start();
         altMarket?.start();
+        coinbaseSpotMarket?.start();
       } else resumeRecoveryInProgress = false;
       accountService?.start();
     } catch (error) {

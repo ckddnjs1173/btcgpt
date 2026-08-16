@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "BTC Futures Assistant Actions",
-    "version": "5.5.0",
+    "version": "5.6.0",
     "description": "Unified BTCUSDT market, context, lifecycle, deterministic calculation, and analytics-only GPT decision telemetry actions."
   },
   "servers": [
@@ -1132,13 +1132,14 @@
           "objectiveOnly",
           "leadCore",
           "altMarket",
+          "crossVenue",
           "evidenceHealth",
           "provenance"
         ],
         "properties": {
           "version": {
             "type": "string",
-            "enum": ["local-market-v1"]
+            "enum": ["local-market-v2"]
           },
           "generatedAt": {
             "type": "integer",
@@ -1198,6 +1199,16 @@
               "$ref": "#/components/schemas/DataProvenance"
             },
             "maxItems": 32
+          },
+          "crossVenue": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CrossVenueIntelligence"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -1650,6 +1661,572 @@
             "type": "number",
             "minimum": 0,
             "maximum": 1000
+          }
+        }
+      },
+      "CrossVenueIntelligence": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "generatedAt",
+          "objectiveOnly",
+          "interpretationBoundary",
+          "assets",
+          "provenance"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "enum": ["cross-venue-v1"]
+          },
+          "generatedAt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "objectiveOnly": {
+            "type": "boolean",
+            "const": true
+          },
+          "interpretationBoundary": {
+            "type": "string",
+            "enum": ["BINANCE_USDT_PERP_VS_COINBASE_USD_SPOT_REFERENCE_ONLY"]
+          },
+          "assets": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["BTC", "ETH", "SOL"],
+            "properties": {
+              "BTC": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "asset",
+                      "generatedAt",
+                      "coinbaseProductId",
+                      "binanceInstrument",
+                      "quoteCurrencyMismatch",
+                      "coinbaseSpot",
+                      "binancePerp",
+                      "derived"
+                    ],
+                    "properties": {
+                      "asset": {
+                        "type": "string",
+                        "enum": ["BTC", "ETH", "SOL"]
+                      },
+                      "generatedAt": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "coinbaseProductId": {
+                        "type": "string",
+                        "enum": ["BTC-USD", "ETH-USD", "SOL-USD"]
+                      },
+                      "binanceInstrument": {
+                        "type": "string",
+                        "enum": ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+                      },
+                      "quoteCurrencyMismatch": {
+                        "type": "boolean",
+                        "const": true
+                      },
+                      "coinbaseSpot": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "lastPrice",
+                          "bidPrice",
+                          "askPrice",
+                          "spreadBps",
+                          "returnsBps",
+                          "normalizedTakerDelta1m",
+                          "normalizedTakerDelta5m",
+                          "depthImbalance20",
+                          "microPrice"
+                        ],
+                        "properties": {
+                          "lastPrice": {
+                            "type": ["number", "null"]
+                          },
+                          "bidPrice": {
+                            "type": ["number", "null"]
+                          },
+                          "askPrice": {
+                            "type": ["number", "null"]
+                          },
+                          "spreadBps": {
+                            "type": ["number", "null"]
+                          },
+                          "returnsBps": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["1m", "3m", "5m"],
+                            "properties": {
+                              "1m": {
+                                "type": ["number", "null"]
+                              },
+                              "3m": {
+                                "type": ["number", "null"]
+                              },
+                              "5m": {
+                                "type": ["number", "null"]
+                              }
+                            }
+                          },
+                          "normalizedTakerDelta1m": {
+                            "type": ["number", "null"]
+                          },
+                          "normalizedTakerDelta5m": {
+                            "type": ["number", "null"]
+                          },
+                          "depthImbalance20": {
+                            "type": ["number", "null"]
+                          },
+                          "microPrice": {
+                            "type": ["number", "null"]
+                          }
+                        }
+                      },
+                      "binancePerp": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "markPrice",
+                          "returnsBps",
+                          "normalizedTakerDelta1m",
+                          "normalizedTakerDelta5m"
+                        ],
+                        "properties": {
+                          "markPrice": {
+                            "type": ["number", "null"]
+                          },
+                          "returnsBps": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["1m", "3m", "5m"],
+                            "properties": {
+                              "1m": {
+                                "type": ["number", "null"]
+                              },
+                              "3m": {
+                                "type": ["number", "null"]
+                              },
+                              "5m": {
+                                "type": ["number", "null"]
+                              }
+                            }
+                          },
+                          "normalizedTakerDelta1m": {
+                            "type": ["number", "null"]
+                          },
+                          "normalizedTakerDelta5m": {
+                            "type": ["number", "null"]
+                          }
+                        }
+                      },
+                      "derived": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "perpSpotReferenceSpreadBps",
+                          "returnDifferenceBps",
+                          "normalizedTakerDeltaDifference1m",
+                          "normalizedTakerDeltaDifference5m"
+                        ],
+                        "properties": {
+                          "perpSpotReferenceSpreadBps": {
+                            "type": ["number", "null"]
+                          },
+                          "returnDifferenceBps": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["1m", "3m", "5m"],
+                            "properties": {
+                              "1m": {
+                                "type": ["number", "null"]
+                              },
+                              "3m": {
+                                "type": ["number", "null"]
+                              },
+                              "5m": {
+                                "type": ["number", "null"]
+                              }
+                            }
+                          },
+                          "normalizedTakerDeltaDifference1m": {
+                            "type": ["number", "null"]
+                          },
+                          "normalizedTakerDeltaDifference5m": {
+                            "type": ["number", "null"]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ETH": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "asset",
+                      "generatedAt",
+                      "coinbaseProductId",
+                      "binanceInstrument",
+                      "quoteCurrencyMismatch",
+                      "coinbaseSpot",
+                      "binancePerp",
+                      "derived"
+                    ],
+                    "properties": {
+                      "asset": {
+                        "type": "string",
+                        "enum": ["BTC", "ETH", "SOL"]
+                      },
+                      "generatedAt": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "coinbaseProductId": {
+                        "type": "string",
+                        "enum": ["BTC-USD", "ETH-USD", "SOL-USD"]
+                      },
+                      "binanceInstrument": {
+                        "type": "string",
+                        "enum": ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+                      },
+                      "quoteCurrencyMismatch": {
+                        "type": "boolean",
+                        "const": true
+                      },
+                      "coinbaseSpot": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "lastPrice",
+                          "bidPrice",
+                          "askPrice",
+                          "spreadBps",
+                          "returnsBps",
+                          "normalizedTakerDelta1m",
+                          "normalizedTakerDelta5m",
+                          "depthImbalance20",
+                          "microPrice"
+                        ],
+                        "properties": {
+                          "lastPrice": {
+                            "type": ["number", "null"]
+                          },
+                          "bidPrice": {
+                            "type": ["number", "null"]
+                          },
+                          "askPrice": {
+                            "type": ["number", "null"]
+                          },
+                          "spreadBps": {
+                            "type": ["number", "null"]
+                          },
+                          "returnsBps": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["1m", "3m", "5m"],
+                            "properties": {
+                              "1m": {
+                                "type": ["number", "null"]
+                              },
+                              "3m": {
+                                "type": ["number", "null"]
+                              },
+                              "5m": {
+                                "type": ["number", "null"]
+                              }
+                            }
+                          },
+                          "normalizedTakerDelta1m": {
+                            "type": ["number", "null"]
+                          },
+                          "normalizedTakerDelta5m": {
+                            "type": ["number", "null"]
+                          },
+                          "depthImbalance20": {
+                            "type": ["number", "null"]
+                          },
+                          "microPrice": {
+                            "type": ["number", "null"]
+                          }
+                        }
+                      },
+                      "binancePerp": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "markPrice",
+                          "returnsBps",
+                          "normalizedTakerDelta1m",
+                          "normalizedTakerDelta5m"
+                        ],
+                        "properties": {
+                          "markPrice": {
+                            "type": ["number", "null"]
+                          },
+                          "returnsBps": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["1m", "3m", "5m"],
+                            "properties": {
+                              "1m": {
+                                "type": ["number", "null"]
+                              },
+                              "3m": {
+                                "type": ["number", "null"]
+                              },
+                              "5m": {
+                                "type": ["number", "null"]
+                              }
+                            }
+                          },
+                          "normalizedTakerDelta1m": {
+                            "type": ["number", "null"]
+                          },
+                          "normalizedTakerDelta5m": {
+                            "type": ["number", "null"]
+                          }
+                        }
+                      },
+                      "derived": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "perpSpotReferenceSpreadBps",
+                          "returnDifferenceBps",
+                          "normalizedTakerDeltaDifference1m",
+                          "normalizedTakerDeltaDifference5m"
+                        ],
+                        "properties": {
+                          "perpSpotReferenceSpreadBps": {
+                            "type": ["number", "null"]
+                          },
+                          "returnDifferenceBps": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["1m", "3m", "5m"],
+                            "properties": {
+                              "1m": {
+                                "type": ["number", "null"]
+                              },
+                              "3m": {
+                                "type": ["number", "null"]
+                              },
+                              "5m": {
+                                "type": ["number", "null"]
+                              }
+                            }
+                          },
+                          "normalizedTakerDeltaDifference1m": {
+                            "type": ["number", "null"]
+                          },
+                          "normalizedTakerDeltaDifference5m": {
+                            "type": ["number", "null"]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "SOL": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "asset",
+                      "generatedAt",
+                      "coinbaseProductId",
+                      "binanceInstrument",
+                      "quoteCurrencyMismatch",
+                      "coinbaseSpot",
+                      "binancePerp",
+                      "derived"
+                    ],
+                    "properties": {
+                      "asset": {
+                        "type": "string",
+                        "enum": ["BTC", "ETH", "SOL"]
+                      },
+                      "generatedAt": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "coinbaseProductId": {
+                        "type": "string",
+                        "enum": ["BTC-USD", "ETH-USD", "SOL-USD"]
+                      },
+                      "binanceInstrument": {
+                        "type": "string",
+                        "enum": ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+                      },
+                      "quoteCurrencyMismatch": {
+                        "type": "boolean",
+                        "const": true
+                      },
+                      "coinbaseSpot": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "lastPrice",
+                          "bidPrice",
+                          "askPrice",
+                          "spreadBps",
+                          "returnsBps",
+                          "normalizedTakerDelta1m",
+                          "normalizedTakerDelta5m",
+                          "depthImbalance20",
+                          "microPrice"
+                        ],
+                        "properties": {
+                          "lastPrice": {
+                            "type": ["number", "null"]
+                          },
+                          "bidPrice": {
+                            "type": ["number", "null"]
+                          },
+                          "askPrice": {
+                            "type": ["number", "null"]
+                          },
+                          "spreadBps": {
+                            "type": ["number", "null"]
+                          },
+                          "returnsBps": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["1m", "3m", "5m"],
+                            "properties": {
+                              "1m": {
+                                "type": ["number", "null"]
+                              },
+                              "3m": {
+                                "type": ["number", "null"]
+                              },
+                              "5m": {
+                                "type": ["number", "null"]
+                              }
+                            }
+                          },
+                          "normalizedTakerDelta1m": {
+                            "type": ["number", "null"]
+                          },
+                          "normalizedTakerDelta5m": {
+                            "type": ["number", "null"]
+                          },
+                          "depthImbalance20": {
+                            "type": ["number", "null"]
+                          },
+                          "microPrice": {
+                            "type": ["number", "null"]
+                          }
+                        }
+                      },
+                      "binancePerp": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "markPrice",
+                          "returnsBps",
+                          "normalizedTakerDelta1m",
+                          "normalizedTakerDelta5m"
+                        ],
+                        "properties": {
+                          "markPrice": {
+                            "type": ["number", "null"]
+                          },
+                          "returnsBps": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["1m", "3m", "5m"],
+                            "properties": {
+                              "1m": {
+                                "type": ["number", "null"]
+                              },
+                              "3m": {
+                                "type": ["number", "null"]
+                              },
+                              "5m": {
+                                "type": ["number", "null"]
+                              }
+                            }
+                          },
+                          "normalizedTakerDelta1m": {
+                            "type": ["number", "null"]
+                          },
+                          "normalizedTakerDelta5m": {
+                            "type": ["number", "null"]
+                          }
+                        }
+                      },
+                      "derived": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "perpSpotReferenceSpreadBps",
+                          "returnDifferenceBps",
+                          "normalizedTakerDeltaDifference1m",
+                          "normalizedTakerDeltaDifference5m"
+                        ],
+                        "properties": {
+                          "perpSpotReferenceSpreadBps": {
+                            "type": ["number", "null"]
+                          },
+                          "returnDifferenceBps": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["1m", "3m", "5m"],
+                            "properties": {
+                              "1m": {
+                                "type": ["number", "null"]
+                              },
+                              "3m": {
+                                "type": ["number", "null"]
+                              },
+                              "5m": {
+                                "type": ["number", "null"]
+                              }
+                            }
+                          },
+                          "normalizedTakerDeltaDifference1m": {
+                            "type": ["number", "null"]
+                          },
+                          "normalizedTakerDeltaDifference5m": {
+                            "type": ["number", "null"]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "provenance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataProvenance"
+            },
+            "maxItems": 24
           }
         }
       }
