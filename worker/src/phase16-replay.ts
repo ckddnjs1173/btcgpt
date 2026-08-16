@@ -186,8 +186,26 @@ function safeParse(raw: string): unknown {
   }
 }
 
+function replayInputBasis(
+  snapshot: unknown,
+): 'DECISION_CONTEXT' | 'MARKET_SNAPSHOT' {
+  const root = asRecord(snapshot);
+  return root?.version === 'decision-context-v1'
+    ? 'DECISION_CONTEXT'
+    : 'MARKET_SNAPSHOT';
+}
+
+function replayMarketGeneratedAt(snapshot: unknown): number | null {
+  const root = asRecord(snapshot);
+  return asNumber(root?.marketGeneratedAt) ?? asNumber(root?.generatedAt);
+}
+
 function anchorMarkPrice(snapshot: unknown): number | null {
-  return asNumber(at(asRecord(snapshot), 'marketState', 'markPrice'));
+  const root = asRecord(snapshot);
+  return (
+    asNumber(at(root, 'btcCore', 'marketState', 'markPrice')) ??
+    asNumber(at(root, 'marketState', 'markPrice'))
+  );
 }
 
 export async function saveReplaySnapshotLease(
@@ -199,7 +217,7 @@ export async function saveReplaySnapshotLease(
   const root = asRecord(snapshotResponse);
   const snapshotId =
     root && typeof root.snapshotId === 'string' ? root.snapshotId : null;
-  const marketGeneratedAt = asNumber(root?.generatedAt);
+  const marketGeneratedAt = replayMarketGeneratedAt(snapshotResponse);
   if (!snapshotId || marketGeneratedAt === null) return false;
 
   const payload = JSON.stringify(snapshotResponse);
@@ -413,9 +431,11 @@ async function readReplayInput(
     .bind(decisionId)
     .first<FingerprintRow>();
 
+  const frozenInput = safeParse(replay.snapshotPayload);
   return json({
     decisionId: replay.decisionId,
     replayVersion: replay.replayVersion,
+    inputBasis: replayInputBasis(frozenInput),
     snapshotId: replay.snapshotId,
     marketGeneratedAt: replay.marketGeneratedAt,
     sourceLeaseAt: replay.sourceLeaseAt,
@@ -423,7 +443,7 @@ async function readReplayInput(
     anchorMarkPrice: replay.anchorMarkPrice,
     payloadBytes: replay.payloadBytes,
     payloadSha256: replay.payloadSha256,
-    snapshot: safeParse(replay.snapshotPayload),
+    snapshot: frozenInput,
     marketFingerprint: fingerprint
       ? {
           version: fingerprint.fingerprintVersion,
