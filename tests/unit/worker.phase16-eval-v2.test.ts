@@ -218,9 +218,9 @@ describe('Evaluation V2 experiment scoring', () => {
     expect(body.score.decisionEvaluation.mfeR).toBeGreaterThan(2);
     expect(body.score.decisionEvaluation.maeR).toBeGreaterThan(1);
     expect(body.score.decisionEvaluation.stopHitMs).toBe(90_000);
-    expect(
-      body.score.decisionEvaluation.targets[0]?.orderingVsStop,
-    ).toBe('TARGET_FIRST');
+    expect(body.score.decisionEvaluation.targets[0]?.orderingVsStop).toBe(
+      'TARGET_FIRST',
+    );
     expect(body.score.notes.join(' ')).toContain('No scalar strategy score');
   });
 
