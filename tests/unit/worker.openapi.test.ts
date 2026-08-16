@@ -58,6 +58,7 @@ interface OpenApiDocument {
         properties: {
           snapshotId: { description?: string };
           marketGeneratedAt: { description?: string };
+          triggerContract?: unknown;
         };
       };
       DecisionContext: {
@@ -72,6 +73,10 @@ interface OpenApiDocument {
         additionalProperties: boolean;
         required: string[];
       };
+      StructuredTriggerContract: {
+        additionalProperties: boolean;
+        required: string[];
+      };
     };
   };
 }
@@ -82,7 +87,7 @@ describe('worker OpenAPI', () => {
     const raw = fs.readFileSync(p, 'utf8');
     const json = JSON.parse(raw) as OpenApiDocument;
 
-    expect(json.info.version).toBe('5.4.0');
+    expect(json.info.version).toBe('5.5.0');
     expect(json.servers).toEqual([
       {
         url: 'https://btc-futures-assistant-relay.btcgpt-ck1173.workers.dev',
@@ -189,6 +194,15 @@ describe('worker OpenAPI', () => {
       json.components.schemas.DecisionRecord.properties.marketGeneratedAt
         .description,
     ).toContain('Decision Context');
+    expect(
+      json.components.schemas.DecisionRecord.properties.triggerContract,
+    ).toBeDefined();
+    expect(
+      json.components.schemas.StructuredTriggerContract.additionalProperties,
+    ).toBe(false);
+    expect(
+      json.components.schemas.StructuredTriggerContract.required,
+    ).toContain('sourceSnapshotId');
     expect(json.paths['/v1/snapshot/latest'].put).toBeUndefined();
   });
 

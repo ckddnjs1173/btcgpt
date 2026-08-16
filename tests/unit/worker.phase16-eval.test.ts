@@ -111,6 +111,9 @@ describe('phase 16B replay experiment registry', () => {
       readFileSync('worker/migrations/0008_replay_eval_lab.sql', 'utf8'),
     );
     database.exec(
+      readFileSync('worker/migrations/0012_evaluation_v2.sql', 'utf8'),
+    );
+    database.exec(
       readFileSync(
         'worker/migrations/0009_replay_experiment_registry.sql',
         'utf8',
