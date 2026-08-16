@@ -94,10 +94,7 @@ export const evidenceHealthSchema = z
       });
     }
 
-    if (
-      value.freshnessClass !== 'CORE_BLOCKING' &&
-      value.requiredForEntry
-    ) {
+    if (value.freshnessClass !== 'CORE_BLOCKING' && value.requiredForEntry) {
       context.addIssue({
         code: 'custom',
         path: ['requiredForEntry'],

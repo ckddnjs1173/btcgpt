@@ -1,9 +1,6 @@
 import type { CryptoAssetObservationBase } from '../../../shared/market-intelligence';
 
-export type ObservationUpsertResult =
-  | 'INSERTED'
-  | 'UPDATED'
-  | 'IGNORED_OLDER';
+export type ObservationUpsertResult = 'INSERTED' | 'UPDATED' | 'IGNORED_OLDER';
 
 function observationKey(observation: CryptoAssetObservationBase): string {
   return `${observation.venue}:${observation.instrumentType}:${observation.symbol}`;
