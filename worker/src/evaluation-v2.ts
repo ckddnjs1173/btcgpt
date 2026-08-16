@@ -51,8 +51,8 @@ export function normalizePricePath(value: unknown): PricePathPoint[] {
   const points: PricePathPoint[] = [];
   for (const item of value) {
     if (!Array.isArray(item) || item.length !== 2) continue;
-    const ageMs = item[0];
-    const markPrice = item[1];
+    const ageMs: unknown = item[0];
+    const markPrice: unknown = item[1];
     if (
       typeof ageMs !== 'number' ||
       !Number.isFinite(ageMs) ||
@@ -271,7 +271,6 @@ export function evaluateWaitTrigger(input: WaitTriggerEvaluationInput) {
       )
     ) {
       invalidationHitMs = ageMs;
-      matchedAtMs = null;
       break;
     }
 
