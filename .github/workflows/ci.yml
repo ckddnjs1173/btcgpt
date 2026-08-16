@@ -33,10 +33,7 @@ jobs:
         run: npm run check
 
       - name: Verify formatting
-        run: |
-          npx prettier --write src/main/market/multicoin/cache.ts src/shared/market-intelligence.ts
-          git diff -- src/main/market/multicoin/cache.ts src/shared/market-intelligence.ts
-          git diff --exit-code -- src/main/market/multicoin/cache.ts src/shared/market-intelligence.ts
+        run: npm run format:check
 
       - name: Package application
         run: npm run build
