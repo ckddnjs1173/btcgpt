@@ -34,12 +34,7 @@ export interface WaitTriggerEvaluationInput {
 }
 
 export interface ManagementEvaluationInput {
-  decision:
-    | 'HOLD'
-    | 'PARTIAL_EXIT'
-    | 'EXIT'
-    | 'MOVE_STOP'
-    | 'CHANGE_TP';
+  decision: 'HOLD' | 'PARTIAL_EXIT' | 'EXIT' | 'MOVE_STOP' | 'CHANGE_TP';
   side: 'LONG' | 'SHORT' | 'NEUTRAL';
   anchorMarkPrice: number;
   pricePath: PricePathPoint[];
@@ -199,7 +194,10 @@ export function evaluateEnterPlan(input: EnterPlanEvaluationInput) {
       price: target,
       hitMs,
       orderingVsStop: ordering(hitMs, stopHitMs),
-      beforeStop: hitMs === null || stopHitMs === null ? hitMs !== null : hitMs < stopHitMs,
+      beforeStop:
+        hitMs === null || stopHitMs === null
+          ? hitMs !== null
+          : hitMs < stopHitMs,
     };
   });
   const excursion = excursionFromReference(
@@ -218,10 +216,7 @@ export function evaluateEnterPlan(input: EnterPlanEvaluationInput) {
     available: true as const,
     samplingBasis: 'RELAY_MARK_PRICE_PATH' as const,
     riskBps,
-    anchorToPlannedEntryBps: rawMoveBps(
-      input.entry,
-      input.anchorMarkPrice,
-    ),
+    anchorToPlannedEntryBps: rawMoveBps(input.entry, input.anchorMarkPrice),
     mfeBps: excursion.mfeBps,
     maeBps: excursion.maeBps,
     mfeR: excursion.mfeBps / riskBps,
@@ -326,10 +321,7 @@ export function evaluateWaitTrigger(input: WaitTriggerEvaluationInput) {
         ([ageMs]) =>
           ageMs >= triggerHitMs && ageMs <= triggerHitMs + 15 * 60_000,
       )
-      .map(
-        ([ageMs, price]) =>
-          [ageMs - triggerHitMs, price] as PricePathPoint,
-      );
+      .map(([ageMs, price]) => [ageMs - triggerHitMs, price] as PricePathPoint);
     postTrigger = excursionFromReference(
       input.side,
       triggerObservedPrice,

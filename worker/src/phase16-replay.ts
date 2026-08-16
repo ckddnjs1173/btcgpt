@@ -1,9 +1,18 @@
 import type { Env } from './index';
+import {
+  evaluateEnterPlan,
+  evaluateManagementDecision,
+  evaluateWaitTrigger,
+  parsePricePathJson,
+} from './evaluation-v2';
+import { structuredTriggerInputSchema } from '../../src/shared/trading/structured-trigger';
 
 export const REPLAY_CASE_VERSION = 'replay-v1';
 const SNAPSHOT_LEASE_TTL_MS = 30 * 60_000;
 const OUTCOME_GRACE_MS = 10 * 60_000;
 const OUTCOME_HORIZONS = [
+  ['1m', 60_000],
+  ['3m', 3 * 60_000],
   ['5m', 5 * 60_000],
   ['15m', 15 * 60_000],
   ['30m', 30 * 60_000],
@@ -57,6 +66,14 @@ type ReplayOutcomeRow = {
   firstFutureObservedAt: number | null;
   lastFutureObservedAt: number | null;
   sampleCount: number;
+  maxUpBps1m: number | null;
+  maxDownBps1m: number | null;
+  returnBps1m: number | null;
+  returnObservedAt1m: number | null;
+  maxUpBps3m: number | null;
+  maxDownBps3m: number | null;
+  returnBps3m: number | null;
+  returnObservedAt3m: number | null;
   maxUpBps5m: number | null;
   maxDownBps5m: number | null;
   returnBps5m: number | null;
@@ -73,6 +90,9 @@ type ReplayOutcomeRow = {
   maxDownBps60m: number | null;
   returnBps60m: number | null;
   returnObservedAt60m: number | null;
+  pricePathVersion: string;
+  pricePathJson: string;
+  lastPathObservedAt: number | null;
   finalizedAt: number | null;
 };
 
@@ -289,6 +309,22 @@ export async function attachReplayCaseToDecision(
   return true;
 }
 
+function pricePathAssignments(): string {
+  const age = '(?1 - market_generated_at)';
+  const interval = `CASE
+    WHEN ${age} <= ${5 * 60_000} THEN 5000
+    WHEN ${age} <= ${15 * 60_000} THEN 15000
+    ELSE 30000 END`;
+  const due = `(${age} > 0 AND ${age} <= ${60 * 60_000}
+    AND (last_path_observed_at IS NULL OR (?1 - last_path_observed_at) >= (${interval})))`;
+  return `
+    price_path_json=CASE WHEN ${due}
+      THEN json_insert(COALESCE(price_path_json, '[]'), '$[#]', json_array(${age}, ?2))
+      ELSE price_path_json END,
+    last_path_observed_at=CASE WHEN ${due}
+      THEN ?1 ELSE last_path_observed_at END`;
+}
+
 function horizonAssignments(
   suffix: (typeof OUTCOME_HORIZONS)[number][0],
   horizonMs: number,
@@ -329,12 +365,14 @@ export async function updateReplayOutcomesFromSnapshot(
   const assignments = OUTCOME_HORIZONS.map(([suffix, horizonMs]) =>
     horizonAssignments(suffix, horizonMs),
   ).join(',');
+  const pathAssignments = pricePathAssignments();
   const result = await env.DB.prepare(
     `UPDATE replay_case_outcomes SET
       first_future_observed_at=COALESCE(first_future_observed_at, ?1),
       last_future_observed_at=?1,
       sample_count=sample_count + 1,
       ${assignments},
+      ${pathAssignments},
       finalized_at=CASE
         WHEN finalized_at IS NULL AND (?1 - market_generated_at) >= ${MAX_OUTCOME_HORIZON_MS}
         THEN ?1 ELSE finalized_at END
@@ -396,6 +434,87 @@ async function readReplayInput(
   });
 }
 
+function decisionEvaluationV2(input: {
+  decision: DecisionOutcomeRow;
+  outcome: ReplayOutcomeRow | null;
+  tradeQuality: TradeQualityRow | null;
+}): unknown {
+  const { decision, outcome, tradeQuality } = input;
+  if (!outcome || outcome.anchorMarkPrice === null)
+    return { available: false, reason: 'OUTCOME_UNAVAILABLE' };
+  const pricePath = parsePricePathJson(outcome.pricePathJson);
+  if (pricePath.length === 0)
+    return { available: false, reason: 'PRICE_PATH_UNAVAILABLE' };
+  const payload = asRecord(safeParse(decision.payload));
+  const side =
+    decision.side === 'LONG' || decision.side === 'SHORT'
+      ? decision.side
+      : 'NEUTRAL';
+
+  if (decision.decision === 'ENTER_NOW' && side !== 'NEUTRAL') {
+    const entry = asNumber(payload?.entry);
+    const stop = asNumber(payload?.stop);
+    const targets = Array.isArray(payload?.targets)
+      ? payload.targets
+          .map(asNumber)
+          .filter((value): value is number => value !== null)
+      : [];
+    if (entry === null || stop === null || targets.length === 0)
+      return { available: false, reason: 'PLAN_UNAVAILABLE' };
+    return evaluateEnterPlan({
+      side,
+      anchorMarkPrice: outcome.anchorMarkPrice,
+      entry,
+      stop,
+      targets,
+      pricePath,
+      realizedNetR: tradeQuality?.realizedNetR ?? null,
+      entryDriftBps: tradeQuality?.entryDriftBps ?? null,
+    });
+  }
+
+  if (decision.decision === 'WAIT_TRIGGER') {
+    const parsedTrigger = structuredTriggerInputSchema.safeParse(
+      payload?.triggerContract,
+    );
+    if (!parsedTrigger.success)
+      return { available: false, reason: 'STRUCTURED_TRIGGER_UNAVAILABLE' };
+    return evaluateWaitTrigger({
+      side,
+      marketGeneratedAt: outcome.marketGeneratedAt,
+      anchorMarkPrice: outcome.anchorMarkPrice,
+      triggerContract: parsedTrigger.data,
+      pricePath,
+    });
+  }
+
+  if (
+    decision.decision === 'HOLD' ||
+    decision.decision === 'PARTIAL_EXIT' ||
+    decision.decision === 'EXIT' ||
+    decision.decision === 'MOVE_STOP' ||
+    decision.decision === 'CHANGE_TP'
+  ) {
+    return evaluateManagementDecision({
+      decision: decision.decision,
+      side,
+      anchorMarkPrice: outcome.anchorMarkPrice,
+      pricePath,
+      realizedNetR: tradeQuality?.realizedNetR ?? null,
+    });
+  }
+
+  return {
+    available: true,
+    decision: decision.decision,
+    performanceScored: false,
+    note:
+      decision.decision === 'NO_TRADE'
+        ? 'NO_TRADE is described by future opportunity vectors; no scalar penalty is assigned.'
+        : 'DATA_BLOCKED is counted but not performance-scored.',
+  };
+}
+
 async function readReplayOutcome(
   env: Env,
   decisionId: string,
@@ -417,6 +536,10 @@ async function readReplayOutcome(
       first_future_observed_at AS firstFutureObservedAt,
       last_future_observed_at AS lastFutureObservedAt,
       sample_count AS sampleCount,
+      max_up_bps_1m AS maxUpBps1m, max_down_bps_1m AS maxDownBps1m,
+      return_bps_1m AS returnBps1m, return_observed_at_1m AS returnObservedAt1m,
+      max_up_bps_3m AS maxUpBps3m, max_down_bps_3m AS maxDownBps3m,
+      return_bps_3m AS returnBps3m, return_observed_at_3m AS returnObservedAt3m,
       max_up_bps_5m AS maxUpBps5m, max_down_bps_5m AS maxDownBps5m,
       return_bps_5m AS returnBps5m, return_observed_at_5m AS returnObservedAt5m,
       max_up_bps_15m AS maxUpBps15m, max_down_bps_15m AS maxDownBps15m,
@@ -425,7 +548,8 @@ async function readReplayOutcome(
       return_bps_30m AS returnBps30m, return_observed_at_30m AS returnObservedAt30m,
       max_up_bps_60m AS maxUpBps60m, max_down_bps_60m AS maxDownBps60m,
       return_bps_60m AS returnBps60m, return_observed_at_60m AS returnObservedAt60m,
-      finalized_at AS finalizedAt
+      price_path_version AS pricePathVersion, price_path_json AS pricePathJson,
+      last_path_observed_at AS lastPathObservedAt, finalized_at AS finalizedAt
      FROM replay_case_outcomes WHERE decision_id = ?`,
   )
     .bind(decisionId)
@@ -459,8 +583,14 @@ async function readReplayOutcome(
       planValidation: decision.planValidation,
       structuredPayload: safeParse(decision.payload),
     },
-    futurePath: outcome,
+    futurePath: outcome
+      ? {
+          ...outcome,
+          pricePath: parsePricePathJson(outcome.pricePathJson),
+        }
+      : null,
     tradeQuality,
+    evaluationV2: decisionEvaluationV2({ decision, outcome, tradeQuality }),
     samplingBasis: 'RELAY_MARK_PRICE',
   });
 }

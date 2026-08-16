@@ -2,8 +2,17 @@ import { z } from 'zod';
 
 import type { Env } from './index';
 import { REPLAY_CASE_VERSION } from './phase16-replay';
+import {
+  EVALUATION_V2_VERSION,
+  evaluateEnterPlan,
+  evaluateManagementDecision,
+  evaluateWaitTrigger,
+  parsePricePathJson,
+} from './evaluation-v2';
+import { structuredTriggerInputSchema } from '../../src/shared/trading/structured-trigger';
 
-export const EVALUATOR_VERSION = 'eval-v1';
+export const EVALUATOR_VERSION = EVALUATION_V2_VERSION;
+const evaluatorVersionSchema = z.enum(['eval-v1', 'eval-v2']);
 const MAX_BODY_BYTES = 20_000;
 const MAX_ID_LENGTH = 100;
 
@@ -12,7 +21,7 @@ const experimentSchema = z
     experimentId: z.string().trim().min(1).max(MAX_ID_LENGTH),
     name: z.string().trim().min(1).max(160),
     replayVersion: z.literal(REPLAY_CASE_VERSION).default(REPLAY_CASE_VERSION),
-    evaluatorVersion: z.literal(EVALUATOR_VERSION).default(EVALUATOR_VERSION),
+    evaluatorVersion: evaluatorVersionSchema.default(EVALUATOR_VERSION),
     provider: z.enum(['OPENAI', 'CUSTOM_GPT', 'MANUAL', 'OTHER']),
     model: z.string().trim().min(1).max(120),
     modelVersion: z.string().trim().min(1).max(120).nullable().optional(),
@@ -37,7 +46,9 @@ const runStartSchema = z
 
 const outputSchema = z
   .object({
-    outputVersion: z.literal('eval-output-v1').default('eval-output-v1'),
+    outputVersion: z
+      .enum(['eval-output-v1', 'eval-output-v2'])
+      .default('eval-output-v2'),
     decision: z.enum([
       'ENTER_NOW',
       'WAIT_TRIGGER',
@@ -58,6 +69,7 @@ const outputSchema = z
     stop: z.number().positive().nullable().optional(),
     targets: z.array(z.number().positive()).max(3).default([]),
     triggerSummary: z.string().trim().max(300).nullable().optional(),
+    triggerContract: structuredTriggerInputSchema.nullable().optional(),
     invalidationSummary: z.string().trim().max(300).nullable().optional(),
     reasonTags: z.array(z.string().trim().min(1).max(60)).max(12).default([]),
     counterThesisTags: z
@@ -81,6 +93,24 @@ const outputSchema = z
   })
   .strict()
   .superRefine((output, context) => {
+    if (
+      output.outputVersion === 'eval-output-v2' &&
+      output.decision === 'WAIT_TRIGGER' &&
+      !output.triggerContract
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['triggerContract'],
+        message: 'eval-output-v2 WAIT_TRIGGER requires triggerContract',
+      });
+    }
+    if (output.triggerContract && output.decision !== 'WAIT_TRIGGER') {
+      context.addIssue({
+        code: 'custom',
+        path: ['triggerContract'],
+        message: 'triggerContract is only valid for WAIT_TRIGGER',
+      });
+    }
     if (output.decision !== 'ENTER_NOW') return;
     if (output.side === 'NEUTRAL') {
       context.addIssue({
@@ -106,7 +136,7 @@ const outputSchema = z
 
 type ExperimentInput = z.infer<typeof experimentSchema>;
 type EvalOutput = z.infer<typeof outputSchema>;
-type HorizonKey = '5m' | '15m' | '30m' | '60m';
+type HorizonKey = '1m' | '3m' | '5m' | '15m' | '30m' | '60m';
 
 type ExperimentRow = {
   experimentId: string;
@@ -150,6 +180,14 @@ type RunRow = {
 
 type OutcomeRow = {
   finalizedAt: number | null;
+  anchorMarkPrice: number | null;
+  marketGeneratedAt: number;
+  maxUpBps1m: number | null;
+  maxDownBps1m: number | null;
+  returnBps1m: number | null;
+  maxUpBps3m: number | null;
+  maxDownBps3m: number | null;
+  returnBps3m: number | null;
   maxUpBps5m: number | null;
   maxDownBps5m: number | null;
   returnBps5m: number | null;
@@ -162,6 +200,7 @@ type OutcomeRow = {
   maxUpBps60m: number | null;
   maxDownBps60m: number | null;
   returnBps60m: number | null;
+  pricePathJson: string;
 };
 
 type SummaryRow = {
@@ -523,6 +562,14 @@ async function loadOutcome(
   return database(env)
     .prepare(
       `SELECT finalized_at AS finalizedAt,
+        market_generated_at AS marketGeneratedAt,
+        anchor_mark_price AS anchorMarkPrice,
+        max_up_bps_1m AS maxUpBps1m,
+        max_down_bps_1m AS maxDownBps1m,
+        return_bps_1m AS returnBps1m,
+        max_up_bps_3m AS maxUpBps3m,
+        max_down_bps_3m AS maxDownBps3m,
+        return_bps_3m AS returnBps3m,
         max_up_bps_5m AS maxUpBps5m,
         max_down_bps_5m AS maxDownBps5m,
         return_bps_5m AS returnBps5m,
@@ -534,7 +581,8 @@ async function loadOutcome(
         return_bps_30m AS returnBps30m,
         max_up_bps_60m AS maxUpBps60m,
         max_down_bps_60m AS maxDownBps60m,
-        return_bps_60m AS returnBps60m
+        return_bps_60m AS returnBps60m,
+        price_path_json AS pricePathJson
        FROM replay_case_outcomes WHERE decision_id = ?`,
     )
     .bind(decisionId)
@@ -545,6 +593,20 @@ function horizonValues(
   outcome: OutcomeRow,
   horizon: HorizonKey,
 ): { rawReturn: number | null; maxUp: number | null; maxDown: number | null } {
+  if (horizon === '1m') {
+    return {
+      rawReturn: outcome.returnBps1m,
+      maxUp: outcome.maxUpBps1m,
+      maxDown: outcome.maxDownBps1m,
+    };
+  }
+  if (horizon === '3m') {
+    return {
+      rawReturn: outcome.returnBps3m,
+      maxUp: outcome.maxUpBps3m,
+      maxDown: outcome.maxDownBps3m,
+    };
+  }
   if (horizon === '5m') {
     return {
       rawReturn: outcome.returnBps5m,
@@ -635,6 +697,111 @@ function decisionClass(decision: EvalOutput['decision']): string {
   return 'POSITION_MANAGEMENT';
 }
 
+function allHorizonScores(outcome: OutcomeRow, side: EvalOutput['side']) {
+  return {
+    '1m': scoreHorizon(side, horizonValues(outcome, '1m')),
+    '3m': scoreHorizon(side, horizonValues(outcome, '3m')),
+    '5m': scoreHorizon(side, horizonValues(outcome, '5m')),
+    '15m': scoreHorizon(side, horizonValues(outcome, '15m')),
+    '30m': scoreHorizon(side, horizonValues(outcome, '30m')),
+    '60m': scoreHorizon(side, horizonValues(outcome, '60m')),
+  } satisfies Record<HorizonKey, HorizonScore>;
+}
+
+function scoreRunV2FromOutcome(outcome: OutcomeRow, output: EvalOutput) {
+  const directionalSide =
+    output.decision === 'ENTER_NOW' ? output.side : 'NEUTRAL';
+  const horizons = allHorizonScores(outcome, directionalSide);
+  const pricePath = parsePricePathJson(outcome.pricePathJson);
+  let decisionEvaluation: unknown;
+
+  if (
+    output.decision === 'ENTER_NOW' &&
+    output.side !== 'NEUTRAL' &&
+    output.entry != null &&
+    output.stop != null
+  ) {
+    decisionEvaluation = evaluateEnterPlan({
+      side: output.side,
+      anchorMarkPrice: outcome.anchorMarkPrice ?? output.entry,
+      entry: output.entry,
+      stop: output.stop,
+      targets: output.targets,
+      pricePath,
+    });
+  } else if (output.decision === 'WAIT_TRIGGER' && output.triggerContract) {
+    decisionEvaluation = evaluateWaitTrigger({
+      side: output.side,
+      marketGeneratedAt: outcome.marketGeneratedAt,
+      anchorMarkPrice:
+        outcome.anchorMarkPrice ?? output.triggerContract.triggerPrice,
+      triggerContract: output.triggerContract,
+      pricePath,
+    });
+  } else if (
+    output.decision === 'HOLD' ||
+    output.decision === 'PARTIAL_EXIT' ||
+    output.decision === 'EXIT' ||
+    output.decision === 'MOVE_STOP' ||
+    output.decision === 'CHANGE_TP'
+  ) {
+    decisionEvaluation = evaluateManagementDecision({
+      decision: output.decision,
+      side: output.side,
+      anchorMarkPrice: outcome.anchorMarkPrice ?? 0,
+      pricePath,
+    });
+  } else if (output.decision === 'NO_TRADE') {
+    decisionEvaluation = {
+      available: true,
+      performanceScored: false,
+      opportunityByHorizon: Object.fromEntries(
+        Object.entries(horizons).map(([key, value]) => [
+          key,
+          value.opportunityBps,
+        ]),
+      ),
+      note: 'NO_TRADE has no arbitrary scalar penalty.',
+    };
+  } else {
+    decisionEvaluation = {
+      available: true,
+      performanceScored: false,
+      note: 'DATA_BLOCKED is counted but not performance-scored.',
+    };
+  }
+
+  const score = {
+    evaluatorVersion: EVALUATION_V2_VERSION,
+    scoreStatus: 'FINAL',
+    scoringBasis: 'RELAY_MARK_PRICE_PATH',
+    decisionClass: decisionClass(output.decision),
+    side: output.side,
+    horizons,
+    decisionEvaluation,
+    notes: [
+      'ENTER direction is scored separately from WAIT/NO_TRADE opportunity and management path quality.',
+      'TP/SL and trigger timing use sampled relay mark-price path, not tick-perfect exchange events.',
+      'No scalar strategy score is assigned in eval-v2.',
+    ],
+  };
+  const thirty = horizons['30m'];
+  const isAbstention =
+    output.decision === 'WAIT_TRIGGER' || output.decision === 'NO_TRADE';
+  return {
+    scorePayload: JSON.stringify(score),
+    signedReturnBps30m:
+      output.decision === 'ENTER_NOW' ? thirty.signedReturnBps : null,
+    directionCorrect30m:
+      output.decision === 'ENTER_NOW' && thirty.directionCorrect !== null
+        ? thirty.directionCorrect
+          ? 1
+          : 0
+        : null,
+    opportunityBps30m: isAbstention ? thirty.opportunityBps : null,
+  };
+}
+
 async function scoreRun(
   env: Env,
   run: RunRow,
@@ -649,6 +816,8 @@ async function scoreRun(
   if (!outcome || outcome.finalizedAt === null) {
     throw new Error('REPLAY_OUTCOME_NOT_FINALIZED');
   }
+  if (run.evaluatorVersion === EVALUATION_V2_VERSION)
+    return scoreRunV2FromOutcome(outcome, output);
 
   const horizons = {
     '5m': scoreHorizon(output.side, horizonValues(outcome, '5m')),

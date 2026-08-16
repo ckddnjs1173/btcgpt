@@ -133,6 +133,9 @@ describe('phase 16 replay/eval foundation', () => {
     database.exec(
       readFileSync('worker/migrations/0008_replay_eval_lab.sql', 'utf8'),
     );
+    database.exec(
+      readFileSync('worker/migrations/0012_evaluation_v2.sql', 'utf8'),
+    );
     env = {
       DB: new SqliteD1(database),
       UPLOADER_WRITE_KEY: 'upload-secret',

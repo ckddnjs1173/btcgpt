@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { structuredTriggerInputSchema } from '../../src/shared/trading/structured-trigger';
+
 import { handler as legacyHandler, type Env } from './index';
 import { syncDecisionLineageFromSnapshot } from './phase13-lineage';
 import {
@@ -47,6 +49,7 @@ const decisionSchema = z
     stop: z.number().positive().nullable().optional(),
     targets: z.array(z.number().positive()).max(3).default([]),
     triggerSummary: z.string().trim().max(300).nullable().optional(),
+    triggerContract: structuredTriggerInputSchema.nullable().optional(),
     invalidationSummary: z.string().trim().max(300).nullable().optional(),
     reasonTags: z.array(z.string().trim().min(1).max(60)).max(12).default([]),
     counterThesisTags: z
@@ -62,6 +65,29 @@ const decisionSchema = z
         path: ['parentDecisionId'],
         message: 'parentDecisionId must differ from decisionId',
       });
+    }
+    if (decision.triggerContract) {
+      if (decision.decision !== 'WAIT_TRIGGER') {
+        context.addIssue({
+          code: 'custom',
+          path: ['triggerContract'],
+          message: 'triggerContract is only valid for WAIT_TRIGGER',
+        });
+      }
+      if (decision.triggerContract.decisionId !== decision.decisionId) {
+        context.addIssue({
+          code: 'custom',
+          path: ['triggerContract', 'decisionId'],
+          message: 'triggerContract decisionId must match decisionId',
+        });
+      }
+      if (decision.triggerContract.sourceSnapshotId !== decision.snapshotId) {
+        context.addIssue({
+          code: 'custom',
+          path: ['triggerContract', 'sourceSnapshotId'],
+          message: 'triggerContract sourceSnapshotId must match snapshotId',
+        });
+      }
     }
     if (decision.decision === 'ENTER_NOW') {
       if (decision.side === 'NEUTRAL') {

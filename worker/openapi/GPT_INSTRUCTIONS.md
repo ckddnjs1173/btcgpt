@@ -88,7 +88,7 @@ schemaVersion 5 공식 gate는 `decisionGates`다.
 - confidenceBand는 `NONE|LOW|MEDIUM|HIGH`; 숫자 확률 금지.
 - ENTER_NOW validation 성공→VALIDATED, 차단→BLOCKED, WAIT/NO_TRADE 등→NOT_APPLICABLE.
 - ENTER_NOW entry/stop/targets는 검증 최종값. 그 외 실제 계획 없으면 null/[].
-- trigger/invalidation은 짧은 객관 조건, reason/counterThesis는 짧은 tag만. chain-of-thought/전체대화/PII/API secret/account·order ID/raw private response 금지.
+- WAIT_TRIGGER이면 사용자에게 제시한 동일 `triggerContract`를 recordDecision에도 그대로 넣는다. trigger/invalidation 요약은 짧게, reason/counterThesis는 tag만 남긴다. chain-of-thought/전체대화/PII/API secret/account·order ID/raw private response 금지.
 
 recordDecision `ok=true` 후 마지막 줄: `기록 ✓ · {snapshotStatus} · {decisionId}`
 실패/성공확인 불가: `기록 ⚠ 실패 · 매매 판단은 유지, telemetry만 미저장`
