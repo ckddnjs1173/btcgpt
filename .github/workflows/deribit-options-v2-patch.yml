@@ -20,6 +20,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Prepare patch staging
+        run: python scripts/tmp-deribit-options-v2-hotfix.py
       - name: Apply Deribit Options V2
         run: python scripts/tmp-deribit-options-v2.py
       - name: Format changed source
@@ -35,7 +37,6 @@ jobs:
           worker/openapi/GPT_INSTRUCTIONS.md
           tests/unit/deribit-options-v2.test.ts
           tests/unit/worker.openapi.test.ts
-          tests/unit/decision-context-v1.test.ts
       - name: Validate
         run: npm run check
       - name: Verify formatting
