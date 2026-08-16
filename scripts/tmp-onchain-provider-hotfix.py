@@ -16,6 +16,10 @@ s = s.replace(
 )
 s = s.replace(
     "  const periodAt = Date.parse(String(latest.time ?? ''));",
-    "  const periodText =\\n    typeof latest.time === 'string' || typeof latest.time === 'number'\\n      ? String(latest.time)\\n      : '';\\n  const periodAt = Date.parse(periodText);",
+    """  const periodText =
+    typeof latest.time === 'string' || typeof latest.time === 'number'
+      ? String(latest.time)
+      : '';
+  const periodAt = Date.parse(periodText);""",
 )
 p.write_text(s, encoding='utf-8', newline='\n')
