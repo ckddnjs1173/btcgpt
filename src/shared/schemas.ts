@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { structuredTriggerInputSchema } from './trading/structured-trigger';
+
 export const clipboardTextSchema = z
   .string()
   .trim()
@@ -118,6 +120,7 @@ export const lockTradePlanInputSchema = positionCalculationInputSchema.extend({
     .min(1)
     .max(3)
     .optional(),
+  trigger: structuredTriggerInputSchema.optional(),
 });
 
 export const paperCloseInputSchema = z.object({

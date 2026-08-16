@@ -9,6 +9,7 @@ import type {
   RelayStatus,
   PositionCalculationResult,
   UserSettings,
+  StructuredTriggerInput,
 } from '../shared/contracts';
 import { MarketChart } from './MarketChart';
 
@@ -151,6 +152,7 @@ export function App() {
   });
   const [calculation, setCalculation] =
     useState<PositionCalculationResult | null>(null);
+  const [triggerContractText, setTriggerContractText] = useState('');
   const [relayUrl, setRelayUrl] = useState('');
   const [relayUploadKey, setRelayUploadKey] = useState('');
   const [naverClientId, setNaverClientId] = useState('');
@@ -376,6 +378,9 @@ export function App() {
     try {
       if (!window.desktopApi.lockTradePlan)
         throw new Error('계획 고정 API 미지원');
+      const trigger = triggerContractText.trim()
+        ? (JSON.parse(triggerContractText) as StructuredTriggerInput)
+        : undefined;
       await window.desktopApi.lockTradePlan({
         side: calculator.side,
         entry: Number(calculator.entry),
@@ -387,10 +392,14 @@ export function App() {
         sizeValue: Number(calculator.sizeValue),
         entryOrderType: calculator.entryOrderType,
         exitOrderType: calculator.exitOrderType,
+        trigger,
       });
+      if (trigger) setTriggerContractText('');
       setResult({
         ok: true,
-        message: '검증된 계획을 고정하고 30분 객관 가격 감시를 시작했습니다.',
+        message: trigger
+          ? 'GPT가 작성한 WAIT trigger 계약을 승인·고정했습니다. 프로그램은 조건 충족만 감시하며 자동 진입하지 않습니다.'
+          : '최신 검증을 통과한 즉시 진입 계획을 고정했습니다.',
       });
       await refresh();
     } catch (error) {
@@ -399,7 +408,7 @@ export function App() {
         message: error instanceof Error ? error.message : '계획 고정 실패',
       });
     }
-  }, [calculator, refresh]);
+  }, [calculator, refresh, triggerContractText]);
 
   const enterPaperTrade = useCallback(async () => {
     try {
@@ -1072,11 +1081,16 @@ export function App() {
             {' · '}누적 순손익{' '}
             {formatNumber(snapshot?.trading.statistics.netPnl ?? 0)} USDT
           </span>
+          {snapshot?.trading.lifecycle.stage === 'REANALYSIS_REQUIRED' && (
+            <button onClick={() => void copyAndOpen()}>
+              트리거 충족 · 최신 GPT 재분석 열기
+            </button>
+          )}
           {settings.tradingMode === 'PAPER' &&
             snapshot?.trading.activePlan?.status === 'LOCKED' &&
-            snapshot.trading.activePlan.monitoring?.state === 'TRIGGERED' && (
+            !snapshot.trading.activePlan.monitoring && (
               <button onClick={() => void enterPaperTrade()}>
-                트리거 충족 계획으로 PAPER 진입
+                검증된 즉시 계획으로 PAPER 진입
               </button>
             )}
           {snapshot?.trading.activePaperTrade && (
@@ -1170,7 +1184,7 @@ export function App() {
         {relay?.configured ? (
           <div className="account-status">
             <strong>
-              {relay.connected ? '5초 heartbeat 정상' : '업로드 연결 끊김'}
+              {relay.connected ? '2초 heartbeat 정상' : '업로드 연결 끊김'}
             </strong>
             <span>
               마지막 성공{' '}
@@ -1377,6 +1391,18 @@ export function App() {
               <option>MAKER</option>
             </select>
             <button onClick={() => void runCalculator()}>수량·비용 검증</button>
+            <textarea
+              aria-label="GPT WAIT trigger contract JSON"
+              value={triggerContractText}
+              onChange={(event) => setTriggerContractText(event.target.value)}
+              placeholder="WAIT_TRIGGER일 때 GPT가 제공한 triggerContract JSON만 선택적으로 붙여넣기"
+              rows={7}
+            />
+            <small>
+              비워 두면 최신 검증을 통과한 즉시 계획입니다. JSON을 넣으면 GPT가
+              작성한 조건만 감시하며, TRIGGERED 후 반드시 GPT 재분석이
+              필요합니다.
+            </small>
             <button
               disabled={!calculation?.valid}
               onClick={() => void lockPlan()}

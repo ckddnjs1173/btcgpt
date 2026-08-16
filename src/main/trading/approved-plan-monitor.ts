@@ -50,6 +50,13 @@ export class ApprovedPlanMonitor {
     this.timer = null;
   }
 
+  private saveMonitoring(
+    plan: LockedTradePlan,
+    monitoring: ApprovedPlanMonitoring,
+  ): void {
+    this.database.saveLockedTradePlan({ ...plan, monitoring });
+  }
+
   private check(): void {
     const plan = this.database.readActiveLockedTradePlan(
       currentMode(this.database),
@@ -60,6 +67,19 @@ export class ApprovedPlanMonitor {
     if (!monitoring) return;
 
     const now = Date.now();
+    if (monitoring.authoredBy !== 'GPT') {
+      this.transition(plan, {
+        ...monitoring,
+        state: 'CANCELLED',
+        cancelledAt: now,
+      });
+      showNotification(
+        '기존 감시 계획 취소',
+        '프로그램이 자동 생성했던 구형 트리거는 더 이상 사용하지 않습니다. GPT에서 최신 조건을 다시 받아 승인하세요.',
+      );
+      return;
+    }
+
     if (now >= monitoring.expiresAt) {
       this.transition(plan, {
         ...monitoring,
@@ -68,7 +88,7 @@ export class ApprovedPlanMonitor {
       });
       showNotification(
         '승인 계획 만료',
-        `${plan.side} 계획이 만료되었습니다. 새 snapshot으로 다시 검토한 뒤 재승인하세요.`,
+        `${plan.side} 계획이 만료되었습니다. 최신 Decision Context로 다시 분석한 뒤 새 계획을 승인하세요.`,
       );
       return;
     }
@@ -115,36 +135,60 @@ export class ApprovedPlanMonitor {
       });
       showNotification(
         '승인 계획 무효화',
-        `${plan.side} 계획 무효화 가격 ${monitoring.invalidationPrice} 도달 · 현재 Mark ${markPrice}. 주문을 누르지 말고 새 계획을 확인하세요.`,
+        `${plan.side} 계획 무효화 가격 ${monitoring.invalidationPrice} 도달 · 현재 Mark ${markPrice}. 주문을 누르지 말고 새 GPT 분석을 확인하세요.`,
       );
       return;
     }
 
-    if (
-      monitoring.state === 'WATCHING' &&
-      snapshot.decisionGates.entryAllowed &&
-      conditionMet(
-        monitoring.triggerCondition,
-        markPrice,
-        monitoring.triggerPrice,
-      )
-    ) {
-      const updated = {
-        ...monitoring,
-        state: 'TRIGGERED' as const,
-        triggeredAt: now,
-      };
-      this.database.saveLockedTradePlan({ ...plan, monitoring: updated });
-      const target = plan.targets[0] ?? null;
-      showNotification(
-        '승인 계획 트리거 충족',
-        `${plan.side} · ${plan.quantity} BTC · Entry ${plan.entry} · SL ${plan.stop}${target === null ? '' : ` · TP ${target}`} · Binance에서 직접 입력·확인하세요.`,
-      );
-      logger.info(
-        { planId: plan.id, triggerPrice: monitoring.triggerPrice },
-        'Approved plan trigger satisfied',
-      );
+    if (monitoring.state !== 'ARMED' && monitoring.state !== 'WATCHING') return;
+
+    const matched = conditionMet(
+      monitoring.triggerCondition,
+      markPrice,
+      monitoring.triggerPrice,
+    );
+    if (!matched) {
+      if (monitoring.conditionMatchedAt !== null)
+        this.saveMonitoring(plan, {
+          ...monitoring,
+          conditionMatchedAt: null,
+        });
+      return;
     }
+
+    const conditionMatchedAt = monitoring.conditionMatchedAt ?? now;
+    if (
+      monitoring.conditionMatchedAt === null &&
+      monitoring.confirmWindowSec > 0
+    )
+      this.saveMonitoring(plan, {
+        ...monitoring,
+        conditionMatchedAt,
+      });
+
+    if (now - conditionMatchedAt < monitoring.confirmWindowSec * 1_000) return;
+
+    const updated: ApprovedPlanMonitoring = {
+      ...monitoring,
+      state: 'TRIGGERED',
+      conditionMatchedAt,
+      triggeredAt: now,
+    };
+    this.saveMonitoring(plan, updated);
+    showNotification(
+      'GPT 재분석 필요',
+      `${plan.side} 승인 트리거가 충족되었습니다. 자동 진입은 하지 않습니다. 최신 Decision Context로 GPT 재분석 후 새 계획을 검증·고정하세요.`,
+    );
+    logger.info(
+      {
+        planId: plan.id,
+        triggerId: monitoring.triggerId,
+        decisionId: monitoring.decisionId,
+        triggerPrice: monitoring.triggerPrice,
+        maxChaseBps: monitoring.maxChaseBps,
+      },
+      'Approved GPT trigger satisfied; reanalysis required',
+    );
   }
 
   private transition(

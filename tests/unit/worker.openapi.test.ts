@@ -25,6 +25,9 @@ interface OpenApiDocument {
     '/v1/plan/validate': {
       post: ActionOperation;
     };
+    '/v1/position-adjustment/validate': {
+      post: ActionOperation;
+    };
     '/v1/trading-state/latest': {
       get: ActionOperation;
     };
@@ -61,6 +64,14 @@ interface OpenApiDocument {
         additionalProperties: boolean;
         required: string[];
       };
+      PositionAdjustmentRequest: {
+        additionalProperties: boolean;
+        required: string[];
+      };
+      PositionAdjustmentResponse: {
+        additionalProperties: boolean;
+        required: string[];
+      };
     };
   };
 }
@@ -71,7 +82,7 @@ describe('worker OpenAPI', () => {
     const raw = fs.readFileSync(p, 'utf8');
     const json = JSON.parse(raw) as OpenApiDocument;
 
-    expect(json.info.version).toBe('5.3.0');
+    expect(json.info.version).toBe('5.4.0');
     expect(json.servers).toEqual([
       {
         url: 'https://btc-futures-assistant-relay.btcgpt-ck1173.workers.dev',
@@ -91,6 +102,9 @@ describe('worker OpenAPI', () => {
     expect(json.paths['/v1/plan/validate'].post.operationId).toBe(
       'validateTradePlan',
     );
+    expect(
+      json.paths['/v1/position-adjustment/validate'].post.operationId,
+    ).toBe('validatePositionAdjustment');
     expect(json.paths['/v1/trading-state/latest'].get.operationId).toBe(
       'getTradeLifecycle',
     );
@@ -100,6 +114,11 @@ describe('worker OpenAPI', () => {
 
     expect(
       json.paths['/v1/decision-context/latest'].get['x-openai-isConsequential'],
+    ).toBe(false);
+    expect(
+      json.paths['/v1/position-adjustment/validate'].post[
+        'x-openai-isConsequential'
+      ],
     ).toBe(false);
     expect(
       json.paths['/v1/snapshot/latest'].get['x-openai-isConsequential'],
@@ -119,6 +138,9 @@ describe('worker OpenAPI', () => {
     expect(json.paths['/v1/decision-context/latest'].get.security).toEqual([
       { actionKey: [] },
     ]);
+    expect(
+      json.paths['/v1/position-adjustment/validate'].post.security,
+    ).toEqual([{ actionKey: [] }]);
     expect(raw).not.toContain('bearerAuth');
 
     expect(json.components.schemas.DecisionContext.additionalProperties).toBe(
@@ -132,6 +154,19 @@ describe('worker OpenAPI', () => {
     );
     expect(json.components.schemas.DecisionContext.required).toContain(
       'timing',
+    );
+    expect(
+      json.components.schemas.PositionAdjustmentRequest.additionalProperties,
+    ).toBe(false);
+    expect(json.components.schemas.PositionAdjustmentRequest.required).toEqual([
+      'snapshotId',
+      'action',
+    ]);
+    expect(
+      json.components.schemas.PositionAdjustmentResponse.additionalProperties,
+    ).toBe(false);
+    expect(json.components.schemas.PositionAdjustmentResponse.required).toEqual(
+      ['ok', 'errors'],
     );
 
     expect(json.components.schemas.TradePlan.required).toContain('targets');
@@ -168,6 +203,10 @@ describe('worker OpenAPI', () => {
 
     expect(Array.from(raw).length).toBeLessThanOrEqual(7_500);
     expect(raw).toContain('getDecisionSnapshot');
+    expect(raw).toContain('validatePositionAdjustment');
+    expect(raw).toContain('triggerContract');
+    expect(raw).toContain('TRIGGERED');
+    expect(raw).toContain('재분석');
     expect(raw).toContain('instructionVersion=decision-context-v1');
     expect(raw).toContain('contextPackVersion=decision-context-v1');
     expect(raw).not.toContain('instructionVersion=phase23-v1');

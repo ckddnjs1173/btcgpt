@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "BTC Futures Assistant Actions",
-    "version": "5.3.0",
+    "version": "5.4.0",
     "description": "Unified BTCUSDT market, context, lifecycle, deterministic calculation, and analytics-only GPT decision telemetry actions."
   },
   "servers": [
@@ -1351,6 +1351,219 @@
             "additionalProperties": true
           }
         }
+      },
+      "PositionAdjustmentTargetInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["price", "requestedPercent"],
+        "properties": {
+          "price": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "requestedPercent": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 100
+          }
+        }
+      },
+      "PositionAdjustmentRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["snapshotId", "action"],
+        "properties": {
+          "snapshotId": {
+            "type": "string",
+            "description": "Exact snapshotId from the current Decision Context."
+          },
+          "action": {
+            "type": "string",
+            "enum": ["PARTIAL_EXIT", "EXIT", "MOVE_STOP", "CHANGE_TP"]
+          },
+          "requestedQuantity": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "requestedPercent": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 100
+          },
+          "stopPrice": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "targets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/PositionAdjustmentTargetInput"
+            }
+          },
+          "exitOrderType": {
+            "type": "string",
+            "enum": ["MAKER", "TAKER"],
+            "default": "TAKER"
+          }
+        }
+      },
+      "ValidatedAdjustmentTarget": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requestedPrice",
+          "alignedPrice",
+          "requestedPercent",
+          "alignedQuantity",
+          "notional"
+        ],
+        "properties": {
+          "requestedPrice": {
+            "type": "number"
+          },
+          "alignedPrice": {
+            "type": "number"
+          },
+          "requestedPercent": {
+            "type": "number"
+          },
+          "alignedQuantity": {
+            "type": "number"
+          },
+          "notional": {
+            "type": "number"
+          }
+        }
+      },
+      "ProjectedProtection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stopLossQuantity",
+          "takeProfitQuantity",
+          "stopLossCoverageRatio",
+          "takeProfitCoverageRatio"
+        ],
+        "properties": {
+          "stopLossQuantity": {
+            "type": "number"
+          },
+          "takeProfitQuantity": {
+            "type": "number"
+          },
+          "stopLossCoverageRatio": {
+            "type": ["number", "null"]
+          },
+          "takeProfitCoverageRatio": {
+            "type": ["number", "null"]
+          }
+        }
+      },
+      "PositionAdjustmentResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ok", "errors"],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "snapshotId": {
+            "type": ["string", "null"]
+          },
+          "requestedSnapshotId": {
+            "type": "string"
+          },
+          "currentSnapshotId": {
+            "type": ["string", "null"]
+          },
+          "marketGeneratedAt": {
+            "type": ["number", "null"]
+          },
+          "positionSource": {
+            "type": "string"
+          },
+          "side": {
+            "type": "string",
+            "enum": ["LONG", "SHORT"]
+          },
+          "currentQuantity": {
+            "type": "number"
+          },
+          "markPrice": {
+            "type": "number"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["PARTIAL_EXIT", "EXIT", "MOVE_STOP", "CHANGE_TP"]
+          },
+          "reduceOnlyRequired": {
+            "type": "boolean",
+            "const": true
+          },
+          "requestedQuantity": {
+            "type": ["number", "null"]
+          },
+          "alignedQuantity": {
+            "type": ["number", "null"]
+          },
+          "remainingQuantity": {
+            "type": "number"
+          },
+          "requestedStopPrice": {
+            "type": ["number", "null"]
+          },
+          "alignedStopPrice": {
+            "type": ["number", "null"]
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidatedAdjustmentTarget"
+            }
+          },
+          "estimatedFee": {
+            "type": ["number", "null"]
+          },
+          "estimatedSlippage": {
+            "type": ["number", "null"]
+          },
+          "projectedProtection": {
+            "$ref": "#/components/schemas/ProjectedProtection"
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tickSize", "stepSize", "minQuantity", "minNotional"],
+            "properties": {
+              "tickSize": {
+                "type": "number"
+              },
+              "stepSize": {
+                "type": "number"
+              },
+              "minQuantity": {
+                "type": "number"
+              },
+              "minNotional": {
+                "type": "number"
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -1810,6 +2023,81 @@
           }
         },
         "x-openai-isConsequential": false
+      }
+    },
+    "/v1/position-adjustment/validate": {
+      "post": {
+        "operationId": "validatePositionAdjustment",
+        "summary": "Validate a GPT-selected open-position adjustment without placing orders",
+        "description": "Pure validation/calculation for PARTIAL_EXIT, EXIT, MOVE_STOP, or CHANGE_TP against the exact latest snapshot and current read-only/manual position. Never creates or changes an exchange order.",
+        "security": [
+          {
+            "actionKey": []
+          }
+        ],
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PositionAdjustmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PositionAdjustmentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Snapshot changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PositionAdjustmentResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Storage unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

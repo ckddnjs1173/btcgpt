@@ -1,14 +1,9 @@
 import { buildDecisionContext } from './decision-context';
+import { loadLatestSnapshotRow } from './latest-snapshot-store';
 import { getCrossMarketContext } from './phase17-cross-market';
 import { buildContextPack } from './phase20-context-router';
 import { applyRelayFreshness } from './relay-freshness';
 import type { Env } from './index';
-
-type SnapshotRow = {
-  raw: string;
-  generatedAt: number;
-  receivedAt: number;
-};
 
 const MAX_RESPONSE_BYTES = 90_000;
 
@@ -26,14 +21,6 @@ function authorized(request: Request, expected: string): boolean {
   return bearer === `Bearer ${expected}` || direct === expected;
 }
 
-async function loadSnapshot(env: Env): Promise<SnapshotRow | null> {
-  if (!env.DB) throw new Error('DB_UNAVAILABLE');
-  return env.DB.prepare(
-    `SELECT payload AS raw, generated_at AS generatedAt,
-      received_at AS receivedAt FROM snapshot_latest WHERE id = 1`,
-  ).first<SnapshotRow>();
-}
-
 export async function handleDecisionContextRequest(
   request: Request,
   env: Env,
@@ -42,9 +29,9 @@ export async function handleDecisionContextRequest(
     return json({ error: 'UNAUTHORIZED' }, 401);
 
   const actionStartedAt = Date.now();
-  let stored: SnapshotRow | null;
+  let stored: Awaited<ReturnType<typeof loadLatestSnapshotRow>>;
   try {
-    stored = await loadSnapshot(env);
+    stored = await loadLatestSnapshotRow(env);
   } catch {
     return json({ error: 'STORAGE_UNAVAILABLE' }, 503);
   }
