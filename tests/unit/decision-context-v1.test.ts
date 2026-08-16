@@ -56,8 +56,9 @@ describe('decision-context-v1 transport', () => {
 
     expect(compact.snapshot.snapshotId).toBe('snap-v1');
     expect(compact.snapshot.marketIntelligence?.version).toBe(
-      'local-market-v1',
+      'local-market-v2',
     );
+    expect(compact.snapshot.marketIntelligence?.crossVenue).toBeNull();
     expect(compact.snapshot.marketIntelligence?.generatedAt).toBe(NOW);
     expect(compact.byteLength).toBeLessThan(RELAY_SNAPSHOT_MAX_BYTES);
   });
@@ -192,7 +193,7 @@ describe('Worker decision context builder', () => {
     expect(result.version).toBe('decision-context-v1');
     expect(result.snapshotId).toBe('snap-v1');
     expect(result.marketGeneratedAt).toBe(NOW - 1_000);
-    expect(result.cryptoMarket?.version).toBe('local-market-v1');
+    expect(result.cryptoMarket?.version).toBe('local-market-v2');
     expect(result.evidence.cryptoMarketAvailable).toBe(true);
     expect(result.completeness.leadAssetsAvailable).toBe(0);
     expect(result.timing.marketToRelayMs).toBe(500);
