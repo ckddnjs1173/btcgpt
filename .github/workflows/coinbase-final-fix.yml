@@ -1,0 +1,52 @@
+name: Temporary Coinbase Final Consistency Fix
+
+on:
+  push:
+    branches:
+      - agent/coinbase-spot-sensor
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/coinbase-spot-sensor
+      - name: Apply consistency fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/main/market/cross-venue/coinbase-spot-accumulator.ts')
+          text = p.read_text(encoding='utf-8')
+          old = """    if (\n      this.lastPrice === null &&\n      this.bidPrice === null &&\n      this.askPrice === null &&\n      !this.level2Synchronized\n    )\n      return null;"""
+          new = """    if (\n      this.lastPrice === null &&\n      this.bidPrice === null &&\n      this.askPrice === null &&\n      !this.level2Synchronized &&\n      this.lastLevel2ReceivedAt === null\n    )\n      return null;"""
+          if old not in text:
+              raise SystemExit('snapshot availability anchor missing')
+          text = text.replace(old, new, 1)
+          old = """    const bestBid = this.bidPrice ?? topBids[0]?.[0] ?? null;\n    const bestAsk = this.askPrice ?? topAsks[0]?.[0] ?? null;"""
+          new = """    const bestBid = this.level2Synchronized\n      ? (topBids[0]?.[0] ?? null)\n      : (this.bidPrice ?? null);\n    const bestAsk = this.level2Synchronized\n      ? (topAsks[0]?.[0] ?? null)\n      : (this.askPrice ?? null);"""
+          if old not in text:
+              raise SystemExit('top book anchor missing')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          p = Path('worker/openapi/GPT_INSTRUCTIONS.md')
+          text = p.read_text(encoding='utf-8')
+          old = '- `crossMarket`: Worker 저빈도 corroboration. `cryptoMarket.crossVenue`와 중복되면 더 신선한 provenance/age를 우선하고 독립 확인으로 이중계산하지 않는다.'
+          new = '- `crossMarket`: Worker 저빈도 corroboration. `cryptoMarket.crossVenue`와 겹치면 더 신선한 provenance/age를 우선하고 이중계산하지 않는다.'
+          if old not in text:
+              raise SystemExit('instruction trim anchor missing')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          npx prettier --write src/main/market/cross-venue/coinbase-spot-accumulator.ts worker/openapi/GPT_INSTRUCTIONS.md
+          git rm .github/workflows/coinbase-final-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main/market/cross-venue/coinbase-spot-accumulator.ts worker/openapi/GPT_INSTRUCTIONS.md
+          git commit -m "fix: align Coinbase book state semantics"
+          git push origin HEAD:agent/coinbase-spot-sensor
