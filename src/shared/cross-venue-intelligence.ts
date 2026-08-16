@@ -144,6 +144,7 @@ export const crossVenueIntelligenceSchema = z
         SOL: crossVenueAssetSchema.nullable(),
       })
       .strict(),
+    provenance: z.array(dataProvenanceSchema).max(24),
   })
   .strict();
 export type CrossVenueIntelligence = z.infer<
