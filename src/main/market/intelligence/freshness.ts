@@ -44,9 +44,15 @@ export const MULTICOIN_FRESHNESS_THRESHOLDS = {
 } as const satisfies Record<string, FreshnessThreshold>;
 
 function validateThreshold(threshold: FreshnessThreshold): void {
-  if (!Number.isFinite(threshold.normalMaxAgeMs) || threshold.normalMaxAgeMs <= 0)
+  if (
+    !Number.isFinite(threshold.normalMaxAgeMs) ||
+    threshold.normalMaxAgeMs <= 0
+  )
     throw new Error('INVALID_NORMAL_MAX_AGE');
-  if (!Number.isFinite(threshold.usableMaxAgeMs) || threshold.usableMaxAgeMs <= 0)
+  if (
+    !Number.isFinite(threshold.usableMaxAgeMs) ||
+    threshold.usableMaxAgeMs <= 0
+  )
     throw new Error('INVALID_USABLE_MAX_AGE');
   if (threshold.usableMaxAgeMs < threshold.normalMaxAgeMs)
     throw new Error('INVALID_FRESHNESS_RANGE');
