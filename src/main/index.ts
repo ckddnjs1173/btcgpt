@@ -11,6 +11,7 @@ import { registerIpcHandlers } from './ipc/register-handlers';
 import { logger } from './logging/logger';
 import { MarketDataService } from './market/service';
 import { LeadCoreMarketService } from './market/multicoin/lead-service';
+import { AltMarketService } from './market/multicoin/alt-service';
 import type { SnapshotOptions } from './market/snapshot';
 import { createCompactRelaySnapshot } from './market/compact-snapshot';
 import { generateSnapshot } from './market/snapshot';
@@ -47,6 +48,7 @@ let tray: Tray | null = null;
 let database: AppDatabase | null = null;
 let marketData: MarketDataService | null = null;
 let leadCoreMarket: LeadCoreMarketService | null = null;
+let altMarket: AltMarketService | null = null;
 let relayUploader: RelayUploader | null = null;
 let accountService: AccountService | null = null;
 let notificationMonitor: OperationalNotificationMonitor | null = null;
@@ -89,6 +91,8 @@ app.on('will-quit', () => {
   accountService = null;
   relayUploader?.stop();
   relayUploader = null;
+  altMarket?.stop();
+  altMarket = null;
   leadCoreMarket?.stop();
   leadCoreMarket = null;
   marketData?.stop();
@@ -120,6 +124,7 @@ void app.whenReady().then(() => {
   });
   marketData = new MarketDataService(database);
   leadCoreMarket = new LeadCoreMarketService();
+  altMarket = new AltMarketService();
   const naverStore = new NaverCredentialStore(database);
   const accountCredentialStore = new CredentialStore(database);
   externalContext = new ExternalContextService(
@@ -258,6 +263,7 @@ void app.whenReady().then(() => {
       );
     });
     leadCoreMarket.start();
+    altMarket.start();
   }
   externalContext.start();
   const environmentRelay =
@@ -303,9 +309,10 @@ void app.whenReady().then(() => {
     if (quitting || resumeRecoveryInProgress) return;
     resumeRecoveryInProgress = true;
     logger.info(
-      'System resumed; restarting live market, lead-core, and account streams',
+      'System resumed; restarting live BTC, lead-core, alt-market, and account streams',
     );
     try {
+      altMarket?.stop();
       leadCoreMarket?.stop();
       marketData?.stop();
       accountService?.stop();
@@ -328,6 +335,7 @@ void app.whenReady().then(() => {
             resumeRecoveryInProgress = false;
           });
         leadCoreMarket?.start();
+        altMarket?.start();
       } else resumeRecoveryInProgress = false;
       accountService?.start();
     } catch (error) {
