@@ -229,7 +229,13 @@ export class CoinbaseSpotAccumulator {
         microPrice,
         level2ObservedAt: this.level2ObservedAt,
       },
-      connection: input,
+      connection: {
+        connected: input.connected,
+        lastMessageAt: input.lastMessageAt,
+        lastHeartbeatAt: input.lastHeartbeatAt,
+        reconnectCount: input.reconnectCount,
+        sequenceGapCount: input.sequenceGapCount,
+      },
       provenance,
     });
   }
