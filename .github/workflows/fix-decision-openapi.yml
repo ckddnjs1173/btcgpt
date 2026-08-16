@@ -1,0 +1,63 @@
+name: Temporary Decision OpenAPI Fixer
+
+on:
+  push:
+    branches:
+      - agent/decision-context-v1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: agent/decision-context-v1
+
+      - name: Patch Decision Context OpenAPI
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('worker/openapi/openapi.json')
+          doc = json.loads(path.read_text(encoding='utf-8'))
+
+          op = doc['paths']['/v1/decision-context/latest']['get']
+          op['security'] = [{'actionKey': []}]
+          op['x-openai-isConsequential'] = False
+
+          trade_plan_snapshot = doc['components']['schemas']['TradePlan']['properties']['snapshotId']
+          trade_plan_snapshot['description'] = (
+              'snapshotId from the live decision context used for this analysis. '
+              'Validation rejects a superseded or mismatched market snapshot.'
+          )
+
+          decision_record = doc['components']['schemas']['DecisionRecord']['properties']
+          decision_record['snapshotId']['description'] = (
+              'snapshotId from the exact live Decision Context used for this decision.'
+          )
+          decision_record['marketGeneratedAt']['description'] = (
+              'marketGeneratedAt from the same live Decision Context used for this decision.'
+          )
+
+          path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
+      - name: Commit OpenAPI patch if needed
+        shell: bash
+        run: |
+          if git diff --quiet -- worker/openapi/openapi.json; then
+            echo "No OpenAPI changes needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add worker/openapi/openapi.json
+          git commit -m "fix decision context openapi contract"
+          git push origin HEAD:agent/decision-context-v1
