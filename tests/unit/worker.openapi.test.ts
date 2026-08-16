@@ -77,6 +77,15 @@ interface OpenApiDocument {
         additionalProperties: boolean;
         required: string[];
       };
+      LocalMarketIntelligence: {
+        additionalProperties: boolean;
+        required: string[];
+        properties: { version: { enum: string[] } };
+      };
+      CrossVenueIntelligence: {
+        additionalProperties: boolean;
+        required: string[];
+      };
     };
   };
 }
@@ -87,7 +96,7 @@ describe('worker OpenAPI', () => {
     const raw = fs.readFileSync(p, 'utf8');
     const json = JSON.parse(raw) as OpenApiDocument;
 
-    expect(json.info.version).toBe('5.5.0');
+    expect(json.info.version).toBe('5.6.0');
     expect(json.servers).toEqual([
       {
         url: 'https://btc-futures-assistant-relay.btcgpt-ck1173.workers.dev',
@@ -203,6 +212,18 @@ describe('worker OpenAPI', () => {
     expect(
       json.components.schemas.StructuredTriggerContract.required,
     ).toContain('sourceSnapshotId');
+    expect(
+      json.components.schemas.LocalMarketIntelligence.properties.version.enum,
+    ).toEqual(['local-market-v2']);
+    expect(json.components.schemas.LocalMarketIntelligence.required).toContain(
+      'crossVenue',
+    );
+    expect(
+      json.components.schemas.CrossVenueIntelligence.additionalProperties,
+    ).toBe(false);
+    expect(json.components.schemas.CrossVenueIntelligence.required).toContain(
+      'interpretationBoundary',
+    );
     expect(json.paths['/v1/snapshot/latest'].put).toBeUndefined();
   });
 

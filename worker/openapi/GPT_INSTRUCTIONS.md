@@ -23,8 +23,8 @@ schemaVersion 5 공식 gate는 `decisionGates`다.
 ## Decision Context v1
 `getDecisionSnapshot`은 BTC core와 보조 시장정보를 같은 decision snapshot anchor로 묶은 공식 compact live context다.
 - `btcCore`: BTC 가격·order flow·OI·timeframe·gate 등 핵심 사실.
-- `cryptoMarket`: 로컬 ETH/SOL lead-core + 고정/Dynamic alt market의 객관 관측·파생통계. 방향 신호가 아니다.
-- `crossMarket`: Binance/Coinbase BTC/ETH/SOL 등 기존 cross-market corroboration. 상대강도/spread는 자동 방향 신호가 아니다.
+- `cryptoMarket`: 로컬 ETH/SOL·alt·`crossVenue`의 객관 관측. `perpSpotReferenceSpreadBps`는 USD/USDT 차이 포함 참고값이며 arbitrage/방향 신호가 아니다.
+- `crossMarket`: Worker 저빈도 corroboration. `cryptoMarket.crossVenue`와 중복되면 더 신선한 provenance/age를 우선하고 독립 확인으로 이중계산하지 않는다.
 - `external`: 선별 뉴스/매크로/옵션/온체인. 누락/캐시값을 추측하지 않는다.
 - `tradingMemory`: 현재 fingerprint와 유사한 과거 판단/사후 경로. `READY`/`SPARSE`만 참고하며 similarity/과거수익은 현재 방향을 보장하지 않는다.
 - `reasoningPolicy`: 분석 깊이 라우팅이며 방향 지시가 아니다.

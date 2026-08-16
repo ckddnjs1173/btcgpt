@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+import {
+  crossVenueIntelligenceSchema,
+  type CrossVenueIntelligence,
+} from './cross-venue-intelligence';
 import type { AltMarketIntelligence } from './alt-market-intelligence';
 import {
   dataProvenanceSchema,
@@ -7,7 +11,7 @@ import {
   type LeadAssetObservation,
 } from './market-intelligence';
 
-export const LOCAL_MARKET_INTELLIGENCE_VERSION = 'local-market-v1' as const;
+export const LOCAL_MARKET_INTELLIGENCE_VERSION = 'local-market-v2' as const;
 export const DECISION_CONTEXT_VERSION = 'decision-context-v1' as const;
 
 const finite = z.number().finite();
@@ -175,6 +179,7 @@ export const localMarketIntelligenceSchema = z
       })
       .strict(),
     altMarket: compactAltMarketSchema.nullable(),
+    crossVenue: crossVenueIntelligenceSchema.nullable(),
     evidenceHealth: z.array(evidenceHealthSchema).max(128),
     provenance: z.array(dataProvenanceSchema).max(32),
   })
@@ -271,12 +276,14 @@ export function buildLocalMarketIntelligence(input: {
     SOLUSDT: LeadAssetObservation | null;
   };
   altMarket: AltMarketIntelligence | null;
+  crossVenue?: CrossVenueIntelligence | null;
   evidenceHealth: LocalMarketIntelligence['evidenceHealth'];
 }): LocalMarketIntelligence {
   const provenance = [
     ...(input.leadCore.ETHUSDT?.provenance ?? []),
     ...(input.leadCore.SOLUSDT?.provenance ?? []),
     ...(input.altMarket?.provenance ?? []),
+    ...(input.crossVenue?.provenance ?? []),
   ]
     .sort((a, b) => b.collectorReceivedAt - a.collectorReceivedAt)
     .filter(
@@ -310,6 +317,7 @@ export function buildLocalMarketIntelligence(input: {
           rotation: input.altMarket.rotation,
         }
       : null,
+    crossVenue: input.crossVenue ?? null,
     evidenceHealth: input.evidenceHealth,
     provenance,
   });
