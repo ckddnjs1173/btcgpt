@@ -83,6 +83,8 @@ describe('cross-venue intelligence', () => {
     );
     expect(result.assets.BTC?.coinbaseProductId).toBe('BTC-USD');
     expect(result.assets.BTC?.binanceInstrument).toBe('BTCUSDT');
+    expect(result.assets.BTC?.coinbaseSpot.lastPrice).toBe(100);
+    expect(result.assets.BTC?.binancePerp.markPrice).toBe(101);
     expect(result.assets.BTC?.quoteCurrencyMismatch).toBe(true);
     expect(result.assets.BTC?.derived.perpSpotReferenceSpreadBps).toBeCloseTo(
       100,
