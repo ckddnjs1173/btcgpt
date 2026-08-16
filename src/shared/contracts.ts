@@ -3,6 +3,7 @@ import type {
   StructuredTriggerInput,
 } from './trading/structured-trigger';
 import type { DeribitOptionsIntelligenceV2 } from './options-intelligence';
+import type { OnchainIntelligenceV1 } from './onchain-intelligence';
 export type {
   ApprovedPlanMonitoring,
   ApprovedPlanMonitoringState,
@@ -424,6 +425,7 @@ export interface ExternalContextSnapshot {
   sourceHealth: Record<string, ExternalSourceHealth>;
   riskContext: RiskContext;
   optionsV2: DeribitOptionsIntelligenceV2 | null;
+  onchainV1: OnchainIntelligenceV1 | null;
 }
 
 export interface ExternalContextStatus {

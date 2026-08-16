@@ -14,6 +14,15 @@ import { logger } from '../logging/logger';
 import { fetchRss, item, officialFeeds, sourceAdapters } from './adapters';
 import { deribitOptionsContextItem, fetchDeribitOptionsV2 } from './options-v2';
 import type { DeribitOptionsIntelligenceV2 } from '../../shared/options-intelligence';
+import type {
+  MempoolObservation,
+  NetworkDailyObservation,
+} from '../../shared/onchain-intelligence';
+import {
+  buildOnchainIntelligenceV1,
+  fetchCoinMetricsDailyObservation,
+  fetchMempoolObservation,
+} from './onchain-v1';
 
 type SourceName =
   | 'BINANCE_ANNOUNCEMENT'
@@ -75,6 +84,8 @@ export class ExternalContextService {
   private stopped = true;
   private updatedAt: number | null = null;
   private deribitOptionsV2: DeribitOptionsIntelligenceV2 | null = null;
+  private mempoolObservation: MempoolObservation | null = null;
+  private networkDailyObservation: NetworkDailyObservation | null = null;
 
   constructor(
     private readonly naverCredentials: () => {
@@ -210,6 +221,11 @@ export class ExternalContextService {
       sourceHealth,
       riskContext: this.riskContext(now, sourceHealth),
       optionsV2: this.deribitOptionsV2,
+      onchainV1: buildOnchainIntelligenceV1({
+        now,
+        mempool: this.mempoolObservation,
+        networkDaily: this.networkDailyObservation,
+      }),
     };
   }
 
@@ -224,11 +240,15 @@ export class ExternalContextService {
         const optionsV2 = await fetchDeribitOptionsV2();
         this.deribitOptionsV2 = optionsV2;
         records = [deribitOptionsContextItem(optionsV2)];
-      } else if (source === 'MEMPOOL_SPACE')
-        records = await sourceAdapters.mempool();
-      else if (source === 'COIN_METRICS_COMMUNITY')
-        records = await sourceAdapters.coinMetrics();
-      else if (source === 'ALTERNATIVE_ME')
+      } else if (source === 'MEMPOOL_SPACE') {
+        const collected = await fetchMempoolObservation();
+        this.mempoolObservation = collected.observation;
+        records = [collected.item];
+      } else if (source === 'COIN_METRICS_COMMUNITY') {
+        const collected = await fetchCoinMetricsDailyObservation();
+        this.networkDailyObservation = collected.observation;
+        records = [collected.item];
+      } else if (source === 'ALTERNATIVE_ME')
         records = await sourceAdapters.fearAndGreed();
       else if (source === 'GDELT') records = await sourceAdapters.gdelt();
       else if (source === 'NAVER_NEWS') {

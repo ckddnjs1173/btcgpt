@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "BTC Futures Assistant Actions",
-    "version": "5.7.0",
+    "version": "5.8.0",
     "description": "Unified BTCUSDT market, context, lifecycle, deterministic calculation, and analytics-only GPT decision telemetry actions."
   },
   "servers": [
@@ -304,6 +304,16 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/DeribitOptionsV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "onchainV1": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OnchainV1"
               },
               {
                 "type": "null"
@@ -1355,7 +1365,7 @@
           "external": {
             "type": "object",
             "additionalProperties": true,
-            "description": "Includes optionsV2 structured Deribit BTC options evidence when available."
+            "description": "Includes optionsV2 structured Deribit BTC options evidence when available. Includes onchainV1 objective background/regime evidence when available."
           },
           "tradingMemory": {
             "type": "object",
@@ -2360,6 +2370,124 @@
           }
         },
         "description": "Objective Deribit BTC options-market evidence. It is not a LONG/SHORT, arbitrage, max-pain, or price-target signal."
+      },
+      "OnchainV1": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "generatedAt",
+          "objectiveOnly",
+          "role",
+          "mempool",
+          "networkDaily",
+          "health",
+          "provenance"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "const": "onchain-v1"
+          },
+          "generatedAt": {
+            "type": "integer"
+          },
+          "objectiveOnly": {
+            "type": "boolean",
+            "const": true
+          },
+          "role": {
+            "type": "string",
+            "const": "BACKGROUND_REGIME_ONLY"
+          },
+          "mempool": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "observedAt",
+                  "transactionCount",
+                  "virtualSizeBytes",
+                  "totalFeeSats",
+                  "recommendedFees"
+                ],
+                "properties": {
+                  "observedAt": {
+                    "type": "integer"
+                  },
+                  "transactionCount": {
+                    "type": ["integer", "null"]
+                  },
+                  "virtualSizeBytes": {
+                    "type": ["integer", "null"]
+                  },
+                  "totalFeeSats": {
+                    "type": ["number", "null"]
+                  },
+                  "recommendedFees": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "networkDaily": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "periodAt",
+                  "observedAt",
+                  "activeAddressCount",
+                  "transactionCount",
+                  "totalFeesBtc",
+                  "metricNature"
+                ],
+                "properties": {
+                  "periodAt": {
+                    "type": "integer"
+                  },
+                  "observedAt": {
+                    "type": "integer"
+                  },
+                  "activeAddressCount": {
+                    "type": ["number", "null"]
+                  },
+                  "transactionCount": {
+                    "type": ["number", "null"]
+                  },
+                  "totalFeesBtc": {
+                    "type": ["number", "null"]
+                  },
+                  "metricNature": {
+                    "type": "string",
+                    "const": "REVISED"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "health": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "provenance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataProvenance"
+            }
+          }
+        },
+        "description": "Objective BTC on-chain background/regime evidence. Mempool is an observed snapshot; Coin Metrics daily history is treated as revision-capable and frozen in replay. Never a scalp trigger, entry gate, or directional signal."
       }
     }
   },
