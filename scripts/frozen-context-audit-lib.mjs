@@ -55,7 +55,14 @@ function percentile(values, quantile) {
 function distribution(values) {
   const numeric = values.map(finite).filter((value) => value !== null);
   if (numeric.length === 0) {
-    return { count: 0, min: null, p50: null, p95: null, max: null, mean: null };
+    return {
+      count: 0,
+      min: null,
+      p50: null,
+      p95: null,
+      max: null,
+      mean: null,
+    };
   }
   return {
     count: numeric.length,
@@ -73,7 +80,13 @@ function evidenceHealthRows(snapshot) {
 }
 
 function healthCounts(rows) {
-  const counts = { NORMAL: 0, DEGRADED: 0, STALE: 0, UNAVAILABLE: 0, UNKNOWN: 0 };
+  const counts = {
+    NORMAL: 0,
+    DEGRADED: 0,
+    STALE: 0,
+    UNAVAILABLE: 0,
+    UNKNOWN: 0,
+  };
   for (const row of rows) {
     const value = status(row.status);
     if (value) counts[value] += 1;
@@ -166,7 +179,8 @@ function axisState(snapshot, healthRows) {
 
 function completenessMismatches(snapshot, axes) {
   const completeness = record(snapshot.completeness) ?? {};
-  const actualLeadAssets = Number(axes.leadCore.ethAvailable) + Number(axes.leadCore.solAvailable);
+  const actualLeadAssets =
+    Number(axes.leadCore.ethAvailable) + Number(axes.leadCore.solAvailable);
   const actualDynamicAssets = axes.altBreadth.dynamicAssetCount;
   const actualCryptoAvailable = record(snapshot.cryptoMarket) !== null;
   const mismatches = [];
@@ -199,10 +213,12 @@ export function auditFrozenReplayInput(decisionId, replayInput) {
   const validDecisionContext = snapshot?.version === 'decision-context-v1';
   const healthRows = validDecisionContext ? evidenceHealthRows(snapshot) : [];
   const axes = validDecisionContext ? axisState(snapshot, healthRows) : null;
-  const timing = validDecisionContext ? record(snapshot.timing) ?? {} : {};
-  const gates = validDecisionContext ? record(snapshot.decisionGates) ?? {} : {};
+  const timing = validDecisionContext ? (record(snapshot.timing) ?? {}) : {};
+  const gates = validDecisionContext
+    ? (record(snapshot.decisionGates) ?? {})
+    : {};
   const completeness = validDecisionContext
-    ? record(snapshot.completeness) ?? {}
+    ? (record(snapshot.completeness) ?? {})
     : {};
 
   return {
@@ -213,7 +229,9 @@ export function auditFrozenReplayInput(decisionId, replayInput) {
     marketGeneratedAt: validDecisionContext
       ? finite(snapshot.marketGeneratedAt)
       : null,
-    contextGeneratedAt: validDecisionContext ? finite(snapshot.generatedAt) : null,
+    contextGeneratedAt: validDecisionContext
+      ? finite(snapshot.generatedAt)
+      : null,
     payloadBytes: payloadBytes(replayInput),
     decisionGate: validDecisionContext
       ? {
@@ -229,7 +247,9 @@ export function auditFrozenReplayInput(decisionId, replayInput) {
           marketToRelayMs: finite(timing.marketToRelayMs),
           relayToActionStartMs: finite(timing.relayToActionStartMs),
           contextBuildMs: finite(timing.contextBuildMs),
-          cryptoMarketAgeMs: finite(record(snapshot.evidence)?.cryptoMarketAgeMs),
+          cryptoMarketAgeMs: finite(
+            record(snapshot.evidence)?.cryptoMarketAgeMs,
+          ),
         }
       : null,
     axes,
@@ -264,11 +284,14 @@ export function auditFrozenReplayInput(decisionId, replayInput) {
 
 function axisAvailability(cases, axisName) {
   const valid = cases.filter((item) => item.validDecisionContext);
-  const available = valid.filter((item) => item.axes?.[axisName]?.available === true);
+  const available = valid.filter(
+    (item) => item.axes?.[axisName]?.available === true,
+  );
   return {
     validCases: valid.length,
     availableCases: available.length,
-    availabilityRate: valid.length === 0 ? null : available.length / valid.length,
+    availabilityRate:
+      valid.length === 0 ? null : available.length / valid.length,
   };
 }
 
@@ -336,7 +359,9 @@ export function buildFrozenContextAudit(caseAudits) {
     validDecisionContextRate: validCases.length / caseAudits.length,
     payloadBytes: distribution(caseAudits.map((item) => item.payloadBytes)),
     timing: {
-      marketAgeMs: distribution(validCases.map((item) => item.timing?.marketAgeMs)),
+      marketAgeMs: distribution(
+        validCases.map((item) => item.timing?.marketAgeMs),
+      ),
       cryptoMarketAgeMs: distribution(
         validCases.map((item) => item.timing?.cryptoMarketAgeMs),
       ),
@@ -373,7 +398,13 @@ export function buildFrozenContextAudit(caseAudits) {
     health: {
       aggregateCounts: validCases.reduce(
         (counts, item) => {
-          for (const key of ['NORMAL', 'DEGRADED', 'STALE', 'UNAVAILABLE', 'UNKNOWN']) {
+          for (const key of [
+            'NORMAL',
+            'DEGRADED',
+            'STALE',
+            'UNAVAILABLE',
+            'UNKNOWN',
+          ]) {
             counts[key] += item.health?.counts?.[key] ?? 0;
           }
           return counts;
@@ -385,7 +416,9 @@ export function buildFrozenContextAudit(caseAudits) {
     completeness: {
       mismatchCases: mismatchCases.length,
       mismatchRate:
-        validCases.length === 0 ? null : mismatchCases.length / validCases.length,
+        validCases.length === 0
+          ? null
+          : mismatchCases.length / validCases.length,
       mismatchDetails: mismatchCases.map((item) => ({
         decisionId: item.decisionId,
         mismatches: item.completeness.mismatches,
