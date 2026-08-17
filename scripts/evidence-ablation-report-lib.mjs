@@ -105,7 +105,10 @@ function compareAdjacent(before, after) {
         after.averageAbstainOpportunityBps30m,
         before.averageAbstainOpportunityBps30m,
       ),
-      averageLatencyMs: subtract(after.averageLatencyMs, before.averageLatencyMs),
+      averageLatencyMs: subtract(
+        after.averageLatencyMs,
+        before.averageLatencyMs,
+      ),
       totalReportedCostUsd: subtract(
         after.totalReportedCostUsd,
         before.totalReportedCostUsd,
