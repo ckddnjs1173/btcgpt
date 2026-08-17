@@ -1,0 +1,38 @@
+name: Temporary Final Instruction Trim
+
+on:
+  push:
+    branches:
+      - agent/latency-soak-hardening
+    paths:
+      - .github/workflows/tmp-instruction-trim2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  trim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/latency-soak-hardening
+      - name: Trim wording
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('worker/openapi/GPT_INSTRUCTIONS.md')
+          s = p.read_text()
+          old = '- snapshotId/marketGeneratedAt/contextGeneratedAt은 같은 Decision Context 값 사용.'
+          new = '- snapshotId/marketGeneratedAt/contextGeneratedAt은 같은 Context 값 사용.'
+          if s.count(old) != 1:
+              raise SystemExit('trim anchor mismatch')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Commit trim
+        run: |
+          git config user.name "ckddnjs1173"
+          git config user.email "ckddnjs0929@gmail.com"
+          git add worker/openapi/GPT_INSTRUCTIONS.md
+          git commit -m "docs: fit canonical instruction limit"
+          git push
