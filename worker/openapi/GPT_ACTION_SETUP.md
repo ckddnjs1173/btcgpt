@@ -1,42 +1,82 @@
 # GPT Action Setup
 
+## Canonical versions
+
+- OpenAPI **5.9.0**: `worker/openapi/openapi.json`
+- Instructions: `worker/openapi/GPT_INSTRUCTIONS.md`
+- Live Decision Context: `decision-context-v1`
+- Instruction budget: **7,500 characters maximum**
+
+Use one current Instructions document and one current Action schema only. Historical Phase append files are migration notes; do not append them to the live GPT configuration.
+
 ## Custom GPT instructions
 
-Use **one current instruction file only**:
+In the GPT editor, replace the entire Instructions field with the complete contents of:
 
 `worker/openapi/GPT_INSTRUCTIONS.md`
 
-In the GPT editor, replace the entire Instructions field with that file. Do not append old Phase 13/confirmation/intelligence appendix files. They are historical migration notes and the editor has an 8,000-character instruction limit.
-
-`GPT_INSTRUCTIONS.md` is intentionally kept below that limit and contains the current base behavior, decision telemetry, context-v2 trading memory, adaptive reasoning, and position-management rules.
+Do not merge old instruction appendices into it. The repository test and production preflight both enforce the 7,500-character budget.
 
 ## Canonical Action schema
 
-The Custom GPT must use **one Action configuration only**. Paste the complete contents of:
+Create or update a single GPT Action using the complete contents of:
 
 `worker/openapi/openapi.json`
 
-into that Action's OpenAPI schema field. Do not split market-data and decision-telemetry schemas into separate Actions.
+공식 live anchor는 `getDecisionSnapshot`이다. `getLatestSnapshot` remains detail/debug fallback only.
 
 Expected operation IDs:
-1. `getLatestSnapshot`
-2. `getExternalContext`
-3. `validateTradePlan`
-4. `getTradeLifecycle`
-5. `recordDecision`
 
-If any are missing, replace the Action schema with the current `worker/openapi/openapi.json`.
+1. `getDecisionSnapshot` — official live Decision Context
+2. `getLatestSnapshot` — detailed snapshot/debug fallback
+3. `getExternalContext` — optional external expansion when requested by reasoning policy
+4. `validateTradePlan` — deterministic ENTER_NOW plan validation
+5. `validatePositionAdjustment` — deterministic position-management adjustment validation
+6. `getTradeLifecycle` — approved-plan / lifecycle detail
+7. `recordDecision` — analytics-only decision telemetry
+
+If any operation is missing, replace the Action schema with the current `worker/openapi/openapi.json`; do not hand-edit a partial schema in the GPT editor.
 
 ## Authentication
 
-Use API Key authentication with Bearer auth and the existing `ACTION_READ_KEY`. Never use `UPLOADER_WRITE_KEY` in the Custom GPT.
+Configure the Action as API Key authentication using Bearer auth and the existing `ACTION_READ_KEY`.
+
+Never use `UPLOADER_WRITE_KEY` in the Custom GPT. The upload key is only for the desktop-to-Worker snapshot write path.
 
 ## New-entry runtime order
 
-1. `getLatestSnapshot`
-2. analyze `decisionGates`, `intelligenceContext`, and `reasoningPolicy`
-3. if final action is `ENTER_NOW`, `validateTradePlan` with the same `snapshotId`
-4. `recordDecision`
-5. answer the user
+1. Call `getDecisionSnapshot` and use that response's `snapshotId`, `marketGeneratedAt`, `generatedAt`, `decisionGates`, BTC core, crypto market, external evidence, memory, reasoning policy, and position-management context.
+2. If the response already shows a live position or management lifecycle, stop new-entry analysis and switch to position management.
+3. Apply `reasoningPolicy`. Call `getExternalContext` only when the current policy/instructions require external expansion.
+4. `WAIT_TRIGGER` may include one GPT-authored structured trigger, but a local `TRIGGERED` event is only a request for fresh reanalysis.
+5. For `ENTER_NOW`, call `validateTradePlan` with the same current `snapshotId`. A changed snapshot requires fresh `getDecisionSnapshot` analysis.
+6. Call `recordDecision` exactly once immediately before the user-facing answer.
 
-`recordDecision` is analytics-only telemetry. A telemetry failure must not rewrite the market conclusion or substitute invented trade values.
+`recordDecision` is analytics-only telemetry. Its failure must not rewrite the market conclusion, bypass validation, or create invented trade values.
+
+## WAIT trigger reanalysis
+
+When an approved GPT trigger becomes `TRIGGERED`:
+
+1. call a fresh `getDecisionSnapshot`;
+2. re-evaluate the current market rather than treating the trigger as entry permission;
+3. only a new GPT `ENTER_NOW` decision may proceed to `validateTradePlan`;
+4. record the new decision with `recordDecision`.
+
+## Position management runtime order
+
+1. Call a fresh `getDecisionSnapshot`.
+2. Use `getTradeLifecycle` only when approved-plan/lifecycle detail is needed.
+3. For exact `PARTIAL_EXIT`, `EXIT`, `MOVE_STOP`, or `CHANGE_TP` values, call `validatePositionAdjustment` with the same `snapshotId`.
+4. Call `recordDecision` exactly once before answering.
+
+## After Worker deployment
+
+After deploying a Worker revision that changes Action-visible contracts:
+
+1. replace the GPT Action schema with the current `worker/openapi/openapi.json`;
+2. replace the GPT Instructions with the current `worker/openapi/GPT_INSTRUCTIONS.md`;
+3. confirm Bearer authentication still uses `ACTION_READ_KEY`;
+4. use GPT Preview to test `getDecisionSnapshot` before relying on the GPT for live analysis.
+
+The repository production runbook is `docs/PRODUCTION_READINESS.md`.
