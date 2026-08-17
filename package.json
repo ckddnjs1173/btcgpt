@@ -33,9 +33,11 @@
     "research:report": "node scripts/research-report.mjs",
     "research:lead-lag": "node scripts/lead-lag-research.mjs",
     "research:ablation:prepare": "node scripts/evidence-ablation-prepare.mjs",
+    "ops:preflight": "node scripts/production-preflight.mjs",
+    "ops:postdeploy-smoke": "node scripts/production-postdeploy-smoke.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations && npm run test:lead-lag && npm run test:evidence-ablation"
+    "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations && npm run test:lead-lag && npm run test:evidence-ablation && node scripts/production-preflight.mjs --ci"
   },
   "keywords": [
     "bitcoin",
