@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/renderer/App';
@@ -141,7 +147,9 @@ describe('Phase 0 dashboard', () => {
     render(<App />);
     const makerInput = await screen.findByLabelText('Maker 수수료율');
     fireEvent.change(makerInput, { target: { value: '0.00017' } });
-    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+    });
     expect(makerInput).toHaveValue('0.00017');
   });
 });
