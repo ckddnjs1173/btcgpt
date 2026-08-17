@@ -19,6 +19,7 @@
     "test:migrations": "node scripts/d1-migration-validate.mjs",
     "test:lead-lag": "node --test scripts/lead-lag-lib.test.mjs",
     "test:evidence-ablation": "node --test scripts/evidence-ablation-lib.test.mjs",
+    "test:production-deploy": "node --test scripts/production-deploy-command.test.mjs",
     "e2e": "vitest run tests/e2e && playwright test",
     "e2e:electron": "playwright test",
     "test:security": "vitest run tests/security",
@@ -38,7 +39,7 @@
     "ops:postdeploy-smoke": "node scripts/production-postdeploy-smoke.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations && npm run test:lead-lag && npm run test:evidence-ablation && node scripts/production-preflight.mjs --ci"
+    "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations && npm run test:lead-lag && npm run test:evidence-ablation && npm run test:production-deploy && node scripts/production-preflight.mjs --ci"
   },
   "keywords": [
     "bitcoin",
