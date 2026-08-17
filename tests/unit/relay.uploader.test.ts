@@ -50,6 +50,38 @@ describe('RelayUploader snapshot settings', () => {
     }
   });
 
+  it('captures relay round-trip and server receive timing', async () => {
+    const relayReceivedAt = Date.now() + 25;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({ ok: true, receivedAt: relayReceivedAt }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            },
+          ),
+        ),
+      ),
+    );
+    const uploader = new RelayUploader(new MarketCache(), {
+      baseUrl: 'https://relay.example.workers.dev',
+      uploadKey: 'x'.repeat(32),
+    });
+
+    await uploader.uploadOnce();
+    const status = uploader.getStatus();
+    expect(status.connected).toBe(true);
+    expect(status.lastServerReceivedAt).toBe(relayReceivedAt);
+    expect(status.lastSnapshotGeneratedAt).toEqual(expect.any(Number));
+    expect(status.lastRoundTripMs).toEqual(expect.any(Number));
+    expect(status.lastMarketToRelayReceiveMs).toEqual(expect.any(Number));
+    expect(status.lastRoundTripMs).toBeGreaterThanOrEqual(0);
+    expect(status.lastMarketToRelayReceiveMs).toBeGreaterThanOrEqual(0);
+  });
+
   it('serializes uploads so an older request cannot finish last', async () => {
     const resolvers: Array<() => void> = [];
     const fetchMock = vi.fn(

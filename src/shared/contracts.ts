@@ -589,6 +589,10 @@ export interface RelayStatus {
   consecutiveFailures: number;
   error: string | null;
   lastPayloadBytes?: number | null;
+  lastSnapshotGeneratedAt?: number | null;
+  lastServerReceivedAt?: number | null;
+  lastRoundTripMs?: number | null;
+  lastMarketToRelayReceiveMs?: number | null;
 }
 
 export interface RelayConfigurationInput {

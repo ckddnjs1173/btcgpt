@@ -64,6 +64,10 @@ export class RelayUploader {
       consecutiveFailures: 0,
       error: null,
       lastPayloadBytes: null,
+      lastSnapshotGeneratedAt: null,
+      lastServerReceivedAt: null,
+      lastRoundTripMs: null,
+      lastMarketToRelayReceiveMs: null,
     };
   }
 
@@ -124,16 +128,38 @@ export class RelayUploader {
         body: compact.json,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
+      const responseBody = await response.text();
       if (!response.ok) {
-        const body = (await response.text()).slice(0, 240);
+        const body = responseBody.slice(0, 240);
         throw new Error(
           `Relay upload failed: HTTP ${response.status}${body ? ` ${body}` : ''}`,
         );
       }
+      let serverReceivedAt: number | null = null;
+      if (responseBody) {
+        try {
+          const parsed = JSON.parse(responseBody) as { receivedAt?: unknown };
+          if (
+            typeof parsed.receivedAt === 'number' &&
+            Number.isFinite(parsed.receivedAt)
+          )
+            serverReceivedAt = parsed.receivedAt;
+        } catch {
+          // A successful upload remains successful if optional timing metadata is absent.
+        }
+      }
+      const successAt = Date.now();
       this.status.connected = true;
-      this.status.lastSuccessAt = Date.now();
+      this.status.lastSuccessAt = successAt;
       this.status.consecutiveFailures = 0;
       this.status.error = null;
+      this.status.lastSnapshotGeneratedAt = fullSnapshot.generatedAt;
+      this.status.lastServerReceivedAt = serverReceivedAt;
+      this.status.lastRoundTripMs = Math.max(0, successAt - attemptAt);
+      this.status.lastMarketToRelayReceiveMs =
+        serverReceivedAt === null
+          ? null
+          : Math.max(0, serverReceivedAt - fullSnapshot.generatedAt);
     } catch (error) {
       this.status.connected = false;
       this.status.consecutiveFailures += 1;
