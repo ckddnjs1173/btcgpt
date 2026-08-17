@@ -3,9 +3,13 @@ import { handleEvalV2PathQualityRequest } from './eval-v2-path-quality-route';
 import { handler as phase20Handler } from './phase20';
 import { handleResearchReadRequest } from './phase24-25-research';
 import { capturePlanLeverageFromSnapshot } from './phase25-leverage';
+import { handleResearchDecisionCohortsRequest } from './research-decision-cohorts-route';
 import { handleResearchOpsRequest } from './research-ops';
 
 export async function handler(request: Request, env: Env): Promise<Response> {
+  const cohortResponse = await handleResearchDecisionCohortsRequest(request, env);
+  if (cohortResponse) return cohortResponse;
+
   const pathQualityResponse = await handleEvalV2PathQualityRequest(
     request,
     env,
