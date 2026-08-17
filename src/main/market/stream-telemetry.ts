@@ -61,7 +61,9 @@ export class StreamTelemetry {
     if (ageMs > this.staleMessageThresholdMs) this.staleMessages += 1;
   }
 
-  recordParseError(): void {
+  recordParseError(receivedAt: number): void {
+    this.messagesReceived += 1;
+    this.lastMessageAt = receivedAt;
     this.parseErrors += 1;
   }
 
