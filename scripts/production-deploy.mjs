@@ -31,11 +31,7 @@ function run(executable, args, options = {}) {
 
 function npm(args, options) {
   const invocation = resolveNpmInvocation();
-  run(
-    invocation.executable,
-    [...invocation.prefixArgs, ...args],
-    options,
-  );
+  run(invocation.executable, [...invocation.prefixArgs, ...args], options);
 }
 
 console.log('BTC Futures Assistant production deploy orchestrator');
