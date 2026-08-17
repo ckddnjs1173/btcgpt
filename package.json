@@ -19,6 +19,7 @@
     "test:migrations": "node scripts/d1-migration-validate.mjs",
     "test:lead-lag": "node --test scripts/lead-lag-lib.test.mjs",
     "test:evidence-ablation": "node --test scripts/evidence-ablation-lib.test.mjs",
+    "test:evidence-ablation-report": "node --test scripts/evidence-ablation-report-lib.test.mjs",
     "test:production-deploy": "node --test scripts/production-deploy-command.test.mjs",
     "e2e": "vitest run tests/e2e && playwright test",
     "e2e:electron": "playwright test",
@@ -34,12 +35,13 @@
     "research:report": "node scripts/research-report.mjs",
     "research:lead-lag": "node scripts/lead-lag-research.mjs",
     "research:ablation:prepare": "node scripts/evidence-ablation-prepare.mjs",
+    "research:ablation:report": "node scripts/evidence-ablation-report.mjs",
     "ops:preflight": "node scripts/production-preflight.mjs",
     "ops:deploy": "node scripts/production-deploy.mjs",
     "ops:postdeploy-smoke": "node scripts/production-postdeploy-smoke.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations && npm run test:lead-lag && npm run test:evidence-ablation && npm run test:production-deploy && node scripts/production-preflight.mjs --ci"
+    "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations && npm run test:lead-lag && npm run test:evidence-ablation && npm run test:evidence-ablation-report && npm run test:production-deploy && node scripts/production-preflight.mjs --ci"
   },
   "keywords": [
     "bitcoin",
