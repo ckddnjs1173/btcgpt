@@ -4,6 +4,7 @@
 
 - OpenAPI **5.9.0**: `worker/openapi/openapi.json`
 - Instructions: `worker/openapi/GPT_INSTRUCTIONS.md`
+- GPT policy/telemetry instruction version: `gpt-policy-v2`
 - Live Decision Context: `decision-context-v1`
 - Instruction budget: **7,500 characters maximum**
 
@@ -50,7 +51,7 @@ Never use `UPLOADER_WRITE_KEY` in the Custom GPT. The upload key is only for the
 3. Apply `reasoningPolicy`. Call `getExternalContext` only when the current policy/instructions require external expansion.
 4. `WAIT_TRIGGER` may include one GPT-authored structured trigger, but a local `TRIGGERED` event is only a request for fresh reanalysis.
 5. For `ENTER_NOW`, call `validateTradePlan` with the same current `snapshotId`. A changed snapshot requires fresh `getDecisionSnapshot` analysis.
-6. Call `recordDecision` exactly once immediately before the user-facing answer.
+6. Call `recordDecision` exactly once immediately before the user-facing answer, with `instructionVersion=gpt-policy-v2` and `contextPackVersion=decision-context-v1`.
 
 `recordDecision` is analytics-only telemetry. Its failure must not rewrite the market conclusion, bypass validation, or create invented trade values.
 
@@ -68,7 +69,7 @@ When an approved GPT trigger becomes `TRIGGERED`:
 1. Call a fresh `getDecisionSnapshot`.
 2. Use `getTradeLifecycle` only when approved-plan/lifecycle detail is needed.
 3. For exact `PARTIAL_EXIT`, `EXIT`, `MOVE_STOP`, or `CHANGE_TP` values, call `validatePositionAdjustment` with the same `snapshotId`.
-4. Call `recordDecision` exactly once before answering.
+4. Call `recordDecision` exactly once before answering, using the current GPT policy version.
 
 ## After Worker deployment
 
