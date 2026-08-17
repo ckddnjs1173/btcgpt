@@ -72,7 +72,12 @@ function normalizePathQuality(result) {
   };
 }
 
-function normalizeBenchmark(profile, result, pathQualityResult, expectedCaseCount) {
+function normalizeBenchmark(
+  profile,
+  result,
+  pathQualityResult,
+  expectedCaseCount,
+) {
   const pathQuality = normalizePathQuality(pathQualityResult);
   const body = result?.ok === true ? result.body : null;
   if (!body || typeof body !== 'object') {
@@ -170,10 +175,7 @@ function pathDeltas(before, after) {
       ),
     },
     management: {
-      samples: subtract(
-        after.management?.samples,
-        before.management?.samples,
-      ),
+      samples: subtract(after.management?.samples, before.management?.samples),
       meanFavorable30mBps: subtract(
         after.management?.meanFavorable30mBps,
         before.management?.meanFavorable30mBps,

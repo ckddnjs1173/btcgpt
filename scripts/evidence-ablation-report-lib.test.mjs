@@ -186,16 +186,12 @@ test('adds descriptive eval-v2 ENTER and WAIT path deltas when available', () =>
   assert.equal(lead.pathComparable, true);
   assert.ok(Math.abs(lead.pathDeltas.enter.meanMfeR - 0.3) < 1e-12);
   assert.ok(Math.abs(lead.pathDeltas.enter.meanMaeR + 0.1) < 1e-12);
-  assert.ok(
-    Math.abs(lead.pathDeltas.enter.tp1TargetFirstRate - 0.1) < 1e-12,
-  );
+  assert.ok(Math.abs(lead.pathDeltas.enter.tp1TargetFirstRate - 0.1) < 1e-12);
   assert.ok(Math.abs(lead.pathDeltas.wait.triggerHitRate - 0.1) < 1e-12);
   assert.ok(
     Math.abs(lead.pathDeltas.wait.invalidationBeforeTriggerRate + 0.05) < 1e-12,
   );
-  assert.ok(
-    Math.abs(lead.pathDeltas.wait.maxChaseExceededRate + 0.05) < 1e-12,
-  );
+  assert.ok(Math.abs(lead.pathDeltas.wait.maxChaseExceededRate + 0.05) < 1e-12);
 });
 
 test('marks profile comparison invalid when matched frozen case counts drift', () => {

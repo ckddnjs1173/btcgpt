@@ -6,7 +6,10 @@ import { capturePlanLeverageFromSnapshot } from './phase25-leverage';
 import { handleResearchOpsRequest } from './research-ops';
 
 export async function handler(request: Request, env: Env): Promise<Response> {
-  const pathQualityResponse = await handleEvalV2PathQualityRequest(request, env);
+  const pathQualityResponse = await handleEvalV2PathQualityRequest(
+    request,
+    env,
+  );
   if (pathQualityResponse) return pathQualityResponse;
 
   const researchOpsResponse = await handleResearchOpsRequest(request, env);

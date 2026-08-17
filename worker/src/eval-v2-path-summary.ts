@@ -105,7 +105,9 @@ export function aggregateEvalV2PathQuality(rows: EvalV2ScoreRow[]) {
       pushFinite(enterTimeToMfeMs, evaluation.timeToMfeMs);
       pushFinite(enterTimeToMaeMs, evaluation.timeToMaeMs);
 
-      const targets = Array.isArray(evaluation.targets) ? evaluation.targets : [];
+      const targets = Array.isArray(evaluation.targets)
+        ? evaluation.targets
+        : [];
       const tp1 = record(targets[0]);
       const ordering = tp1?.orderingVsStop;
       if (
