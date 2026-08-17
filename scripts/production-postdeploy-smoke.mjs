@@ -24,15 +24,12 @@ if (
   throw new Error('ACTION_READ_KEY is missing from the relay secret file');
 
 const requestStartedAt = Date.now();
-const response = await fetch(
-  new URL('/v1/decision-context/latest', baseUrl),
-  {
-    headers: {
-      authorization: `Bearer ${secrets.ACTION_READ_KEY}`,
-    },
-    signal: AbortSignal.timeout(10_000),
+const response = await fetch(new URL('/v1/decision-context/latest', baseUrl), {
+  headers: {
+    authorization: `Bearer ${secrets.ACTION_READ_KEY}`,
   },
-);
+  signal: AbortSignal.timeout(10_000),
+});
 const body = await response.text();
 const responseReceivedAt = Date.now();
 if (!response.ok)

@@ -56,7 +56,10 @@ check(
 const npmVersion = command(process.platform === 'win32' ? 'npm.cmd' : 'npm', [
   '--version',
 ]);
-check(compareVersion(npmVersion, '11.0.0') >= 0, `npm 11+ required; found ${npmVersion}`);
+check(
+  compareVersion(npmVersion, '11.0.0') >= 0,
+  `npm 11+ required; found ${npmVersion}`,
+);
 check(
   packageJson.engines?.node === '>=24.0.0',
   'package.json Node engine must remain >=24.0.0',
@@ -141,7 +144,10 @@ check(
   wrangler.includes('main = "worker/src/phase25.ts"'),
   'wrangler.toml Worker entrypoint changed unexpectedly',
 );
-check(wrangler.includes('binding = "DB"'), 'wrangler.toml must retain D1 binding DB');
+check(
+  wrangler.includes('binding = "DB"'),
+  'wrangler.toml must retain D1 binding DB',
+);
 check(
   wrangler.includes('database_name = "btc-futures-assistant"'),
   'wrangler.toml D1 database name changed unexpectedly',
@@ -174,9 +180,15 @@ for (let index = 0; index < migrationFiles.length; index += 1) {
 
 if (!ciMode) {
   const branch = command('git', ['branch', '--show-current']);
-  check(branch === 'main', `Production preflight must run on main; found ${branch || 'detached HEAD'}`);
+  check(
+    branch === 'main',
+    `Production preflight must run on main; found ${branch || 'detached HEAD'}`,
+  );
   const workingTree = command('git', ['status', '--porcelain']);
-  check(workingTree.length === 0, 'Working tree must be clean before production deployment');
+  check(
+    workingTree.length === 0,
+    'Working tree must be clean before production deployment',
+  );
 
   try {
     const head = command('git', ['rev-parse', 'HEAD']);
@@ -186,7 +198,9 @@ if (!ciMode) {
       'HEAD differs from origin/main; run git fetch/pull before production deployment',
     );
   } catch {
-    note('origin/main could not be compared; run git fetch origin before deploying.');
+    note(
+      'origin/main could not be compared; run git fetch origin before deploying.',
+    );
   }
 
   check(
@@ -201,7 +215,9 @@ note(
 );
 note(`OpenAPI: ${openApi.info?.version ?? 'missing'}`);
 note(`GPT instructions: ${instructionLength}/7500 characters`);
-note(`Worker entrypoint: ${/main = "([^"]+)"/.exec(wrangler)?.[1] ?? 'missing'}`);
+note(
+  `Worker entrypoint: ${/main = "([^"]+)"/.exec(wrangler)?.[1] ?? 'missing'}`,
+);
 
 if (failures.length > 0) {
   console.error('Production preflight FAILED');
