@@ -1,0 +1,196 @@
+from pathlib import Path
+import json
+
+
+def replace_once(path: str, old: str, new: str) -> None:
+    p = Path(path)
+    s = p.read_text()
+    count = s.count(old)
+    if count != 1:
+        raise SystemExit(f"{path}: expected one replacement, found {count}: {old[:80]!r}")
+    p.write_text(s.replace(old, new, 1))
+
+
+replace_once(
+    "src/shared/contracts.ts",
+    "  lastPayloadBytes?: number | null;\n}",
+    "  lastPayloadBytes?: number | null;\n  lastSnapshotGeneratedAt?: number | null;\n  lastServerReceivedAt?: number | null;\n  lastRoundTripMs?: number | null;\n  lastMarketToRelayReceiveMs?: number | null;\n}",
+)
+
+replace_once(
+    "src/main/relay/uploader.ts",
+    "      lastPayloadBytes: null,\n    };",
+    "      lastPayloadBytes: null,\n      lastSnapshotGeneratedAt: null,\n      lastServerReceivedAt: null,\n      lastRoundTripMs: null,\n      lastMarketToRelayReceiveMs: null,\n    };",
+)
+replace_once(
+    "src/main/relay/uploader.ts",
+    "      if (!response.ok) {\n        const body = (await response.text()).slice(0, 240);\n        throw new Error(\n          `Relay upload failed: HTTP ${response.status}${body ? ` ${body}` : ''}`,\n        );\n      }\n      this.status.connected = true;\n      this.status.lastSuccessAt = Date.now();\n      this.status.consecutiveFailures = 0;\n      this.status.error = null;",
+    "      const responseBody = await response.text();\n      if (!response.ok) {\n        const body = responseBody.slice(0, 240);\n        throw new Error(\n          `Relay upload failed: HTTP ${response.status}${body ? ` ${body}` : ''}`,\n        );\n      }\n      let serverReceivedAt: number | null = null;\n      if (responseBody) {\n        try {\n          const parsed = JSON.parse(responseBody) as { receivedAt?: unknown };\n          if (typeof parsed.receivedAt === 'number' && Number.isFinite(parsed.receivedAt))\n            serverReceivedAt = parsed.receivedAt;\n        } catch {\n          // A successful upload remains successful if optional timing metadata is absent.\n        }\n      }\n      const successAt = Date.now();\n      this.status.connected = true;\n      this.status.lastSuccessAt = successAt;\n      this.status.consecutiveFailures = 0;\n      this.status.error = null;\n      this.status.lastSnapshotGeneratedAt = fullSnapshot.generatedAt;\n      this.status.lastServerReceivedAt = serverReceivedAt;\n      this.status.lastRoundTripMs = Math.max(0, successAt - attemptAt);\n      this.status.lastMarketToRelayReceiveMs =\n        serverReceivedAt === null\n          ? null\n          : Math.max(0, serverReceivedAt - fullSnapshot.generatedAt);",
+)
+
+replace_once(
+    "worker/src/phase13.ts",
+    "    marketGeneratedAt: z.number().int().positive(),\n    parentDecisionId:",
+    "    marketGeneratedAt: z.number().int().positive(),\n    contextGeneratedAt: z.number().int().positive().optional(),\n    parentDecisionId:",
+)
+replace_once(
+    "worker/src/phase13.ts",
+    "  snapshotToRecordLatencyMs: number;\n  payload: string;",
+    "  snapshotToRecordLatencyMs: number;\n  contextGeneratedAt: number | null;\n  contextToRecordLatencyMs: number | null;\n  payload: string;",
+)
+replace_once(
+    "worker/src/phase13.ts",
+    "        snapshot_to_record_latency_ms AS snapshotToRecordLatencyMs,\n        payload",
+    "        snapshot_to_record_latency_ms AS snapshotToRecordLatencyMs,\n        context_generated_at AS contextGeneratedAt,\n        context_to_record_latency_ms AS contextToRecordLatencyMs,\n        payload",
+)
+replace_once(
+    "worker/src/phase13.ts",
+    "  snapshotToRecordLatencyMs: number,\n): Promise<void> {",
+    "  snapshotToRecordLatencyMs: number,\n  contextToRecordLatencyMs: number | null,\n): Promise<void> {",
+)
+replace_once(
+    "worker/src/phase13.ts",
+    "        snapshot_status, snapshot_to_record_latency_ms, plan_validation,\n        entry, stop, targets_json, payload\n      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "        snapshot_status, snapshot_to_record_latency_ms, context_generated_at,\n        context_to_record_latency_ms, plan_validation, entry, stop, targets_json,\n        payload\n      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+)
+replace_once(
+    "worker/src/phase13.ts",
+    "      snapshotStatus,\n      snapshotToRecordLatencyMs,\n      decision.planValidation,",
+    "      snapshotStatus,\n      snapshotToRecordLatencyMs,\n      decision.contextGeneratedAt ?? null,\n      contextToRecordLatencyMs,\n      decision.planValidation,",
+)
+replace_once(
+    "worker/src/phase13.ts",
+    "  const decision = parsed.data;\n  const recordedAt = Date.now();\n  if (decision.marketGeneratedAt > recordedAt + FUTURE_TOLERANCE_MS) {\n    return json({ error: 'FUTURE_MARKET_GENERATED_AT' }, 400);\n  }\n\n  const normalizedPayload = JSON.stringify(decision);",
+    "  const decision = parsed.data;\n  const recordedAt = Date.now();\n  if (decision.marketGeneratedAt > recordedAt + FUTURE_TOLERANCE_MS) {\n    return json({ error: 'FUTURE_MARKET_GENERATED_AT' }, 400);\n  }\n  if (\n    decision.contextGeneratedAt !== undefined &&\n    decision.contextGeneratedAt < decision.marketGeneratedAt\n  )\n    return json({ error: 'CONTEXT_GENERATED_BEFORE_MARKET' }, 400);\n  if (\n    decision.contextGeneratedAt !== undefined &&\n    decision.contextGeneratedAt > recordedAt + FUTURE_TOLERANCE_MS\n  )\n    return json({ error: 'FUTURE_CONTEXT_GENERATED_AT' }, 400);\n  const contextToRecordLatencyMs =\n    decision.contextGeneratedAt === undefined\n      ? null\n      : Math.max(0, recordedAt - decision.contextGeneratedAt);\n\n  const normalizedPayload = JSON.stringify(decision);",
+)
+replace_once(
+    "worker/src/phase13.ts",
+    "        snapshotToRecordLatencyMs: existing.snapshotToRecordLatencyMs,\n        replayCaseCaptured,",
+    "        snapshotToRecordLatencyMs: existing.snapshotToRecordLatencyMs,\n        contextGeneratedAt: existing.contextGeneratedAt,\n        contextToRecordLatencyMs: existing.contextToRecordLatencyMs,\n        replayCaseCaptured,",
+)
+replace_once(
+    "worker/src/phase13.ts",
+    "      snapshotToRecordLatencyMs,\n    );",
+    "      snapshotToRecordLatencyMs,\n      contextToRecordLatencyMs,\n    );",
+)
+replace_once(
+    "worker/src/phase13.ts",
+    "        snapshotToRecordLatencyMs,\n        replayCaseCaptured,",
+    "        snapshotToRecordLatencyMs,\n        contextGeneratedAt: decision.contextGeneratedAt ?? null,\n        contextToRecordLatencyMs,\n        replayCaseCaptured,",
+)
+
+replace_once(
+    "tests/unit/worker.phase13.test.ts",
+    "  snapshotToRecordLatencyMs: number;\n  payload: string;",
+    "  snapshotToRecordLatencyMs: number;\n  contextGeneratedAt: number | null;\n  contextToRecordLatencyMs: number | null;\n  payload: string;",
+)
+p = Path("tests/unit/worker.phase13.test.ts")
+s = p.read_text()
+start = "        } else if (query.includes('INSERT INTO decision_log')) {\n          const ["
+end = "          });\n        }\n        return Promise.resolve({ success: true });"
+a = s.index(start)
+b = s.index(end, a) + len("          });\n")
+replacement = """        } else if (query.includes('INSERT INTO decision_log')) {
+          const decisionId = String(values[0]);
+          this.decisions.set(decisionId, {
+            snapshotId: String(values[1]),
+            recordedAt: Number(values[3]),
+            snapshotStatus: values[12] as 'CURRENT' | 'SUPERSEDED',
+            snapshotToRecordLatencyMs: Number(values[13]),
+            contextGeneratedAt:
+              values[14] === null ? null : Number(values[14]),
+            contextToRecordLatencyMs:
+              values[15] === null ? null : Number(values[15]),
+            payload: String(values[20]),
+          });
+"""
+p.write_text(s[:a] + replacement + s[b:])
+replace_once(
+    "tests/unit/worker.phase13.test.ts",
+    "    expect(await duplicate.json()).toMatchObject({\n      ok: true,\n      decisionId: 'decision-a',\n      duplicate: true,\n      snapshotStatus: 'CURRENT',\n    });\n  });",
+    "    expect(await duplicate.json()).toMatchObject({\n      ok: true,\n      decisionId: 'decision-a',\n      duplicate: true,\n      snapshotStatus: 'CURRENT',\n    });\n  });\n\n  it('stores Decision Context to decision-record latency when supplied', async () => {\n    const generatedAt = Date.now();\n    await uploadSnapshot(env, snapshotFixture('snapshot-a', generatedAt));\n    const response = await record(\n      env,\n      decisionFixture({\n        decisionId: 'decision-latency',\n        marketGeneratedAt: generatedAt,\n        contextGeneratedAt: generatedAt,\n      }),\n    );\n    expect(response.status).toBe(201);\n    const payload = (await response.json()) as Record<string, unknown>;\n    expect(payload.contextGeneratedAt).toBe(generatedAt);\n    expect(payload.contextToRecordLatencyMs).toEqual(expect.any(Number));\n    expect(Number(payload.contextToRecordLatencyMs)).toBeGreaterThanOrEqual(0);\n  });",
+)
+
+p = Path("tests/unit/relay.uploader.test.ts")
+s = p.read_text()
+marker = "  it('serializes uploads so an older request cannot finish last', async () => {"
+if s.count(marker) != 1:
+    raise SystemExit("relay test marker mismatch")
+addition = """  it('captures relay round-trip and server receive timing', async () => {
+    const relayReceivedAt = Date.now() + 25;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ ok: true, receivedAt: relayReceivedAt }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        ),
+      ),
+    );
+    const uploader = new RelayUploader(new MarketCache(), {
+      baseUrl: 'https://relay.example.workers.dev',
+      uploadKey: 'x'.repeat(32),
+    });
+
+    await uploader.uploadOnce();
+    const status = uploader.getStatus();
+    expect(status.connected).toBe(true);
+    expect(status.lastServerReceivedAt).toBe(relayReceivedAt);
+    expect(status.lastSnapshotGeneratedAt).toEqual(expect.any(Number));
+    expect(status.lastRoundTripMs).toEqual(expect.any(Number));
+    expect(status.lastMarketToRelayReceiveMs).toEqual(expect.any(Number));
+    expect(status.lastRoundTripMs).toBeGreaterThanOrEqual(0);
+    expect(status.lastMarketToRelayReceiveMs).toBeGreaterThanOrEqual(0);
+  });
+
+"""
+p.write_text(s.replace(marker, addition + marker, 1))
+
+p = Path("worker/openapi/openapi.json")
+doc = json.loads(p.read_text())
+doc["info"]["version"] = "5.9.0"
+decision = doc["components"]["schemas"]["DecisionRecord"]
+props = decision["properties"]
+if "contextGeneratedAt" not in props:
+    ordered = {}
+    for key, value in props.items():
+        ordered[key] = value
+        if key == "marketGeneratedAt":
+            ordered["contextGeneratedAt"] = {
+                "type": "integer",
+                "description": "Copy generatedAt from the same Decision Context used for this decision. Optional for legacy callers.",
+            }
+    decision["properties"] = ordered
+for schema in doc["components"]["schemas"].values():
+    sp = schema.get("properties") if isinstance(schema, dict) else None
+    if isinstance(sp, dict) and "snapshotToRecordLatencyMs" in sp:
+        sp.setdefault("contextGeneratedAt", {"type": ["integer", "null"]})
+        sp.setdefault(
+            "contextToRecordLatencyMs",
+            {"type": ["integer", "null"], "minimum": 0},
+        )
+p.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n")
+
+replace_once(
+    "tests/unit/worker.openapi.test.ts",
+    "          marketGeneratedAt: { description?: string };\n          triggerContract?: unknown;",
+    "          marketGeneratedAt: { description?: string };\n          contextGeneratedAt?: { description?: string };\n          triggerContract?: unknown;",
+)
+replace_once(
+    "tests/unit/worker.openapi.test.ts",
+    "    expect(json.info.version).toBe('5.8.0');",
+    "    expect(json.info.version).toBe('5.9.0');",
+)
+replace_once(
+    "tests/unit/worker.openapi.test.ts",
+    "    expect(\n      json.components.schemas.DecisionRecord.properties.triggerContract,\n    ).toBeDefined();",
+    "    expect(\n      json.components.schemas.DecisionRecord.properties.contextGeneratedAt\n        ?.description,\n    ).toContain('Decision Context');\n    expect(\n      json.components.schemas.DecisionRecord.properties.triggerContract,\n    ).toBeDefined();",
+)
+
+replace_once(
+    "worker/openapi/GPT_INSTRUCTIONS.md",
+    "- snapshotId/marketGeneratedAt은 실제 사용한 동일 Decision Context에서 복사.",
+    "- snapshotId/marketGeneratedAt/contextGeneratedAt은 사용한 Decision Context 값 그대로.",
+)
