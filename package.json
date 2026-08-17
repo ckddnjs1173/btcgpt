@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "test:sqlite": "node scripts/sqlite-smoke.cjs",
     "test:migrations": "node scripts/d1-migration-validate.mjs",
+    "test:lead-lag": "node --test scripts/lead-lag-lib.test.mjs",
     "e2e": "vitest run tests/e2e && playwright test",
     "e2e:electron": "playwright test",
     "test:security": "vitest run tests/security",
@@ -28,9 +29,10 @@
     "replay:batch:prepare": "node scripts/replay-batch-prepare.mjs",
     "replay:batch:ingest": "node scripts/replay-batch-ingest.mjs",
     "research:report": "node scripts/research-report.mjs",
+    "research:lead-lag": "node scripts/lead-lag-research.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations"
+    "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations && npm run test:lead-lag"
   },
   "keywords": [
     "bitcoin",
@@ -69,7 +71,7 @@
     "@types/electron-squirrel-startup": "1.0.2",
     "@types/node": "24.13.3",
     "@types/react": "19.2.17",
-    "@types/react-dom": "19.2.3",
+    "@types/react-dom": "19.2.11",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "6.0.4",
     "@vitest/coverage-v8": "4.1.10",
