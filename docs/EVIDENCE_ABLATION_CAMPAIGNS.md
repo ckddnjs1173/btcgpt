@@ -56,6 +56,41 @@ The generated batch manifest records `evidenceProfile`, `ablationBasis`, and `ab
 
 Actual OpenAI Batch/Responses execution remains a paid research/evaluation action and requires explicit user approval. Preparing campaign files, frozen inputs, manifests, and comparison plans does not grant that approval.
 
+## Result reporting
+
+After the six experiment outputs have been ingested and scored, generate one matched comparison report from the campaign manifest:
+
+```powershell
+$env:RELAY_URL='https://your-worker.workers.dev'
+$env:ACTION_READ_KEY='...'
+npm run research:ablation:report -- research/ablation/campaign-manifest.json research/ablation/result
+```
+
+This command only calls existing authenticated read-only research endpoints. It writes:
+
+- `research/ablation/result.json`
+- `research/ablation/result.md`
+
+The report verifies that every profile has the expected frozen-case count before marking adjacent comparisons as valid. It then shows each profile and each cumulative evidence step separately for:
+
+- directional sample count and directional accuracy;
+- average 30-minute signed return;
+- WAIT/NO_TRADE sample count and remaining 30-minute opportunity;
+- average model latency;
+- reported API cost and cost per matched case.
+
+Adjacent deltas are reported in this order:
+
+- `BASELINE → LEAD_CORE`
+- `LEAD_CORE → ALT_BREADTH`
+- `ALT_BREADTH → COINBASE`
+- `COINBASE → OPTIONS_V2`
+- `OPTIONS_V2 → ONCHAIN_V1`
+
+The report does not create a scalar winner score. A positive signed-return delta is not sufficient by itself to promote an evidence source, and a lower abstain-opportunity value is not interpreted independently from how often the profile chose ENTER versus WAIT/NO_TRADE. Latency, cost, sample sufficiency, market-regime coverage and out-of-sample behavior remain separate review dimensions.
+
+No paid OpenAI API call is made by the reporting command.
+
 ## Interpretation
 
 Compare adjacent profiles first, not only `BASELINE` versus `ONCHAIN_V1`. A useful result should survive sufficient samples, multiple market regimes, latency/completeness cohorts, and an out-of-sample period.
