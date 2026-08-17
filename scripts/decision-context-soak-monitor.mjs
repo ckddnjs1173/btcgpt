@@ -70,12 +70,15 @@ while (Date.now() < endAt) {
   try {
     if (!appIsRunning()) throw new Error('Packaged app exited');
     const requestStartedAt = Date.now();
-    const response = await fetch(new URL('/v1/decision-context/latest', baseUrl), {
-      headers: {
-        authorization: `Bearer ${secrets.ACTION_READ_KEY}`,
+    const response = await fetch(
+      new URL('/v1/decision-context/latest', baseUrl),
+      {
+        headers: {
+          authorization: `Bearer ${secrets.ACTION_READ_KEY}`,
+        },
+        signal: AbortSignal.timeout(10_000),
       },
-      signal: AbortSignal.timeout(10_000),
-    });
+    );
     const body = await response.text();
     if (!response.ok)
       throw new Error(`Decision Context read returned HTTP ${response.status}`);
