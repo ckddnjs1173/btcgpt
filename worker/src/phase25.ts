@@ -1,10 +1,17 @@
 import type { Env } from './index';
+import { handleEvalV2PathQualityRequest } from './eval-v2-path-quality-route';
 import { handler as phase20Handler } from './phase20';
 import { handleResearchReadRequest } from './phase24-25-research';
 import { capturePlanLeverageFromSnapshot } from './phase25-leverage';
 import { handleResearchOpsRequest } from './research-ops';
 
 export async function handler(request: Request, env: Env): Promise<Response> {
+  const pathQualityResponse = await handleEvalV2PathQualityRequest(
+    request,
+    env,
+  );
+  if (pathQualityResponse) return pathQualityResponse;
+
   const researchOpsResponse = await handleResearchOpsRequest(request, env);
   if (researchOpsResponse) return researchOpsResponse;
 

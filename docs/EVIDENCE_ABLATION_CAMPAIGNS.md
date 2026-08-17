@@ -66,7 +66,7 @@ $env:ACTION_READ_KEY='...'
 npm run research:ablation:report -- research/ablation/campaign-manifest.json research/ablation/result
 ```
 
-This command only calls existing authenticated read-only research endpoints. It writes:
+This command only calls authenticated read-only research endpoints. It writes:
 
 - `research/ablation/result.json`
 - `research/ablation/result.md`
@@ -77,7 +77,18 @@ The report verifies that every profile has the expected frozen-case count before
 - average 30-minute signed return;
 - WAIT/NO_TRADE sample count and remaining 30-minute opportunity;
 - average model latency;
-- reported API cost and cost per matched case.
+- reported API cost and cost per matched case;
+- Eval V2 ENTER MFE R / MAE R and initial adverse excursion;
+- TP1-before-stop versus stop-before-TP1 ordering where sampled paths resolve the order;
+- WAIT_TRIGGER trigger, invalidation, expiry and max-chase rates;
+- WAIT_TRIGGER post-trigger 15-minute favorable/adverse movement;
+- position-management 30-minute favorable/adverse path vectors in the JSON report.
+
+Path quality is read from:
+
+`GET /v1/research/path-quality/{experimentId}`
+
+The endpoint is read-only and aggregates existing `eval-v2` `score_payload` records. It does not add a D1 schema, create a trading signal, or recompute a future path from current market data.
 
 Adjacent deltas are reported in this order:
 
@@ -89,11 +100,22 @@ Adjacent deltas are reported in this order:
 
 The report does not create a scalar winner score. A positive signed-return delta is not sufficient by itself to promote an evidence source, and a lower abstain-opportunity value is not interpreted independently from how often the profile chose ENTER versus WAIT/NO_TRADE. Latency, cost, sample sufficiency, market-regime coverage and out-of-sample behavior remain separate review dimensions.
 
+Path-quality deltas require an additional caution: each profile may choose a different number of ENTER, WAIT_TRIGGER and position-management decisions. Therefore MFE/MAE, TP/SL ordering and trigger-quality deltas are conditional on the decisions that each profile actually made. They are descriptive evidence vectors, not isolated causal source effects.
+
 No paid OpenAI API call is made by the reporting command.
 
 ## Interpretation
 
 Compare adjacent profiles first, not only `BASELINE` versus `ONCHAIN_V1`. A useful result should survive sufficient samples, multiple market regimes, latency/completeness cohorts, and an out-of-sample period.
+
+Review at least these vectors separately:
+
+- decision mix and directional result;
+- ENTER path quality;
+- WAIT_TRIGGER path quality;
+- missed opportunity;
+- latency and cost;
+- actual decision-linked Net R when available.
 
 Promotion review outcomes remain:
 
@@ -109,4 +131,5 @@ Promotion review outcomes remain:
 - Never use later-revised on-chain values in place of the frozen decision-time payload.
 - Never turn the ablation profile into a local LONG/SHORT or entry rule.
 - Never infer causality from correlation or a single successful campaign.
+- Never collapse ENTER, WAIT_TRIGGER and position-management path vectors into one strategy score.
 - Keep experiment IDs, model/instruction/context versions, case IDs, and result lineage auditable.

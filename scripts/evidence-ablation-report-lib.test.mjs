@@ -66,6 +66,60 @@ function benchmark({
   };
 }
 
+function pathQuality({
+  enterSamples = 20,
+  meanMfeR = 1.2,
+  meanMaeR = 0.8,
+  initialAdverse = 15,
+  tp1TargetFirstRate = 0.55,
+  tp1StopFirstRate = 0.4,
+  waitSamples = 20,
+  triggerHitRate = 0.4,
+  invalidationRate = 0.2,
+  expiredRate = 0.3,
+  chaseExceededRate = 0.15,
+  postTriggerFavorable = 70,
+  postTriggerAdverse = 30,
+} = {}) {
+  return {
+    ok: true,
+    status: 200,
+    body: {
+      enter: {
+        samples: enterSamples,
+        mfeR: { mean: meanMfeR, median: meanMfeR },
+        maeR: { mean: meanMaeR, median: meanMaeR },
+        initialAdverseExcursionBps: { mean: initialAdverse },
+        timeToMfeMs: { mean: 60_000 },
+        timeToMaeMs: { mean: 30_000 },
+        tp1Ordering: {
+          resolvedSamples: enterSamples,
+          targetFirstRate: tp1TargetFirstRate,
+          stopFirstRate: tp1StopFirstRate,
+          ambiguousRate: 1 - tp1TargetFirstRate - tp1StopFirstRate,
+        },
+      },
+      wait: {
+        samples: waitSamples,
+        triggerHitRate,
+        invalidationBeforeTriggerRate: invalidationRate,
+        expiredWithoutTriggerRate: expiredRate,
+        timeToTriggerMs: { mean: 45_000 },
+        chase: { samples: 8, maxChaseExceededRate: chaseExceededRate },
+        postTrigger15m: {
+          favorableBps: { mean: postTriggerFavorable },
+          adverseBps: { mean: postTriggerAdverse },
+        },
+      },
+      management: {
+        samples: 5,
+        favorable30mBps: { mean: 80 },
+        adverse30mBps: { mean: 35 },
+      },
+    },
+  };
+}
+
 test('builds adjacent matched-profile deltas without scalar promotion', () => {
   const campaign = manifest();
   const report = buildEvidenceAblationReport(campaign, {
@@ -99,6 +153,45 @@ test('builds adjacent matched-profile deltas without scalar promotion', () => {
   assert.equal(lead.deltas.averageAbstainOpportunityBps30m, -3);
   assert.equal(lead.deltas.averageLatencyMs, 200);
   assert.ok(Math.abs(lead.deltas.costPerMatchedCaseUsd - 0.001) < 1e-12);
+  assert.equal(lead.pathComparable, false);
+});
+
+test('adds descriptive eval-v2 ENTER and WAIT path deltas when available', () => {
+  const campaign = manifest();
+  const benchmarks = {
+    'base-001-abl-0-baseline': benchmark(),
+    'base-001-abl-1-lead-core': benchmark(),
+    'base-001-abl-2-alt-breadth': benchmark(),
+  };
+  const paths = {
+    'base-001-abl-0-baseline': pathQuality(),
+    'base-001-abl-1-lead-core': pathQuality({
+      meanMfeR: 1.5,
+      meanMaeR: 0.7,
+      tp1TargetFirstRate: 0.65,
+      tp1StopFirstRate: 0.3,
+      triggerHitRate: 0.5,
+      invalidationRate: 0.15,
+      chaseExceededRate: 0.1,
+      postTriggerFavorable: 85,
+      postTriggerAdverse: 25,
+    }),
+    'base-001-abl-2-alt-breadth': pathQuality(),
+  };
+  const report = buildEvidenceAblationReport(campaign, benchmarks, paths);
+
+  assert.equal(report.integrity.pathQualityProfilesAvailable, 3);
+  assert.equal(report.integrity.allPathQualityProfilesAvailable, true);
+  const lead = report.adjacentComparisons[0];
+  assert.equal(lead.pathComparable, true);
+  assert.ok(Math.abs(lead.pathDeltas.enter.meanMfeR - 0.3) < 1e-12);
+  assert.ok(Math.abs(lead.pathDeltas.enter.meanMaeR + 0.1) < 1e-12);
+  assert.ok(Math.abs(lead.pathDeltas.enter.tp1TargetFirstRate - 0.1) < 1e-12);
+  assert.ok(Math.abs(lead.pathDeltas.wait.triggerHitRate - 0.1) < 1e-12);
+  assert.ok(
+    Math.abs(lead.pathDeltas.wait.invalidationBeforeTriggerRate + 0.05) < 1e-12,
+  );
+  assert.ok(Math.abs(lead.pathDeltas.wait.maxChaseExceededRate + 0.05) < 1e-12);
 });
 
 test('marks profile comparison invalid when matched frozen case counts drift', () => {
@@ -135,16 +228,24 @@ test('preserves unavailable benchmark failures instead of inventing metrics', ()
   assert.equal(report.integrity.validForManualComparison, false);
 });
 
-test('formats markdown with explicit interpretation boundaries', () => {
+test('formats markdown with explicit path-quality interpretation boundaries', () => {
   const campaign = manifest();
-  const report = buildEvidenceAblationReport(campaign, {
+  const benchmarks = {
     'base-001-abl-0-baseline': benchmark(),
     'base-001-abl-1-lead-core': benchmark(),
     'base-001-abl-2-alt-breadth': benchmark(),
-  });
+  };
+  const paths = {
+    'base-001-abl-0-baseline': pathQuality(),
+    'base-001-abl-1-lead-core': pathQuality(),
+    'base-001-abl-2-alt-breadth': pathQuality(),
+  };
+  const report = buildEvidenceAblationReport(campaign, benchmarks, paths);
   const markdown = formatEvidenceAblationMarkdown(report);
 
   assert.match(markdown, /BASELINE → LEAD_CORE/);
+  assert.match(markdown, /ENTER path quality/);
+  assert.match(markdown, /WAIT_TRIGGER path quality/);
   assert.match(markdown, /does not select a winner/i);
-  assert.match(markdown, /separate evidence vectors/i);
+  assert.match(markdown, /conditional on the decisions/i);
 });
