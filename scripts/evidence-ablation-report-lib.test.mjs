@@ -101,45 +101,39 @@ test('builds adjacent matched-profile deltas without scalar promotion', () => {
   assert.ok(Math.abs(lead.deltas.costPerMatchedCaseUsd - 0.001) < 1e-12);
 });
 
-test(
-  'marks profile comparison invalid when matched frozen case counts drift',
-  () => {
-    const campaign = manifest();
-    const report = buildEvidenceAblationReport(campaign, {
-      'base-001-abl-0-baseline': benchmark(),
-      'base-001-abl-1-lead-core': benchmark({ cases: 59 }),
-      'base-001-abl-2-alt-breadth': benchmark(),
-    });
+test('marks profile comparison invalid when matched frozen case counts drift', () => {
+  const campaign = manifest();
+  const report = buildEvidenceAblationReport(campaign, {
+    'base-001-abl-0-baseline': benchmark(),
+    'base-001-abl-1-lead-core': benchmark({ cases: 59 }),
+    'base-001-abl-2-alt-breadth': benchmark(),
+  });
 
-    assert.equal(report.integrity.allProfilesExactCaseCount, false);
-    assert.equal(report.integrity.validForManualComparison, false);
-    assert.equal(report.adjacentComparisons[0].comparable, false);
-    assert.equal(report.adjacentComparisons[1].comparable, false);
-  },
-);
+  assert.equal(report.integrity.allProfilesExactCaseCount, false);
+  assert.equal(report.integrity.validForManualComparison, false);
+  assert.equal(report.adjacentComparisons[0].comparable, false);
+  assert.equal(report.adjacentComparisons[1].comparable, false);
+});
 
-test(
-  'preserves unavailable benchmark failures instead of inventing metrics',
-  () => {
-    const campaign = manifest();
-    const report = buildEvidenceAblationReport(campaign, {
-      'base-001-abl-0-baseline': benchmark(),
-      'base-001-abl-1-lead-core': {
-        ok: false,
-        status: 404,
-        body: { error: 'EXPERIMENT_NOT_FOUND' },
-      },
-      'base-001-abl-2-alt-breadth': benchmark(),
-    });
+test('preserves unavailable benchmark failures instead of inventing metrics', () => {
+  const campaign = manifest();
+  const report = buildEvidenceAblationReport(campaign, {
+    'base-001-abl-0-baseline': benchmark(),
+    'base-001-abl-1-lead-core': {
+      ok: false,
+      status: 404,
+      body: { error: 'EXPERIMENT_NOT_FOUND' },
+    },
+    'base-001-abl-2-alt-breadth': benchmark(),
+  });
 
-    const missing = report.profiles[1];
-    assert.equal(missing.status, 'UNAVAILABLE');
-    assert.equal(missing.errorStatus, 404);
-    assert.equal(missing.error, 'EXPERIMENT_NOT_FOUND');
-    assert.equal(missing.averageSignedReturnBps30m, null);
-    assert.equal(report.integrity.validForManualComparison, false);
-  },
-);
+  const missing = report.profiles[1];
+  assert.equal(missing.status, 'UNAVAILABLE');
+  assert.equal(missing.errorStatus, 404);
+  assert.equal(missing.error, 'EXPERIMENT_NOT_FOUND');
+  assert.equal(missing.averageSignedReturnBps30m, null);
+  assert.equal(report.integrity.validForManualComparison, false);
+});
 
 test('formats markdown with explicit interpretation boundaries', () => {
   const campaign = manifest();
