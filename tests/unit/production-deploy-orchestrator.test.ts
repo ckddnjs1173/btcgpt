@@ -20,6 +20,12 @@ describe('production deploy orchestrator', () => {
     expect(raw).toContain('Refusing production changes.');
   });
 
+  it('uses the cross-platform npm invocation resolver instead of npm.cmd', () => {
+    expect(raw).toContain("from './production-deploy-command.mjs'");
+    expect(raw).toContain('resolveNpmInvocation()');
+    expect(raw).not.toContain("'npm.cmd'");
+  });
+
   it('runs preflight and dry-run before remote mutation, then smoke after deploy', () => {
     const preflight = raw.indexOf("npm(['run', 'ops:preflight'])");
     const dryRun = raw.indexOf("'--dry-run'");

@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
+import { resolveNpmInvocation } from './production-deploy-command.mjs';
+
 const APPLY_FLAG = '--apply';
 const CONFIRM_PREFIX = '--confirm=';
 const EXPECTED_CONFIRMATION = 'btc-futures-assistant-relay';
@@ -28,7 +30,8 @@ function run(executable, args, options = {}) {
 }
 
 function npm(args, options) {
-  run(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, options);
+  const invocation = resolveNpmInvocation();
+  run(invocation.executable, [...invocation.prefixArgs, ...args], options);
 }
 
 console.log('BTC Futures Assistant production deploy orchestrator');
