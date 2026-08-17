@@ -1,0 +1,38 @@
+name: Temporary Research Hardening Formatting
+
+on:
+  push:
+    branches:
+      - agent/remaining-research-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/remaining-research-hardening
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Format targeted files
+        run: >-
+          npx prettier --write
+          scripts/lead-lag-lib.mjs
+          scripts/lead-lag-lib.test.mjs
+          src/main/external/provider-registry.ts
+          tests/unit/provider-registry.test.ts
+      - name: Commit formatting
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/lead-lag-lib.mjs scripts/lead-lag-lib.test.mjs src/main/external/provider-registry.ts tests/unit/provider-registry.test.ts
+          git commit -m "style: format research hardening files"
+          git push origin HEAD:agent/remaining-research-hardening
