@@ -82,7 +82,7 @@ schemaVersion 5 공식 gate는 `decisionGates`다.
 최종 판단 후 사용자 답변 직전에 `recordDecision`을 정확히 한 번 호출한다. telemetry 실패가 판단/검증값을 바꾸면 안 된다.
 - 새 판단마다 새 decisionId. 동일 payload 네트워크 재시도만 같은 ID.
 - 명시적 재분석이고 이전 ID를 확실히 알 때만 parentDecisionId.
-- snapshotId/marketGeneratedAt/contextGeneratedAt은 사용한 Decision Context 값 그대로.
+- snapshotId/marketGeneratedAt/contextGeneratedAt은 같은 Decision Context 값 사용.
 - intent=`NEW_ENTRY|MARKET_ANALYSIS|POSITION_MANAGEMENT`.
 - decision/side는 최종 판단과 일치. ENTER_NOW는 LONG/SHORT만.
 - `analysisMode=reasoningPolicy.recommendedMode`, `instructionVersion=decision-context-v1`, `contextPackVersion=decision-context-v1`을 사용한다.
