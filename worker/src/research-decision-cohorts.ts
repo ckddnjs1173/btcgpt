@@ -25,7 +25,8 @@ type ParsedResearchRow = ResearchDecisionRow & {
   completenessCohort: 'FULL_CORE' | 'PARTIAL_CORE' | 'LEGACY_INPUT';
   btc15mRealizedVolatility: number | null;
   btc1hReturn12Sign: 'POSITIVE' | 'NEGATIVE' | 'ZERO' | 'UNAVAILABLE';
-  volatilityBand: 'LOW_RELATIVE' | 'MID_RELATIVE' | 'HIGH_RELATIVE' | 'UNAVAILABLE';
+  volatilityBand:
+    'LOW_RELATIVE' | 'MID_RELATIVE' | 'HIGH_RELATIVE' | 'UNAVAILABLE';
 };
 
 function record(value: unknown): UnknownRecord | null {
@@ -99,7 +100,8 @@ function decisionMix(rows: ParsedResearchRow[]) {
 }
 
 function completenessCohort(snapshot: UnknownRecord | null) {
-  if (snapshot?.version !== 'decision-context-v1') return 'LEGACY_INPUT' as const;
+  if (snapshot?.version !== 'decision-context-v1')
+    return 'LEGACY_INPUT' as const;
   const completeness = record(snapshot.completeness);
   const cryptoMarketAvailable = bool(completeness?.cryptoMarketAvailable);
   const leadAssetsAvailable = finite(completeness?.leadAssetsAvailable);
@@ -256,7 +258,10 @@ export function aggregateResearchDecisionCohorts(rows: ResearchDecisionRow[]) {
 
   const thresholds = volatilityThresholds(parsed);
   for (const row of parsed) {
-    row.volatilityBand = volatilityBand(row.btc15mRealizedVolatility, thresholds);
+    row.volatilityBand = volatilityBand(
+      row.btc15mRealizedVolatility,
+      thresholds,
+    );
   }
 
   const decisionContextRows = parsed.filter(
@@ -265,8 +270,7 @@ export function aggregateResearchDecisionCohorts(rows: ResearchDecisionRow[]) {
   const completenessCohorts = grouped(parsed, (row) => row.completenessCohort);
   const regimeCohorts = grouped(
     parsed,
-    (row) =>
-      `${row.volatilityBand}|BTC_1H_RETURN12_${row.btc1hReturn12Sign}`,
+    (row) => `${row.volatilityBand}|BTC_1H_RETURN12_${row.btc1hReturn12Sign}`,
   );
 
   return {

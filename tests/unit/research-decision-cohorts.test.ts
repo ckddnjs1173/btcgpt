@@ -30,11 +30,7 @@ function snapshot(input: {
 
 function score(
   decisionClass:
-    | 'ENTER'
-    | 'WAIT'
-    | 'ABSTAIN'
-    | 'DATA_BLOCKED'
-    | 'POSITION_MANAGEMENT',
+    'ENTER' | 'WAIT' | 'ABSTAIN' | 'DATA_BLOCKED' | 'POSITION_MANAGEMENT',
 ) {
   const decisionEvaluation =
     decisionClass === 'ENTER'
@@ -133,12 +129,16 @@ describe('research decision cohorts', () => {
     expect(report.regimeDefinition.thresholdCaseSamples).toBe(4);
     expect(report.regimeDefinition.lowerTercile).not.toBeNull();
     expect(report.regimeDefinition.upperTercile).not.toBeNull();
-    expect(report.regimeCohorts.some((cohort) => cohort.cohort.includes('LOW_RELATIVE'))).toBe(
-      true,
-    );
-    expect(report.regimeCohorts.some((cohort) => cohort.cohort.includes('HIGH_RELATIVE'))).toBe(
-      true,
-    );
+    expect(
+      report.regimeCohorts.some((cohort) =>
+        cohort.cohort.includes('LOW_RELATIVE'),
+      ),
+    ).toBe(true);
+    expect(
+      report.regimeCohorts.some((cohort) =>
+        cohort.cohort.includes('HIGH_RELATIVE'),
+      ),
+    ).toBe(true);
     expect(report.policy.tradingSignal).toBe(false);
     expect(report.policy.automaticPromotion).toBe(false);
     expect(report.policy.scalarWinnerScore).toBe(false);
@@ -160,9 +160,11 @@ describe('research decision cohorts', () => {
 
     expect(report.regimeDefinition.lowerTercile).toBeNull();
     expect(report.regimeDefinition.upperTercile).toBeNull();
-    expect(report.regimeCohorts.every((cohort) => cohort.cohort.startsWith('UNAVAILABLE|'))).toBe(
-      true,
-    );
+    expect(
+      report.regimeCohorts.every((cohort) =>
+        cohort.cohort.startsWith('UNAVAILABLE|'),
+      ),
+    ).toBe(true);
   });
 
   it('preserves malformed score and snapshot counts instead of fabricating cohorts', () => {

@@ -18,8 +18,10 @@ function subtract(after, before) {
 
 function normalizeDecisionMix(value) {
   const source = value && typeof value === 'object' ? value : {};
-  const counts = source.counts && typeof source.counts === 'object' ? source.counts : {};
-  const rates = source.rates && typeof source.rates === 'object' ? source.rates : {};
+  const counts =
+    source.counts && typeof source.counts === 'object' ? source.counts : {};
+  const rates =
+    source.rates && typeof source.rates === 'object' ? source.rates : {};
   return {
     samples: finite(source.samples),
     counts: Object.fromEntries(
@@ -169,7 +171,8 @@ export function buildResearchFinalizationReport({
   const regimeSignatures = new Set(
     availableProfiles.map(regimeSignature).filter((value) => value !== null),
   );
-  const allCohortProfilesAvailable = availableProfiles.length === profiles.length;
+  const allCohortProfilesAvailable =
+    availableProfiles.length === profiles.length;
   const allCohortRunCountsExact = profiles.every(
     (profile) => profile.exactScoredRunCount,
   );
@@ -178,7 +181,8 @@ export function buildResearchFinalizationReport({
   );
   const noCohortParseErrors = profiles.every(
     (profile) =>
-      profile.invalidScorePayloads === 0 && profile.invalidSnapshotPayloads === 0,
+      profile.invalidScorePayloads === 0 &&
+      profile.invalidSnapshotPayloads === 0,
   );
   const regimeDefinitionsAligned =
     allCohortProfilesAvailable && regimeSignatures.size === 1;

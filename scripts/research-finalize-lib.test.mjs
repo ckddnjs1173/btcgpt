@@ -109,8 +109,9 @@ test('marks the instrumentation loop ready only when every evidence gate is alig
   assert.equal(report.policy.automaticPromotion, false);
   assert.equal(report.policy.liveActivation, false);
   assert.ok(
-    Math.abs(report.adjacentComparisons[0].decisionMixRateDeltas.ENTER - 1 / 3) <
-      1e-12,
+    Math.abs(
+      report.adjacentComparisons[0].decisionMixRateDeltas.ENTER - 1 / 3,
+    ) < 1e-12,
   );
 });
 

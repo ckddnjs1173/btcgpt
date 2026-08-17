@@ -7,7 +7,10 @@ import { handleResearchDecisionCohortsRequest } from './research-decision-cohort
 import { handleResearchOpsRequest } from './research-ops';
 
 export async function handler(request: Request, env: Env): Promise<Response> {
-  const cohortResponse = await handleResearchDecisionCohortsRequest(request, env);
+  const cohortResponse = await handleResearchDecisionCohortsRequest(
+    request,
+    env,
+  );
   if (cohortResponse) return cohortResponse;
 
   const pathQualityResponse = await handleEvalV2PathQualityRequest(

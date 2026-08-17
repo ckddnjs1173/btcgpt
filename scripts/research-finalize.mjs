@@ -122,6 +122,10 @@ await writeFile(
 
 console.log(`Research finalization status: ${report.status}`);
 console.log(`Wrote ${jsonPath} and ${markdownPath}.`);
-console.log(`Wrote supporting reports ${ablationPath} and ${contextAuditPath}.`);
+console.log(
+  `Wrote supporting reports ${ablationPath} and ${contextAuditPath}.`,
+);
 console.log('No paid OpenAI API call was made and production was not changed.');
-console.log('This command never promotes a source/model or activates live trading.');
+console.log(
+  'This command never promotes a source/model or activates live trading.',
+);
