@@ -18,6 +18,7 @@
     "test:sqlite": "node scripts/sqlite-smoke.cjs",
     "test:migrations": "node scripts/d1-migration-validate.mjs",
     "test:lead-lag": "node --test scripts/lead-lag-lib.test.mjs",
+    "test:evidence-ablation": "node --test scripts/evidence-ablation-lib.test.mjs",
     "e2e": "vitest run tests/e2e && playwright test",
     "e2e:electron": "playwright test",
     "test:security": "vitest run tests/security",
@@ -31,9 +32,10 @@
     "replay:batch:ingest": "node scripts/replay-batch-ingest.mjs",
     "research:report": "node scripts/research-report.mjs",
     "research:lead-lag": "node scripts/lead-lag-research.mjs",
+    "research:ablation:prepare": "node scripts/evidence-ablation-prepare.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations && npm run test:lead-lag"
+    "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations && npm run test:lead-lag && npm run test:evidence-ablation"
   },
   "keywords": [
     "bitcoin",

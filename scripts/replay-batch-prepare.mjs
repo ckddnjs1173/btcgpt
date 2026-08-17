@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 
+import {
+  applyEvidenceAblation,
+  EVIDENCE_ABLATION_PROFILES,
+} from './evidence-ablation-lib.mjs';
+
 const relayUrl = (process.env.RELAY_URL ?? '').replace(/\/$/, '');
 const actionKey = process.env.ACTION_READ_KEY ?? '';
 const configPath = process.argv[2];
@@ -17,6 +22,9 @@ const config = JSON.parse(await readFile(configPath, 'utf8'));
 const registry = config.registry;
 const decisionIds = Array.isArray(config.decisionIds) ? config.decisionIds : [];
 const instructions = String(config.instructions ?? '').trim();
+const ablationProfile = registry?.evidenceProfile
+  ? String(registry.evidenceProfile)
+  : null;
 
 if (!registry?.experimentId || !registry?.model || decisionIds.length === 0) {
   throw new Error(
@@ -24,6 +32,13 @@ if (!registry?.experimentId || !registry?.model || decisionIds.length === 0) {
   );
 }
 if (!instructions) throw new Error('instructions are required.');
+if (
+  ablationProfile !== null &&
+  !EVIDENCE_ABLATION_PROFILES.includes(ablationProfile)
+)
+  throw new Error(
+    `registry.evidenceProfile must be one of: ${EVIDENCE_ABLATION_PROFILES.join(', ')}.`,
+  );
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -126,9 +141,14 @@ function responseBody(replayInput) {
               'Judge this frozen historical BTC futures market state.',
               'Use only the supplied replay input. Do not use web search, current knowledge, or future outcomes.',
               `Analysis mode: ${registry.analysisMode}.`,
+              ablationProfile
+                ? `Evidence ablation profile: ${ablationProfile}. Missing evidence in this input is intentional; do not reconstruct it from outside knowledge.`
+                : null,
               'Return only the requested structured decision.',
               JSON.stringify(replayInput),
-            ].join('\n\n'),
+            ]
+              .filter(Boolean)
+              .join('\n\n'),
           },
         ],
       },
@@ -153,6 +173,7 @@ const registered = {
   provider: 'OPENAI',
   instructionVersion: `${baseInstructionVersion}@${promptHash}`.slice(0, 120),
 };
+delete registered.evidenceProfile;
 await relay('/v1/replay/experiment/register', {
   method: 'POST',
   body: JSON.stringify(registered),
@@ -165,13 +186,31 @@ const manifest = {
   model: registry.model,
   preparedAt: Date.now(),
   paidExecutionApproved: false,
+  evidenceProfile: ablationProfile,
+  ablationBasis:
+    ablationProfile === null
+      ? 'NONE'
+      : 'FROZEN_DECISION_CONTEXT_FIELD_REMOVAL_ONLY',
   items: [],
 };
 
 for (const [index, decisionId] of decisionIds.entries()) {
-  const replayInput = await relay(
+  const originalReplayInput = await relay(
     `/v1/replay/case/${encodeURIComponent(decisionId)}/input`,
   );
+  const ablation = ablationProfile
+    ? applyEvidenceAblation(originalReplayInput, ablationProfile)
+    : {
+        replayInput: originalReplayInput,
+        applied: false,
+        profile: null,
+        reason: null,
+      };
+  if (ablationProfile && !ablation.applied)
+    throw new Error(
+      `Decision ${decisionId} cannot use evidence profile ${ablationProfile}: ${ablation.reason}. Select Decision Context replay cases only.`,
+    );
+  const replayInput = ablation.replayInput;
   const customId = `${registry.experimentId}-${index + 1}`;
   const runId = `${registry.experimentId}-${index + 1}-${randomUUID().slice(0, 8)}`;
   lines.push(
@@ -187,6 +226,8 @@ for (const [index, decisionId] of decisionIds.entries()) {
     runId,
     decisionId,
     trialIndex: 1,
+    evidenceProfile: ablationProfile,
+    ablationApplied: ablation.applied,
   });
 }
 
@@ -200,6 +241,10 @@ await writeFile(
 console.log(`Prepared ${lines.length} replay requests.`);
 console.log(`Batch file: ${outputPrefix}.jsonl`);
 console.log(`Manifest: ${outputPrefix}.manifest.json`);
+if (ablationProfile)
+  console.log(
+    `Applied ${ablationProfile} only to frozen Decision Context fields; no future outcome was used.`,
+  );
 console.log(
   'No OpenAI API call was made. Upload/execute the batch only after explicit paid-API approval.',
 );
