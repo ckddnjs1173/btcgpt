@@ -46,8 +46,8 @@
 
 ## Work sequence
 
-- Implement one Phase at a time.
-- Within a Phase, prefer the smallest complete vertical slice over speculative later-Phase scaffolding.
-- Do not implement later-Phase features speculatively.
+- For legacy numbered work, implement one approved Phase at a time. After the Phase 24–25 foundation, prefer named workstreams/contracts instead of inventing additional Phase numbers.
+- Within an approved Phase or workstream, prefer the smallest complete vertical slice over speculative scaffolding.
+- Do not implement unapproved future execution behavior or paid-provider dependencies speculatively; optional provider interfaces are allowed when they preserve a dependency-free core.
 - Run the validation commands explicitly requested by the current user before declaring work complete.
 - Keep `main` runnable and tested.
