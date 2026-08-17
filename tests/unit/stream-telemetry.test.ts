@@ -8,20 +8,20 @@ describe('StreamTelemetry', () => {
 
     telemetry.recordMessage(1_100, 1_000);
     telemetry.recordMessage(2_500, 1_000);
-    telemetry.recordParseError();
+    telemetry.recordParseError(3_000);
     telemetry.recordSequenceGap();
     telemetry.recordDroppedEvent(2);
     telemetry.recordReconnect();
 
     const snapshot = telemetry.snapshot();
     expect(snapshot).toMatchObject({
-      messagesReceived: 2,
+      messagesReceived: 3,
       parseErrors: 1,
       sequenceGaps: 1,
       staleMessages: 1,
       droppedEvents: 2,
       reconnectCount: 1,
-      lastMessageAt: 2_500,
+      lastMessageAt: 3_000,
       lastEventAt: 1_000,
     });
     expect(snapshot.eventAgeMs.sampleCount).toBe(2);
