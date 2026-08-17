@@ -98,9 +98,7 @@ test('builds adjacent matched-profile deltas without scalar promotion', () => {
   assert.equal(lead.deltas.averageSignedReturnBps30m, 3);
   assert.equal(lead.deltas.averageAbstainOpportunityBps30m, -3);
   assert.equal(lead.deltas.averageLatencyMs, 200);
-  assert.ok(
-    Math.abs(lead.deltas.costPerMatchedCaseUsd - 0.001) < 1e-12,
-  );
+  assert.ok(Math.abs(lead.deltas.costPerMatchedCaseUsd - 0.001) < 1e-12);
 });
 
 test(
