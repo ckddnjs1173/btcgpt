@@ -45,7 +45,10 @@ export class StreamTelemetry {
   private lastEventAt: number | null = null;
 
   constructor(private readonly staleMessageThresholdMs: number) {
-    if (!Number.isFinite(staleMessageThresholdMs) || staleMessageThresholdMs < 0)
+    if (
+      !Number.isFinite(staleMessageThresholdMs) ||
+      staleMessageThresholdMs < 0
+    )
       throw new Error('STALE_MESSAGE_THRESHOLD_INVALID');
   }
 
