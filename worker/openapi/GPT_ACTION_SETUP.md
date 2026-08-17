@@ -23,7 +23,7 @@ Create or update a single GPT Action using the complete contents of:
 
 `worker/openapi/openapi.json`
 
-The official live anchor is `getDecisionSnapshot`. `getLatestSnapshot` remains detail/debug fallback only.
+공식 live anchor는 `getDecisionSnapshot`이다. `getLatestSnapshot` remains detail/debug fallback only.
 
 Expected operation IDs:
 
