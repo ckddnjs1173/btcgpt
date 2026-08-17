@@ -102,9 +102,7 @@ describe('ExternalProviderRegistry', () => {
 
     expect(() =>
       registry.register(
-        provider('ONE', 'ETF', () =>
-          Promise.reject(new Error('unused')),
-        ),
+        provider('ONE', 'ETF', () => Promise.reject(new Error('unused'))),
       ),
     ).toThrow('PROVIDER_DUPLICATE:ONE');
 

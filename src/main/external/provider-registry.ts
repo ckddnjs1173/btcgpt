@@ -5,10 +5,7 @@ import type {
 } from './provider-contracts';
 
 export type ProviderRegistryStatus =
-  | 'NORMAL'
-  | 'DEGRADED'
-  | 'DISCONNECTED'
-  | 'DISABLED';
+  'NORMAL' | 'DEGRADED' | 'DISCONNECTED' | 'DISABLED';
 
 export interface ProviderRegistryHealth {
   providerId: string;
@@ -88,7 +85,8 @@ export class ExternalProviderRegistry {
           state.error = null;
           return result;
         } catch (error) {
-          state.status = state.lastSuccessAt === null ? 'DISCONNECTED' : 'DEGRADED';
+          state.status =
+            state.lastSuccessAt === null ? 'DISCONNECTED' : 'DEGRADED';
           state.lastFailureAt = now;
           state.consecutiveFailures += 1;
           state.error = providerError(error);

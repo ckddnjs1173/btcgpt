@@ -137,8 +137,5 @@ test('lead lag analyzer preserves sparse status and missing auxiliary evidence',
   const result = analyzeLeadLag(cases, { minSamples: 20 });
   assert.equal(result.usableCases, 0);
   assert.equal(result.features.ETH_RETURN_1M['1m'].sampleCount, 0);
-  assert.equal(
-    result.features.ETH_RETURN_1M['1m'].sampleStatus,
-    'SPARSE',
-  );
+  assert.equal(result.features.ETH_RETURN_1M['1m'].sampleStatus, 'SPARSE');
 });

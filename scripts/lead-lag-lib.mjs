@@ -68,12 +68,17 @@ function pearson(xs, ys) {
 function ranks(values) {
   const indexed = values
     .map((value, index) => ({ value, index }))
-    .sort((left, right) => left.value - right.value || left.index - right.index);
+    .sort(
+      (left, right) => left.value - right.value || left.index - right.index,
+    );
   const output = new Array(values.length);
   let start = 0;
   while (start < indexed.length) {
     let end = start + 1;
-    while (end < indexed.length && indexed[end]?.value === indexed[start]?.value)
+    while (
+      end < indexed.length &&
+      indexed[end]?.value === indexed[start]?.value
+    )
       end += 1;
     const averageRank = (start + 1 + end) / 2;
     for (let index = start; index < end; index += 1) {
@@ -103,7 +108,14 @@ function btcReturn(snapshot, horizon) {
 }
 
 function leadReturn(snapshot, symbol, horizon) {
-  return at(snapshot, 'cryptoMarket', 'leadCore', symbol, 'returnsBps', horizon);
+  return at(
+    snapshot,
+    'cryptoMarket',
+    'leadCore',
+    symbol,
+    'returnsBps',
+    horizon,
+  );
 }
 
 function relativeLead(snapshot, symbol, horizon) {
@@ -198,7 +210,8 @@ function analyzePair(samples, minSamples) {
   const q75 = percentile(xs, 0.75);
   const bottom =
     q25 === null ? [] : samples.filter((sample) => sample.feature <= q25);
-  const top = q75 === null ? [] : samples.filter((sample) => sample.feature >= q75);
+  const top =
+    q75 === null ? [] : samples.filter((sample) => sample.feature >= q75);
   const signedAgreement = nonZero.filter(
     (sample) => Math.sign(sample.feature) === Math.sign(sample.futureReturn),
   ).length;
@@ -257,7 +270,10 @@ export function analyzeLeadLag(cases, options = {}) {
     ? Math.max(5, options.minSamples)
     : 20;
   const byFeature = Object.fromEntries(
-    FEATURES.map((feature) => [feature.key, Object.fromEntries(FUTURE_HORIZONS.map((horizon) => [horizon, []]))]),
+    FEATURES.map((feature) => [
+      feature.key,
+      Object.fromEntries(FUTURE_HORIZONS.map((horizon) => [horizon, []])),
+    ]),
   );
   let usableCases = 0;
 
