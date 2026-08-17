@@ -22,6 +22,7 @@ import { normalizeRestCandle } from './normalize';
 import { REFERENCE_TIMEFRAMES, TIMEFRAMES } from './types';
 import type { Candle, Timeframe } from './types';
 import { detectCandleGaps } from './gaps';
+import { StreamTelemetry } from './stream-telemetry';
 
 interface CandleRepository {
   readClosedCandles(timeframe: Timeframe, limit?: number): Candle[];
@@ -47,6 +48,7 @@ type MarketDataDependencies = typeof DEFAULT_DEPENDENCIES;
 const STREAM_CHANNELS = ['public', 'market'] as const;
 const STATISTICS_TIMEFRAMES = ['5m', '15m', '1h', '4h'] as const;
 const ORDER_BOOK_RETRY_MAX_MS = 30_000;
+const OPERATIONAL_TELEMETRY_LOG_MS = 5 * 60_000;
 const WS_URLS: Record<MarketStreamChannel, string> = {
   public:
     'wss://fstream.binance.com/public/stream?streams=' +
@@ -188,6 +190,14 @@ export class MarketDataService {
   private orderBookSyncPromise: Promise<void> | null = null;
   private orderBookSyncTimer: NodeJS.Timeout | null = null;
   private orderBookSyncAttempt = 0;
+  private readonly streamTelemetry: Record<
+    MarketStreamChannel,
+    StreamTelemetry
+  > = {
+    public: new StreamTelemetry(3_000),
+    market: new StreamTelemetry(5_000),
+  };
+  private telemetryTimer: NodeJS.Timeout | null = null;
 
   private readonly dependencies: MarketDataDependencies;
 
@@ -200,6 +210,17 @@ export class MarketDataService {
 
   getServerOffsetMs(): number {
     return this.serverOffsetMs;
+  }
+
+  getOperationalTelemetry() {
+    return {
+      generatedAt: Date.now(),
+      streams: {
+        public: this.streamTelemetry.public.snapshot(),
+        market: this.streamTelemetry.market.snapshot(),
+      },
+      orderBook: this.localOrderBook.diagnostics(),
+    };
   }
 
   start(): Promise<void> {
@@ -237,6 +258,12 @@ export class MarketDataService {
       },
       6 * 60 * 60_000,
     );
+    this.telemetryTimer = setInterval(() => {
+      logger.info(
+        { telemetry: this.getOperationalTelemetry() },
+        'Binance BTC operational telemetry',
+      );
+    }, OPERATIONAL_TELEMETRY_LOG_MS);
     this.bootstrap(runId);
     return Promise.resolve();
   }
@@ -253,8 +280,10 @@ export class MarketDataService {
       this.serverTimeTimer,
       this.exchangeInfoTimer,
       this.referenceCandleTimer,
+      this.telemetryTimer,
     ])
       if (timer) clearTimeout(timer);
+    this.telemetryTimer = null;
     for (const channel of STREAM_CHANNELS) {
       const reconnectTimer = this.reconnectTimers[channel];
       const plannedReconnectTimer = this.plannedReconnectTimers[channel];
@@ -894,9 +923,11 @@ export class MarketDataService {
       if (!this.isRunActive(runId) || this.sockets[channel] !== socket) return;
       const receivedAt = Date.now();
       try {
-        this.handleMessage(String(event.data), receivedAt);
+        const eventAt = this.handleMessage(String(event.data), receivedAt);
         this.cache.markStreamEvent(channel, receivedAt);
+        this.streamTelemetry[channel].recordMessage(receivedAt, eventAt);
       } catch (error) {
+        this.streamTelemetry[channel].recordParseError(receivedAt);
         logger.warn(
           { channel, ...safeErrorDetails(error) },
           'Binance WebSocket schema validation failed',
@@ -929,6 +960,7 @@ export class MarketDataService {
       this.cache.markDepthUnsynchronized();
     }
     this.cache.setStreamConnected(channel, false, errorCode);
+    this.streamTelemetry[channel].recordReconnect();
     logger.warn({ channel, errorCode }, 'Binance WebSocket disconnected');
     if (closeSocket)
       try {
@@ -986,7 +1018,7 @@ export class MarketDataService {
     }, delay);
   }
 
-  private handleMessage(raw: string, receivedAt: number): void {
+  private handleMessage(raw: string, receivedAt: number): number | null {
     const envelope = streamEnvelopeSchema.parse(JSON.parse(raw) as unknown);
     if (envelope.stream.includes('@kline_')) {
       const event = klineEventSchema.parse(envelope.data);
@@ -1011,7 +1043,7 @@ export class MarketDataService {
       };
       this.cache.upsertCandle(candle);
       this.database.upsertClosedCandle(candle);
-      return;
+      return event.E;
     }
     if (envelope.stream.includes('@markPrice')) {
       const event = markEventSchema.parse(envelope.data);
@@ -1027,7 +1059,7 @@ export class MarketDataService {
         event.E,
       );
       this.cache.clearSourceError('market');
-      return;
+      return event.E;
     }
     if (envelope.stream.includes('@bookTicker')) {
       const event = bookTickerSchema.parse(envelope.data);
@@ -1038,7 +1070,7 @@ export class MarketDataService {
         event.E,
       );
       this.cache.clearSourceError('bookTicker');
-      return;
+      return event.E;
     }
     if (envelope.stream.includes('@aggTrade')) {
       const event = aggTradeSchema.parse(envelope.data);
@@ -1056,7 +1088,7 @@ export class MarketDataService {
         'trades',
         event.E,
       );
-      return;
+      return event.E;
     }
     if (envelope.stream.includes('@depth')) {
       const event = depthSchema.parse(envelope.data);
@@ -1078,6 +1110,7 @@ export class MarketDataService {
       else if (result === 'SYNCHRONIZED')
         this.completeOrderBookSynchronization(event.E, receivedAt);
       else if (result === 'GAP' || result === 'SNAPSHOT_STALE') {
+        if (result === 'GAP') this.streamTelemetry.public.recordSequenceGap();
         const socket = this.sockets.public;
         if (socket) {
           const errorCode =
@@ -1085,6 +1118,8 @@ export class MarketDataService {
           const retry = this.orderBookRetryDetails(errorCode);
           this.scheduleOrderBookSync(socket, retry.nextRetryMs);
         }
+      } else if (result === 'IGNORED') {
+        this.streamTelemetry.public.recordDroppedEvent();
       } else if (result === 'BUFFERED') {
         const socket = this.sockets.public;
         if (
@@ -1094,7 +1129,7 @@ export class MarketDataService {
         )
           this.scheduleOrderBookSync(socket);
       }
-      return;
+      return event.E;
     }
     if (envelope.stream.includes('@forceOrder')) {
       const event = forceOrderSchema.parse(envelope.data);
@@ -1108,6 +1143,8 @@ export class MarketDataService {
         quantity,
         notional: price * quantity,
       });
+      return event.E;
     }
+    return null;
   }
 }
