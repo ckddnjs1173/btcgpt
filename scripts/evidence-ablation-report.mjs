@@ -19,6 +19,7 @@ if (!relayUrl || !actionKey || !manifestPath) {
 
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 const benchmarkResults = {};
+const pathQualityResults = {};
 
 async function relay(path) {
   const response = await fetch(`${relayUrl}${path}`, {
@@ -38,9 +39,16 @@ for (const profile of manifest.profiles ?? []) {
   benchmarkResults[experimentId] = await relay(
     `/v1/research/benchmark/${encodeURIComponent(experimentId)}`,
   );
+  pathQualityResults[experimentId] = await relay(
+    `/v1/research/path-quality/${encodeURIComponent(experimentId)}`,
+  );
 }
 
-const report = buildEvidenceAblationReport(manifest, benchmarkResults);
+const report = buildEvidenceAblationReport(
+  manifest,
+  benchmarkResults,
+  pathQualityResults,
+);
 const jsonPath = `${outputPrefix}.json`;
 const markdownPath = `${outputPrefix}.md`;
 
@@ -54,5 +62,8 @@ await writeFile(
 console.log(`Wrote ${jsonPath} and ${markdownPath}.`);
 console.log(
   `Manual comparison integrity: ${report.integrity.validForManualComparison}`,
+);
+console.log(
+  `Path-quality profiles available: ${report.integrity.pathQualityProfilesAvailable}/${report.profileCount}.`,
 );
 console.log('No paid OpenAI API call was made.');
