@@ -1,0 +1,38 @@
+name: Eval V2 Format Probe
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Use Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Print formatted files
+        run: |
+          npx prettier --write scripts/evidence-ablation-report-lib.mjs scripts/evidence-ablation-report-lib.test.mjs worker/src/eval-v2-path-summary.ts worker/src/phase25.ts
+          echo '---BEGIN_evidence-ablation-report-lib.mjs---'
+          cat scripts/evidence-ablation-report-lib.mjs
+          echo '---END_evidence-ablation-report-lib.mjs---'
+          echo '---BEGIN_evidence-ablation-report-lib.test.mjs---'
+          cat scripts/evidence-ablation-report-lib.test.mjs
+          echo '---END_evidence-ablation-report-lib.test.mjs---'
+          echo '---BEGIN_eval-v2-path-summary.ts---'
+          cat worker/src/eval-v2-path-summary.ts
+          echo '---END_eval-v2-path-summary.ts---'
+          echo '---BEGIN_phase25.ts---'
+          cat worker/src/phase25.ts
+          echo '---END_phase25.ts---'
