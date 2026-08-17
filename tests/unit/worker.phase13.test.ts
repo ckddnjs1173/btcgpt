@@ -14,6 +14,8 @@ type DecisionRow = {
   recordedAt: number;
   snapshotStatus: 'CURRENT' | 'SUPERSEDED';
   snapshotToRecordLatencyMs: number;
+  contextGeneratedAt: number | null;
+  contextToRecordLatencyMs: number | null;
   payload: string;
 };
 
@@ -39,53 +41,16 @@ class MemoryD1 {
             this.snapshot = { raw, generatedAt, receivedAt };
           }
         } else if (query.includes('INSERT INTO decision_log')) {
-          const [
-            decisionId,
-            snapshotId,
-            ,
-            recordedAt,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            snapshotStatus,
-            snapshotToRecordLatencyMs,
-            ,
-            ,
-            ,
-            ,
-            payload,
-          ] = values as [
-            string,
-            string,
-            number,
-            number,
-            string,
-            string,
-            string,
-            string,
-            string,
-            string,
-            string,
-            string | null,
-            'CURRENT' | 'SUPERSEDED',
-            number,
-            string,
-            number | null,
-            number | null,
-            string,
-            string,
-          ];
+          const decisionId = String(values[0]);
           this.decisions.set(decisionId, {
-            snapshotId,
-            recordedAt,
-            snapshotStatus,
-            snapshotToRecordLatencyMs,
-            payload,
+            snapshotId: String(values[1]),
+            recordedAt: Number(values[3]),
+            snapshotStatus: values[12] as 'CURRENT' | 'SUPERSEDED',
+            snapshotToRecordLatencyMs: Number(values[13]),
+            contextGeneratedAt: values[14] === null ? null : Number(values[14]),
+            contextToRecordLatencyMs:
+              values[15] === null ? null : Number(values[15]),
+            payload: String(values[20]),
           });
         }
         return Promise.resolve({ success: true });
@@ -235,6 +200,24 @@ describe('phase 13 decision telemetry', () => {
       duplicate: true,
       snapshotStatus: 'CURRENT',
     });
+  });
+
+  it('stores Decision Context to decision-record latency when supplied', async () => {
+    const generatedAt = Date.now();
+    await uploadSnapshot(env, snapshotFixture('snapshot-a', generatedAt));
+    const response = await record(
+      env,
+      decisionFixture({
+        decisionId: 'decision-latency',
+        marketGeneratedAt: generatedAt,
+        contextGeneratedAt: generatedAt,
+      }),
+    );
+    expect(response.status).toBe(201);
+    const payload = (await response.json()) as Record<string, unknown>;
+    expect(payload.contextGeneratedAt).toBe(generatedAt);
+    expect(payload.contextToRecordLatencyMs).toEqual(expect.any(Number));
+    expect(Number(payload.contextToRecordLatencyMs)).toBeGreaterThanOrEqual(0);
   });
 
   it('rejects conflicting reuse of decisionId', async () => {

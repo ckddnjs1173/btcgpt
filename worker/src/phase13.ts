@@ -24,6 +24,7 @@ const decisionSchema = z
     decisionId: z.string().trim().min(1).max(100),
     snapshotId: z.string().trim().min(1).max(100),
     marketGeneratedAt: z.number().int().positive(),
+    contextGeneratedAt: z.number().int().positive().optional(),
     parentDecisionId: z.string().trim().min(1).max(100).nullable().optional(),
     intent: z.enum(['MARKET_ANALYSIS', 'NEW_ENTRY', 'POSITION_MANAGEMENT']),
     decision: z.enum([
@@ -120,6 +121,8 @@ type DecisionRow = {
   recordedAt: number;
   snapshotStatus: 'CURRENT' | 'SUPERSEDED';
   snapshotToRecordLatencyMs: number;
+  contextGeneratedAt: number | null;
+  contextToRecordLatencyMs: number | null;
   payload: string;
 };
 
@@ -196,6 +199,8 @@ async function loadDecision(
       `SELECT snapshot_id AS snapshotId, recorded_at AS recordedAt,
         snapshot_status AS snapshotStatus,
         snapshot_to_record_latency_ms AS snapshotToRecordLatencyMs,
+        context_generated_at AS contextGeneratedAt,
+        context_to_record_latency_ms AS contextToRecordLatencyMs,
         payload
        FROM decision_log WHERE decision_id = ?`,
     )
@@ -210,6 +215,7 @@ async function saveDecision(
   snapshotStatus: 'CURRENT' | 'SUPERSEDED',
   recordedAt: number,
   snapshotToRecordLatencyMs: number,
+  contextToRecordLatencyMs: number | null,
 ): Promise<void> {
   const result = await database(env)
     .prepare(
@@ -217,9 +223,10 @@ async function saveDecision(
         decision_id, snapshot_id, market_generated_at, recorded_at,
         intent, decision, side, analysis_mode, instruction_version,
         context_pack_version, confidence_band, parent_decision_id,
-        snapshot_status, snapshot_to_record_latency_ms, plan_validation,
-        entry, stop, targets_json, payload
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        snapshot_status, snapshot_to_record_latency_ms, context_generated_at,
+        context_to_record_latency_ms, plan_validation, entry, stop, targets_json,
+        payload
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       decision.decisionId,
@@ -236,6 +243,8 @@ async function saveDecision(
       decision.parentDecisionId ?? null,
       snapshotStatus,
       snapshotToRecordLatencyMs,
+      decision.contextGeneratedAt ?? null,
+      contextToRecordLatencyMs,
       decision.planValidation,
       decision.entry ?? null,
       decision.stop ?? null,
@@ -288,6 +297,20 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
   if (decision.marketGeneratedAt > recordedAt + FUTURE_TOLERANCE_MS) {
     return json({ error: 'FUTURE_MARKET_GENERATED_AT' }, 400);
   }
+  if (
+    decision.contextGeneratedAt !== undefined &&
+    decision.contextGeneratedAt < decision.marketGeneratedAt
+  )
+    return json({ error: 'CONTEXT_GENERATED_BEFORE_MARKET' }, 400);
+  if (
+    decision.contextGeneratedAt !== undefined &&
+    decision.contextGeneratedAt > recordedAt + FUTURE_TOLERANCE_MS
+  )
+    return json({ error: 'FUTURE_CONTEXT_GENERATED_AT' }, 400);
+  const contextToRecordLatencyMs =
+    decision.contextGeneratedAt === undefined
+      ? null
+      : Math.max(0, recordedAt - decision.contextGeneratedAt);
 
   const normalizedPayload = JSON.stringify(decision);
 
@@ -325,6 +348,8 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
         snapshotStatus: existing.snapshotStatus,
         recordedAt: existing.recordedAt,
         snapshotToRecordLatencyMs: existing.snapshotToRecordLatencyMs,
+        contextGeneratedAt: existing.contextGeneratedAt,
+        contextToRecordLatencyMs: existing.contextToRecordLatencyMs,
         replayCaseCaptured,
       });
     }
@@ -369,6 +394,7 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
       snapshotStatus,
       recordedAt,
       snapshotToRecordLatencyMs,
+      contextToRecordLatencyMs,
     );
 
     try {
@@ -403,6 +429,8 @@ async function recordDecision(request: Request, env: Env): Promise<Response> {
         snapshotStatus,
         recordedAt,
         snapshotToRecordLatencyMs,
+        contextGeneratedAt: decision.contextGeneratedAt ?? null,
+        contextToRecordLatencyMs,
         replayCaseCaptured,
       },
       201,

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "BTC Futures Assistant Actions",
-    "version": "5.8.0",
+    "version": "5.9.0",
     "description": "Unified BTCUSDT market, context, lifecycle, deterministic calculation, and analytics-only GPT decision telemetry actions."
   },
   "servers": [
@@ -505,6 +505,10 @@
             "type": "integer",
             "description": "marketGeneratedAt from the same live Decision Context used for this decision."
           },
+          "contextGeneratedAt": {
+            "type": "integer",
+            "description": "Copy generatedAt from the same Decision Context used for this decision. Optional for legacy callers."
+          },
           "parentDecisionId": {
             "type": ["string", "null"],
             "maxLength": 100,
@@ -639,6 +643,13 @@
           },
           "snapshotToRecordLatencyMs": {
             "type": "integer"
+          },
+          "contextGeneratedAt": {
+            "type": ["integer", "null"]
+          },
+          "contextToRecordLatencyMs": {
+            "type": ["integer", "null"],
+            "minimum": 0
           }
         },
         "additionalProperties": false
