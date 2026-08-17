@@ -1,0 +1,121 @@
+name: Temporary Operational Telemetry Patch
+
+on:
+  push:
+    branches:
+      - agent/operational-telemetry
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/operational-telemetry
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Apply BTC telemetry patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/main/market/service.ts')
+          text = path.read_text()
+
+          def replace_once(old, new):
+              global text
+              if text.count(old) != 1:
+                  raise SystemExit(f'anchor count {text.count(old)} for {old[:80]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "import { detectCandleGaps } from './gaps';\n",
+              "import { detectCandleGaps } from './gaps';\nimport { StreamTelemetry } from './stream-telemetry';\n",
+          )
+          replace_once(
+              "const ORDER_BOOK_RETRY_MAX_MS = 30_000;\n",
+              "const ORDER_BOOK_RETRY_MAX_MS = 30_000;\nconst OPERATIONAL_TELEMETRY_LOG_MS = 5 * 60_000;\n",
+          )
+          replace_once(
+              "  private orderBookSyncAttempt = 0;\n\n  private readonly dependencies: MarketDataDependencies;\n",
+              "  private orderBookSyncAttempt = 0;\n  private readonly streamTelemetry: Record<MarketStreamChannel, StreamTelemetry> = {\n    public: new StreamTelemetry(3_000),\n    market: new StreamTelemetry(5_000),\n  };\n  private telemetryTimer: NodeJS.Timeout | null = null;\n\n  private readonly dependencies: MarketDataDependencies;\n",
+          )
+          replace_once(
+              "  getServerOffsetMs(): number {\n    return this.serverOffsetMs;\n  }\n\n",
+              "  getServerOffsetMs(): number {\n    return this.serverOffsetMs;\n  }\n\n  getOperationalTelemetry() {\n    return {\n      generatedAt: Date.now(),\n      streams: {\n        public: this.streamTelemetry.public.snapshot(),\n        market: this.streamTelemetry.market.snapshot(),\n      },\n      orderBook: this.localOrderBook.diagnostics(),\n    };\n  }\n\n",
+          )
+          replace_once(
+              "    this.bootstrap(runId);\n    return Promise.resolve();\n",
+              "    this.telemetryTimer = setInterval(() => {\n      logger.info(\n        { telemetry: this.getOperationalTelemetry() },\n        'Binance BTC operational telemetry',\n      );\n    }, OPERATIONAL_TELEMETRY_LOG_MS);\n    this.bootstrap(runId);\n    return Promise.resolve();\n",
+          )
+          replace_once(
+              "      this.referenceCandleTimer,\n    ])\n",
+              "      this.referenceCandleTimer,\n      this.telemetryTimer,\n    ])\n",
+          )
+          replace_once(
+              "    for (const channel of STREAM_CHANNELS) {\n",
+              "    this.telemetryTimer = null;\n    for (const channel of STREAM_CHANNELS) {\n",
+          )
+          replace_once(
+              "      try {\n        this.handleMessage(String(event.data), receivedAt);\n        this.cache.markStreamEvent(channel, receivedAt);\n      } catch (error) {\n        logger.warn(\n",
+              "      try {\n        const eventAt = this.handleMessage(String(event.data), receivedAt);\n        this.cache.markStreamEvent(channel, receivedAt);\n        this.streamTelemetry[channel].recordMessage(receivedAt, eventAt);\n      } catch (error) {\n        this.streamTelemetry[channel].recordParseError(receivedAt);\n        logger.warn(\n",
+          )
+          replace_once(
+              "    this.cache.setStreamConnected(channel, false, errorCode);\n    logger.warn({ channel, errorCode }, 'Binance WebSocket disconnected');\n",
+              "    this.cache.setStreamConnected(channel, false, errorCode);\n    this.streamTelemetry[channel].recordReconnect();\n    logger.warn({ channel, errorCode }, 'Binance WebSocket disconnected');\n",
+          )
+          replace_once(
+              "  private handleMessage(raw: string, receivedAt: number): void {\n",
+              "  private handleMessage(raw: string, receivedAt: number): number | null {\n",
+          )
+          replace_once(
+              "      this.database.upsertClosedCandle(candle);\n      return;\n",
+              "      this.database.upsertClosedCandle(candle);\n      return event.E;\n",
+          )
+          replace_once(
+              "      this.cache.clearSourceError('market');\n      return;\n",
+              "      this.cache.clearSourceError('market');\n      return event.E;\n",
+          )
+          replace_once(
+              "      this.cache.clearSourceError('bookTicker');\n      return;\n",
+              "      this.cache.clearSourceError('bookTicker');\n      return event.E;\n",
+          )
+          replace_once(
+              "        event.E,\n      );\n      return;\n    }\n    if (envelope.stream.includes('@depth')) {\n",
+              "        event.E,\n      );\n      return event.E;\n    }\n    if (envelope.stream.includes('@depth')) {\n",
+          )
+          replace_once(
+              "      else if (result === 'GAP' || result === 'SNAPSHOT_STALE') {\n        const socket = this.sockets.public;\n",
+              "      else if (result === 'GAP' || result === 'SNAPSHOT_STALE') {\n        if (result === 'GAP') this.streamTelemetry.public.recordSequenceGap();\n        const socket = this.sockets.public;\n",
+          )
+          replace_once(
+              "      } else if (result === 'BUFFERED') {\n",
+              "      } else if (result === 'IGNORED') {\n        this.streamTelemetry.public.recordDroppedEvent();\n      } else if (result === 'BUFFERED') {\n",
+          )
+          replace_once(
+              "      return;\n    }\n    if (envelope.stream.includes('@forceOrder')) {\n",
+              "      return event.E;\n    }\n    if (envelope.stream.includes('@forceOrder')) {\n",
+          )
+          replace_once(
+              "      this.cache.addLiquidation({\n        eventTime: event.o.T,\n        receivedAt,\n        side: event.o.S,\n        price,\n        quantity,\n        notional: price * quantity,\n      });\n    }\n  }\n}\n",
+              "      this.cache.addLiquidation({\n        eventTime: event.o.T,\n        receivedAt,\n        side: event.o.S,\n        price,\n        quantity,\n        notional: price * quantity,\n      });\n      return event.E;\n    }\n    return null;\n  }\n}\n",
+          )
+
+          path.write_text(text)
+          PY
+          npx prettier --write src/main/market/service.ts src/main/market/stream-telemetry.ts tests/unit/stream-telemetry.test.ts
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main/market/service.ts src/main/market/stream-telemetry.ts tests/unit/stream-telemetry.test.ts
+          git commit -m "feat: instrument BTC stream operations"
+          git push origin HEAD:agent/operational-telemetry
