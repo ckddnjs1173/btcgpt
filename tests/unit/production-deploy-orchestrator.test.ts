@@ -10,9 +10,13 @@ describe('production deploy orchestrator', () => {
 
   it('defaults to read-only and requires explicit apply confirmation', () => {
     expect(raw).toContain("const APPLY_FLAG = '--apply'");
-    expect(raw).toContain("const EXPECTED_CONFIRMATION = 'btc-futures-assistant-relay'");
+    expect(raw).toContain(
+      "const EXPECTED_CONFIRMATION = 'btc-futures-assistant-relay'",
+    );
     expect(raw).toContain("Mode: ${apply ? 'APPLY' : 'READ_ONLY_PLAN'}");
-    expect(raw).toContain('READ_ONLY_PLAN completed. Production was not changed.');
+    expect(raw).toContain(
+      'READ_ONLY_PLAN completed. Production was not changed.',
+    );
     expect(raw).toContain('Refusing production changes.');
   });
 
@@ -28,6 +32,8 @@ describe('production deploy orchestrator', () => {
     expect(migrationApply).toBeGreaterThan(dryRun);
     expect(strictDeploy).toBeGreaterThan(migrationApply);
     expect(smoke).toBeGreaterThan(strictDeploy);
-    expect(raw).toContain('already-applied D1 migrations are not automatically rolled back');
+    expect(raw).toContain(
+      'already-applied D1 migrations are not automatically rolled back',
+    );
   });
 });

@@ -65,7 +65,9 @@ if (confirmation !== EXPECTED_CONFIRMATION) {
   );
 }
 
-console.log('\nAPPLY mode confirmed. Remote D1 migrations are applied before Worker deploy.');
+console.log(
+  '\nAPPLY mode confirmed. Remote D1 migrations are applied before Worker deploy.',
+);
 console.log(
   'Important: if a later deploy step fails, already-applied D1 migrations are not automatically rolled back.',
 );
