@@ -27,7 +27,8 @@ if (!registry.experimentId || !registry.name || !registry.model) {
 }
 if (decisionIds.length === 0)
   throw new Error('The base experiment must include at least one decisionId.');
-if (!instructions) throw new Error('The base experiment instructions are empty.');
+if (!instructions)
+  throw new Error('The base experiment instructions are empty.');
 
 const profileSources = {
   BASELINE: [],
@@ -80,7 +81,10 @@ for (const [index, profile] of EVIDENCE_ABLATION_PROFILES.entries()) {
     decisionIds: [...decisionIds],
     instructions,
   };
-  const file = path.join(outputDir, `${String(index).padStart(2, '0')}-${slug}.experiment.json`);
+  const file = path.join(
+    outputDir,
+    `${String(index).padStart(2, '0')}-${slug}.experiment.json`,
+  );
   await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   manifest.profiles.push({
     order: index,

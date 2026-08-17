@@ -48,7 +48,8 @@ function keepCoinbaseProvenance(row) {
 
 function profileRank(profile) {
   const index = EVIDENCE_ABLATION_PROFILES.indexOf(profile);
-  if (index < 0) throw new Error(`Unknown evidence ablation profile: ${profile}`);
+  if (index < 0)
+    throw new Error(`Unknown evidence ablation profile: ${profile}`);
   return index;
 }
 
@@ -60,7 +61,9 @@ function compactCryptoMarket(cryptoMarket, rank) {
   if (rank < 2) output.altMarket = null;
   if (rank < 3) output.crossVenue = null;
 
-  const health = Array.isArray(output.evidenceHealth) ? output.evidenceHealth : [];
+  const health = Array.isArray(output.evidenceHealth)
+    ? output.evidenceHealth
+    : [];
   output.evidenceHealth = health.filter((row) => {
     if (keepLeadHealth(row)) return true;
     if (rank >= 2 && keepAltHealth(row)) return true;
@@ -95,14 +98,16 @@ function compactEvidence(evidence, cryptoMarket) {
   const output = clone(evidence);
   output.cryptoMarketAvailable = cryptoMarket !== null;
   output.cryptoMarketGeneratedAt = cryptoMarket?.generatedAt ?? null;
-  output.cryptoMarketAgeMs = cryptoMarket === null ? null : output.cryptoMarketAgeMs ?? null;
+  output.cryptoMarketAgeMs =
+    cryptoMarket === null ? null : (output.cryptoMarketAgeMs ?? null);
   output.auxiliaryEvidenceHealth = cryptoMarket?.evidenceHealth ?? [];
   output.provenance = cryptoMarket?.provenance ?? [];
   return output;
 }
 
 function compactCompleteness(completeness, cryptoMarket) {
-  if (!completeness || typeof completeness !== 'object') return completeness ?? null;
+  if (!completeness || typeof completeness !== 'object')
+    return completeness ?? null;
   const output = clone(completeness);
   output.cryptoMarketAvailable = cryptoMarket !== null;
   output.leadAssetsAvailable = cryptoMarket
@@ -134,7 +139,10 @@ export function applyEvidenceAblation(replayInput, profile) {
   snapshot.cryptoMarket = cryptoMarket;
   snapshot.external = compactExternal(snapshot.external, rank);
   snapshot.evidence = compactEvidence(snapshot.evidence, cryptoMarket);
-  snapshot.completeness = compactCompleteness(snapshot.completeness, cryptoMarket);
+  snapshot.completeness = compactCompleteness(
+    snapshot.completeness,
+    cryptoMarket,
+  );
 
   return {
     replayInput: output,

@@ -91,7 +91,10 @@ test('baseline removes tested auxiliary axes while preserving BTC and unrelated 
   assert.equal(result.replayInput.snapshot.external.optionsV2, null);
   assert.equal(result.replayInput.snapshot.external.onchainV1, null);
   assert.equal(result.replayInput.snapshot.external.items[0].source, 'FED');
-  assert.equal(result.replayInput.snapshot.btcCore.marketState.markPrice, 60_000);
+  assert.equal(
+    result.replayInput.snapshot.btcCore.marketState.markPrice,
+    60_000,
+  );
   assert.equal(result.replayInput.snapshot.completeness.leadAssetsAvailable, 0);
   assert.equal(result.replayInput.snapshot.completeness.dynamicAssetCount, 0);
 });
@@ -132,7 +135,10 @@ test('profiles add exactly the intended evidence axes cumulatively', () => {
 });
 
 test('legacy market-snapshot replay cases are not falsely labeled as ablated', () => {
-  const legacy = { inputBasis: 'MARKET_SNAPSHOT', snapshot: { schemaVersion: 5 } };
+  const legacy = {
+    inputBasis: 'MARKET_SNAPSHOT',
+    snapshot: { schemaVersion: 5 },
+  };
   const result = applyEvidenceAblation(legacy, 'BASELINE');
   assert.equal(result.applied, false);
   assert.equal(result.reason, 'DECISION_CONTEXT_REQUIRED');
