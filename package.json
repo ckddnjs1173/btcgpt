@@ -24,6 +24,7 @@
     "test:soak": "vitest run tests/soak",
     "test:binance-smoke": "node scripts/binance-public-smoke.mjs",
     "test:relay-app-soak": "node scripts/relay-app-soak-monitor.mjs",
+    "test:decision-context-soak": "node scripts/decision-context-soak-monitor.mjs",
     "replay:run": "node scripts/replay-runner.mjs",
     "replay:campaign:prepare": "node scripts/replay-campaign-prepare.mjs",
     "replay:batch:prepare": "node scripts/replay-batch-prepare.mjs",
