@@ -1,0 +1,248 @@
+name: Temporary Auxiliary Telemetry Patch
+
+on:
+  push:
+    branches:
+      - agent/aux-operational-telemetry
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/aux-operational-telemetry
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Patch lead, alt, and Coinbase telemetry
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def edit(pathname, replacements):
+              path = Path(pathname)
+              text = path.read_text()
+              for old, new in replacements:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f'{pathname}: anchor count {count} for {old[:100]!r}')
+                  text = text.replace(old, new, 1)
+              path.write_text(text)
+
+          # ETH/SOL lead core.
+          edit('src/main/market/multicoin/lead-service.ts', [
+              (
+                  "import { fetchLeadOpenInterest } from './lead-binance-rest';\n",
+                  "import { fetchLeadOpenInterest } from './lead-binance-rest';\nimport { StreamTelemetry } from '../stream-telemetry';\n",
+              ),
+              (
+                  "const MAX_RECONNECT_MS = 30_000;\n",
+                  "const MAX_RECONNECT_MS = 30_000;\nconst OPERATIONAL_TELEMETRY_LOG_MS = 5 * 60_000;\n",
+              ),
+              (
+                  "  private stopping = false;\n  private oiTimer: NodeJS.Timeout | null = null;\n",
+                  "  private stopping = false;\n  private oiTimer: NodeJS.Timeout | null = null;\n  private telemetryTimer: NodeJS.Timeout | null = null;\n  private readonly streamTelemetry: Record<LeadStreamChannel, StreamTelemetry> = {\n    public: new StreamTelemetry(3_000),\n    market: new StreamTelemetry(5_000),\n  };\n",
+              ),
+              (
+                  "    this.oiTimer = setInterval(() => {\n      void this.refreshOpenInterest(runId);\n    }, OI_POLL_MS);\n",
+                  "    this.oiTimer = setInterval(() => {\n      void this.refreshOpenInterest(runId);\n    }, OI_POLL_MS);\n    this.telemetryTimer = setInterval(() => {\n      logger.info(\n        { telemetry: this.getOperationalTelemetry() },\n        'Lead-core operational telemetry',\n      );\n    }, OPERATIONAL_TELEMETRY_LOG_MS);\n",
+              ),
+              (
+                  "    if (this.oiTimer) clearInterval(this.oiTimer);\n    this.oiTimer = null;\n",
+                  "    if (this.oiTimer) clearInterval(this.oiTimer);\n    if (this.telemetryTimer) clearInterval(this.telemetryTimer);\n    this.oiTimer = null;\n    this.telemetryTimer = null;\n",
+              ),
+              (
+                  "  getStatus(): LeadCoreServiceStatus {\n    return structuredClone(this.status);\n  }\n\n",
+                  "  getStatus(): LeadCoreServiceStatus {\n    return structuredClone(this.status);\n  }\n\n  getOperationalTelemetry() {\n    return {\n      generatedAt: this.dependencies.now(),\n      streams: {\n        public: this.streamTelemetry.public.snapshot(),\n        market: this.streamTelemetry.market.snapshot(),\n      },\n      openInterest: structuredClone(this.status.openInterest),\n    };\n  }\n\n",
+              ),
+              (
+                  "      try {\n        this.handleMessage(String(event.data), receivedAt);\n        this.status.streams[channel].lastMessageAt = receivedAt;\n      } catch (error) {\n",
+                  "      try {\n        const eventAt = this.handleMessage(String(event.data), receivedAt);\n        this.status.streams[channel].lastMessageAt = receivedAt;\n        this.streamTelemetry[channel].recordMessage(receivedAt, eventAt);\n      } catch (error) {\n        this.streamTelemetry[channel].recordParseError(receivedAt);\n",
+              ),
+              (
+                  "    this.status.streams[channel].reconnectCount += 1;\n",
+                  "    this.status.streams[channel].reconnectCount += 1;\n    this.streamTelemetry[channel].recordReconnect();\n",
+              ),
+              (
+                  "  private handleMessage(raw: string, receivedAt: number): void {\n",
+                  "  private handleMessage(raw: string, receivedAt: number): number | null {\n",
+              ),
+              (
+                  "        receivedAt,\n      });\n      return;\n    }\n\n    if (envelope.stream.includes('@depth20')) {\n",
+                  "        receivedAt,\n      });\n      return event.T ?? event.E ?? receivedAt;\n    }\n\n    if (envelope.stream.includes('@depth20')) {\n",
+              ),
+              (
+                  "        receivedAt,\n      });\n      return;\n    }\n\n    if (envelope.stream.endsWith('@aggTrade')) {\n",
+                  "        receivedAt,\n      });\n      return event.T ?? event.E ?? receivedAt;\n    }\n\n    if (envelope.stream.endsWith('@aggTrade')) {\n",
+              ),
+              (
+                  "        receivedAt,\n      });\n      return;\n    }\n\n    if (envelope.stream.includes('@markPrice')) {\n",
+                  "        receivedAt,\n      });\n      return event.T;\n    }\n\n    if (envelope.stream.includes('@markPrice')) {\n",
+              ),
+              (
+                  "        receivedAt,\n      });\n      return;\n    }\n\n    if (envelope.stream.endsWith('@kline_1m')) {\n",
+                  "        receivedAt,\n      });\n      return event.E;\n    }\n\n    if (envelope.stream.endsWith('@kline_1m')) {\n",
+              ),
+              (
+                  "      if (!event.k.x) return;\n",
+                  "      if (!event.k.x) return event.E;\n",
+              ),
+              (
+                  "        closed: true,\n      });\n      return;\n    }\n\n    if (envelope.stream.endsWith('@forceOrder')) {\n",
+                  "        closed: true,\n      });\n      return event.E;\n    }\n\n    if (envelope.stream.endsWith('@forceOrder')) {\n",
+              ),
+              (
+                  "        receivedAt,\n      });\n      return;\n    }\n\n    throw new Error(`UNSUPPORTED_LEAD_STREAM:${envelope.stream}`);\n",
+                  "        receivedAt,\n      });\n      return event.E;\n    }\n\n    throw new Error(`UNSUPPORTED_LEAD_STREAM:${envelope.stream}`);\n",
+              ),
+          ])
+
+          # Sentiment core + dynamic basket.
+          edit('src/main/market/multicoin/alt-service.ts', [
+              (
+                  "import { AltAssetAccumulator } from './alt-accumulator';\n",
+                  "import { AltAssetAccumulator } from './alt-accumulator';\nimport { StreamTelemetry } from '../stream-telemetry';\n",
+              ),
+              (
+                  "const MAX_RECONNECT_MS = 30_000;\n",
+                  "const MAX_RECONNECT_MS = 30_000;\nconst OPERATIONAL_TELEMETRY_LOG_MS = 5 * 60_000;\n",
+              ),
+              (
+                  "  private scanTimer: NodeJS.Timeout | null = null;\n  private oiTimer: NodeJS.Timeout | null = null;\n",
+                  "  private scanTimer: NodeJS.Timeout | null = null;\n  private oiTimer: NodeJS.Timeout | null = null;\n  private telemetryTimer: NodeJS.Timeout | null = null;\n  private readonly streamTelemetry: Record<AltStreamChannel, StreamTelemetry> = {\n    public: new StreamTelemetry(5_000),\n    market: new StreamTelemetry(5_000),\n  };\n  private basketRebalanceCount = 0;\n  private basketChurnCount = 0;\n  private lastBasketRebalancedAt: number | null = null;\n",
+              ),
+              (
+                  "    this.oiTimer = setInterval(() => {\n      void this.refreshOpenInterest(runId);\n    }, OI_POLL_MS);\n",
+                  "    this.oiTimer = setInterval(() => {\n      void this.refreshOpenInterest(runId);\n    }, OI_POLL_MS);\n    this.telemetryTimer = setInterval(() => {\n      logger.info(\n        { telemetry: this.getOperationalTelemetry() },\n        'Alt-market operational telemetry',\n      );\n    }, OPERATIONAL_TELEMETRY_LOG_MS);\n",
+              ),
+              (
+                  "    clearTimer(this.oiTimer);\n    this.scanTimer = null;\n    this.oiTimer = null;\n",
+                  "    clearTimer(this.oiTimer);\n    clearTimer(this.telemetryTimer);\n    this.scanTimer = null;\n    this.oiTimer = null;\n    this.telemetryTimer = null;\n",
+              ),
+              (
+                  "  getBasket(): DynamicBasket | null {\n    return this.basket ? structuredClone(this.basket) : null;\n  }\n\n",
+                  "  getBasket(): DynamicBasket | null {\n    return this.basket ? structuredClone(this.basket) : null;\n  }\n\n  getOperationalTelemetry() {\n    return {\n      generatedAt: this.dependencies.now(),\n      streams: {\n        public: this.streamTelemetry.public.snapshot(),\n        market: this.streamTelemetry.market.snapshot(),\n      },\n      basket: {\n        memberCount: this.basket?.members.length ?? 0,\n        activeSymbolCount: this.activeSymbols.length,\n        rebalanceCount: this.basketRebalanceCount,\n        churnCount: this.basketChurnCount,\n        lastRebalancedAt: this.lastBasketRebalancedAt,\n      },\n    };\n  }\n\n",
+              ),
+              (
+                  "    const previousSymbols = this.activeSymbols.join(',');\n    this.candidates = dynamicCandidates;\n",
+                  "    const previousSymbols = this.activeSymbols.join(',');\n    const previousMembers = new Set(\n      this.basket?.members.map((member) => member.symbol) ?? [],\n    );\n    this.candidates = dynamicCandidates;\n",
+              ),
+              (
+                  "    this.basket = selectDynamicBasket({\n      generatedAt: now,\n      candidates: dynamicCandidates,\n      previous: this.basket,\n    });\n",
+                  "    this.basket = selectDynamicBasket({\n      generatedAt: now,\n      candidates: dynamicCandidates,\n      previous: this.basket,\n    });\n    const nextMembers = new Set(\n      this.basket.members.map((member) => member.symbol),\n    );\n    if (previousMembers.size > 0) {\n      const removed = [...previousMembers].filter(\n        (symbol) => !nextMembers.has(symbol),\n      ).length;\n      const added = [...nextMembers].filter(\n        (symbol) => !previousMembers.has(symbol),\n      ).length;\n      this.basketChurnCount += Math.max(removed, added);\n    }\n    this.basketRebalanceCount += 1;\n    this.lastBasketRebalancedAt = now;\n",
+              ),
+              (
+                  "      try {\n        this.handleMessage(String(event.data), this.dependencies.now());\n      } catch (error) {\n",
+                  "      const receivedAt = this.dependencies.now();\n      try {\n        const eventAt = this.handleMessage(String(event.data), receivedAt);\n        this.streamTelemetry[channel].recordMessage(receivedAt, eventAt);\n      } catch (error) {\n        this.streamTelemetry[channel].recordParseError(receivedAt);\n",
+              ),
+              (
+                  "    this.reconnectCounts[channel] += 1;\n",
+                  "    this.reconnectCounts[channel] += 1;\n    this.streamTelemetry[channel].recordReconnect();\n",
+              ),
+              (
+                  "  private handleMessage(raw: string, receivedAt: number): void {\n",
+                  "  private handleMessage(raw: string, receivedAt: number): number | null {\n",
+              ),
+              (
+                  "        receivedAt,\n      });\n      return;\n    }\n    if (envelope.stream.endsWith('@aggTrade')) {\n",
+                  "        receivedAt,\n      });\n      return event.T ?? event.E ?? receivedAt;\n    }\n    if (envelope.stream.endsWith('@aggTrade')) {\n",
+              ),
+              (
+                  "        receivedAt,\n      });\n      return;\n    }\n    if (envelope.stream.includes('@markPrice')) {\n",
+                  "        receivedAt,\n      });\n      return event.T;\n    }\n    if (envelope.stream.includes('@markPrice')) {\n",
+              ),
+              (
+                  "        receivedAt,\n      });\n      return;\n    }\n    if (envelope.stream.endsWith('@forceOrder')) {\n",
+                  "        receivedAt,\n      });\n      return event.E;\n    }\n    if (envelope.stream.endsWith('@forceOrder')) {\n",
+              ),
+              (
+                  "        receivedAt,\n      });\n      return;\n    }\n    throw new Error(`UNSUPPORTED_ALT_STREAM:${envelope.stream}`);\n",
+                  "        receivedAt,\n      });\n      return event.E;\n    }\n    throw new Error(`UNSUPPORTED_ALT_STREAM:${envelope.stream}`);\n",
+              ),
+          ])
+
+          # Coinbase spot cross-venue.
+          edit('src/main/market/cross-venue/coinbase-spot-service.ts', [
+              (
+                  "import { CoinbaseSpotAccumulator } from './coinbase-spot-accumulator';\n",
+                  "import { CoinbaseSpotAccumulator } from './coinbase-spot-accumulator';\nimport { StreamTelemetry } from '../stream-telemetry';\n",
+              ),
+              (
+                  "const HEALTH_CHECK_MS = 5_000;\n",
+                  "const HEALTH_CHECK_MS = 5_000;\nconst OPERATIONAL_TELEMETRY_LOG_MS = 5 * 60_000;\n",
+              ),
+              (
+                  "  private runGeneration = 0;\n  private healthTimer: NodeJS.Timeout | null = null;\n",
+                  "  private runGeneration = 0;\n  private healthTimer: NodeJS.Timeout | null = null;\n  private telemetryTimer: NodeJS.Timeout | null = null;\n  private readonly telemetry = Object.fromEntries(\n    COINBASE_SPOT_PRODUCTS.map((product) => [\n      product,\n      new StreamTelemetry(5_000),\n    ]),\n  ) as Record<CoinbaseSpotProduct, StreamTelemetry>;\n",
+              ),
+              (
+                  "    this.healthTimer = setInterval(\n      () => this.checkHealth(runId),\n      HEALTH_CHECK_MS,\n    );\n",
+                  "    this.healthTimer = setInterval(\n      () => this.checkHealth(runId),\n      HEALTH_CHECK_MS,\n    );\n    this.telemetryTimer = setInterval(() => {\n      logger.info(\n        { telemetry: this.getOperationalTelemetry() },\n        'Coinbase spot operational telemetry',\n      );\n    }, OPERATIONAL_TELEMETRY_LOG_MS);\n",
+              ),
+              (
+                  "    if (this.healthTimer) clearInterval(this.healthTimer);\n    this.healthTimer = null;\n",
+                  "    if (this.healthTimer) clearInterval(this.healthTimer);\n    if (this.telemetryTimer) clearInterval(this.telemetryTimer);\n    this.healthTimer = null;\n    this.telemetryTimer = null;\n",
+              ),
+              (
+                  "  getStatus(): Record<CoinbaseSpotProduct, ProductStatus> {\n    return structuredClone(this.status);\n  }\n\n",
+                  "  getStatus(): Record<CoinbaseSpotProduct, ProductStatus> {\n    return structuredClone(this.status);\n  }\n\n  getOperationalTelemetry() {\n    return {\n      generatedAt: this.dependencies.now(),\n      products: Object.fromEntries(\n        COINBASE_SPOT_PRODUCTS.map((product) => [\n          product,\n          this.telemetry[product].snapshot(),\n        ]),\n      ) as Record<\n        CoinbaseSpotProduct,\n        ReturnType<StreamTelemetry['snapshot']>\n      >,\n    };\n  }\n\n",
+              ),
+              (
+                  "      try {\n        this.handleMessage(product, String(event.data), receivedAt, socket);\n        this.status[product].lastMessageAt = receivedAt;\n      } catch (error) {\n",
+                  "      try {\n        const eventAt = this.handleMessage(\n          product,\n          String(event.data),\n          receivedAt,\n          socket,\n        );\n        this.status[product].lastMessageAt = receivedAt;\n        this.telemetry[product].recordMessage(receivedAt, eventAt);\n      } catch (error) {\n        this.telemetry[product].recordParseError(receivedAt);\n",
+              ),
+              (
+                  "    socket: WebSocket | null,\n  ): void {\n",
+                  "    socket: WebSocket | null,\n  ): number | null {\n",
+              ),
+              (
+                  "      this.status[product].lastHeartbeatAt = receivedAt;\n      return;\n",
+                  "      this.status[product].lastHeartbeatAt = receivedAt;\n      return envelopeTime;\n",
+              ),
+              (
+                  "      }\n      return;\n    }\n    if (envelope.channel === 'market_trades') {\n",
+                  "      }\n      return envelopeTime;\n    }\n    if (envelope.channel === 'market_trades') {\n",
+              ),
+              (
+                  "      }\n      return;\n    }\n    if (envelope.channel === 'level2' || envelope.channel === 'l2_data') {\n",
+                  "      }\n      return envelopeTime;\n    }\n    if (envelope.channel === 'level2' || envelope.channel === 'l2_data') {\n",
+              ),
+              (
+                  "        this.status[product].sequenceGapCount += 1;\n",
+                  "        this.status[product].sequenceGapCount += 1;\n        this.telemetry[product].recordSequenceGap();\n",
+              ),
+              (
+                  "        if (socket) socket.close(1011, 'level2 sequence gap');\n        return;\n",
+                  "        if (socket) socket.close(1011, 'level2 sequence gap');\n        return envelopeTime;\n",
+              ),
+              (
+                  "        if (previous !== null && sequence <= previous) return;\n",
+                  "        if (previous !== null && sequence <= previous) {\n          this.telemetry[product].recordDroppedEvent();\n          return envelopeTime;\n        }\n",
+              ),
+              (
+                  "      }\n      return;\n    }\n    // Coinbase explicitly allows new message types. Unsupported channels are ignored.\n",
+                  "      }\n      return envelopeTime;\n    }\n    // Coinbase explicitly allows new message types. Unsupported channels are ignored.\n    return envelopeTime;\n",
+              ),
+              (
+                  "    this.status[product].consecutiveFailures += 1;\n",
+                  "    this.status[product].consecutiveFailures += 1;\n    this.telemetry[product].recordReconnect();\n",
+              ),
+          ])
+          PY
+          npx prettier --write src/main/market/multicoin/lead-service.ts src/main/market/multicoin/alt-service.ts src/main/market/cross-venue/coinbase-spot-service.ts
+          npm run typecheck
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main/market/multicoin/lead-service.ts src/main/market/multicoin/alt-service.ts src/main/market/cross-venue/coinbase-spot-service.ts
+          git commit -m "feat: instrument auxiliary market streams"
+          git push origin HEAD:agent/aux-operational-telemetry
