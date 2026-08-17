@@ -86,7 +86,7 @@ export class ExternalProviderRegistry {
           state.lastSuccessAt = now;
           state.consecutiveFailures = 0;
           state.error = null;
-          return result as ProviderFetchResult<unknown>;
+          return result;
         } catch (error) {
           state.status = state.lastSuccessAt === null ? 'DISCONNECTED' : 'DEGRADED';
           state.lastFailureAt = now;
