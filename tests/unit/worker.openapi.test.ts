@@ -289,8 +289,9 @@ describe('worker OpenAPI', () => {
     expect(raw).toContain('triggerContract');
     expect(raw).toContain('TRIGGERED');
     expect(raw).toContain('재분석');
-    expect(raw).toContain('instructionVersion=decision-context-v1');
+    expect(raw).toContain('instructionVersion=gpt-policy-v2');
     expect(raw).toContain('contextPackVersion=decision-context-v1');
+    expect(raw).not.toContain('instructionVersion=decision-context-v1');
     expect(raw).not.toContain('instructionVersion=phase23-v1');
     expect(raw).not.toContain('contextPackVersion=context-v2');
     expect(raw).toContain('reasoningPolicy.recommendedMode');
