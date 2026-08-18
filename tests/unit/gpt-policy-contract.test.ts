@@ -15,7 +15,9 @@ describe('GPT Policy v3 contract', () => {
     expect(instructions).toContain('# BTC Futures Assistant — GPT Policy v3');
     expect(instructions).toContain('instructionVersion=gpt-policy-v3');
     expect(instructions).toContain('contextPackVersion=decision-context-v1');
-    expect(instructions).not.toContain('instructionVersion=decision-context-v1');
+    expect(instructions).not.toContain(
+      'instructionVersion=decision-context-v1',
+    );
   });
 
   it('keeps evidence precedence and independent-confirmation rules explicit', () => {
@@ -61,7 +63,9 @@ describe('GPT Policy v3 contract', () => {
   });
 
   it('treats ENTER as provisional until deterministic validation succeeds', () => {
-    expect(instructions).toContain('`ENTER_NOW`는 validation 전까지 후보일 뿐이다');
+    expect(instructions).toContain(
+      '`ENTER_NOW`는 validation 전까지 후보일 뿐이다',
+    );
     expect(instructions).toContain(
       '`validateTradePlan`이 성공한 경우만 최종 `ENTER_NOW`로 확정',
     );
