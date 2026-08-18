@@ -4,7 +4,7 @@
 
 - OpenAPI **5.9.0**: `worker/openapi/openapi.json`
 - Instructions: `worker/openapi/GPT_INSTRUCTIONS.md`
-- GPT policy/telemetry instruction version: `gpt-policy-v2`
+- GPT policy/telemetry instruction version: `gpt-policy-v3`
 - Live Decision Context: `decision-context-v1`
 - Instruction budget: **7,500 characters maximum**
 
@@ -50,8 +50,8 @@ Never use `UPLOADER_WRITE_KEY` in the Custom GPT. The upload key is only for the
 2. If the response already shows a live position or management lifecycle, stop new-entry analysis and switch to position management.
 3. Apply `reasoningPolicy`. Call `getExternalContext` only when the current policy/instructions require external expansion.
 4. `WAIT_TRIGGER` may include one GPT-authored structured trigger, but a local `TRIGGERED` event is only a request for fresh reanalysis.
-5. For `ENTER_NOW`, call `validateTradePlan` with the same current `snapshotId`. A changed snapshot requires fresh `getDecisionSnapshot` analysis.
-6. Call `recordDecision` exactly once immediately before the user-facing answer, with `instructionVersion=gpt-policy-v2` and `contextPackVersion=decision-context-v1`.
+5. Treat `ENTER_NOW` as provisional until `validateTradePlan` succeeds on the same current `snapshotId`. If validation blocks the candidate, reclassify the final user-facing action and preserve `planValidation=BLOCKED` in telemetry.
+6. Call `recordDecision` exactly once immediately before the user-facing answer, with `instructionVersion=gpt-policy-v3` and `contextPackVersion=decision-context-v1`.
 
 `recordDecision` is analytics-only telemetry. Its failure must not rewrite the market conclusion, bypass validation, or create invented trade values.
 
