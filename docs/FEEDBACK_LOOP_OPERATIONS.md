@@ -96,19 +96,21 @@ A research campaign can be selected without manually copying decision IDs from D
 
 For the current canonical GPT policy, keep the policy version and frozen context version distinct:
 
-- `instructionVersion=gpt-policy-v2`
+- `instructionVersion=gpt-policy-v3`
 - `contextPackVersion=decision-context-v1`
+
+The previous baseline is preserved at `research/gpt-policies/gpt-policy-v2.md` so matched replay comparisons do not depend on reconstructing old prompt text from memory.
 
 Example campaign spec:
 
 ```json
 {
   "registry": {
-    "experimentId": "gpt-policy-v2-fast-001",
-    "name": "GPT Policy v2 FAST",
+    "experimentId": "gpt-policy-v3-fast-001",
+    "name": "GPT Policy v3 FAST",
     "model": "MODEL_NAME",
     "modelVersion": null,
-    "instructionVersion": "gpt-policy-v2",
+    "instructionVersion": "gpt-policy-v3",
     "contextPackVersion": "decision-context-v1",
     "analysisMode": "FAST",
     "enabledSources": [],
@@ -126,20 +128,20 @@ The campaign tool normalizes the experiment registry to the strict replay experi
 With `RELAY_URL` and `ACTION_READ_KEY` set locally:
 
 ```powershell
-npm run replay:campaign:prepare -- campaign-spec.json gpt-policy-v2-001
+npm run replay:campaign:prepare -- campaign-spec.json gpt-policy-v3-001
 ```
 
 This queries only replay metadata plus outcome-finalization status, samples cases across the requested decision classes, and writes:
 
-- `gpt-policy-v2-001.experiment.json` for the existing batch preparation step;
-- `gpt-policy-v2-001.selection.json` as the audit manifest.
+- `gpt-policy-v3-001.experiment.json` for the existing batch preparation step;
+- `gpt-policy-v3-001.selection.json` as the audit manifest.
 
 The selection algorithm samples across the available time range rather than simply taking the latest consecutive rows. If one decision class is sparse, remaining capacity is filled from other eligible classes. It never reads future return values.
 
 The next step is still no-cost:
 
 ```powershell
-npm run replay:batch:prepare -- gpt-policy-v2-001.experiment.json gpt-policy-v2-001.batch
+npm run replay:batch:prepare -- gpt-policy-v3-001.experiment.json gpt-policy-v3-001.batch
 ```
 
 This prepares OpenAI Batch JSONL only. Actual paid upload/execution remains outside these scripts and requires explicit approval.
