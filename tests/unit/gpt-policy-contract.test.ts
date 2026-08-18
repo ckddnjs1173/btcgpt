@@ -10,10 +10,10 @@ const instructionsPath = path.join(
 );
 const instructions = fs.readFileSync(instructionsPath, 'utf8');
 
-describe('GPT Policy v2 contract', () => {
+describe('GPT Policy v3 contract', () => {
   it('keeps GPT policy telemetry separate from the Decision Context version', () => {
-    expect(instructions).toContain('# BTC Futures Assistant — GPT Policy v2');
-    expect(instructions).toContain('instructionVersion=gpt-policy-v2');
+    expect(instructions).toContain('# BTC Futures Assistant — GPT Policy v3');
+    expect(instructions).toContain('instructionVersion=gpt-policy-v3');
     expect(instructions).toContain('contextPackVersion=decision-context-v1');
     expect(instructions).not.toContain('instructionVersion=decision-context-v1');
   });
@@ -48,6 +48,9 @@ describe('GPT Policy v2 contract', () => {
       '`DATA_BLOCKED`: gate가 분석 자체를 막을 때만',
     );
     expect(instructions).toContain('거래를 만들기 위해 WAIT을 남발하지 않는다');
+    expect(instructions).toContain(
+      '`ENTER_NOW`와 `WAIT_TRIGGER`의 side는 `LONG|SHORT`',
+    );
   });
 
   it('keeps WAIT triggers as reanalysis requests instead of entry permission', () => {
@@ -57,14 +60,25 @@ describe('GPT Policy v2 contract', () => {
     );
   });
 
+  it('treats ENTER as provisional until deterministic validation succeeds', () => {
+    expect(instructions).toContain('`ENTER_NOW`는 validation 전까지 후보일 뿐이다');
+    expect(instructions).toContain(
+      '`validateTradePlan`이 성공한 경우만 최종 `ENTER_NOW`로 확정',
+    );
+    expect(instructions).toContain(
+      'ENTER 후보로 validation을 실행했으나 차단돼 최종 WAIT/NO_TRADE/DATA_BLOCKED가 된 경우=`BLOCKED`',
+    );
+    expect(instructions).toContain(
+      'trade-plan validation을 실행하지 않은 판단/관리=`NOT_APPLICABLE`',
+    );
+  });
+
   it('keeps confidence descriptive rather than an action shortcut', () => {
     expect(instructions).toContain('숫자 확률 대신 `NONE|LOW|MEDIUM|HIGH`');
     expect(instructions).toContain(
       'confidence가 낮다고 자동 WAIT, 높다고 자동 ENTER하지 않는다',
     );
-    expect(instructions).toContain(
-      '보조시장 합의만으로 HIGH 금지',
-    );
+    expect(instructions).toContain('보조시장 합의만으로 HIGH 금지');
   });
 
   it('keeps position management anchored to protection and invalidation', () => {
