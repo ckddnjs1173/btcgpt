@@ -1,5 +1,7 @@
 # Intelligence Batch — Phase 21-23
 
+> **Historical implementation record.** This file is not the current live GPT contract or deployment guide. Its `phase23-v1`, `context-v2`, and direct Wrangler deployment instructions are superseded. Current live setup is defined by `worker/openapi/GPT_ACTION_SETUP.md`, `worker/openapi/GPT_INSTRUCTIONS.md`, and `docs/PRODUCTION_READINESS.md`.
+
 ## Scope
 
 This batch activates three linked intelligence layers without adding a local LONG/SHORT engine.
