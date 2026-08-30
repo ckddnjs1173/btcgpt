@@ -3,6 +3,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { resolveNpmInvocation } from './production-deploy-command.mjs';
+import {
+  BUILDER_INSTRUCTION_LIMIT,
+  BUILDER_OPERATION_DESCRIPTION_LIMIT,
+  EXPECTED_OPERATION_IDS,
+  INTERNAL_INSTRUCTION_BUDGET,
+  buildBuilderSchema,
+  validateBuilderSchema,
+  validateInstructions,
+} from './gpt-builder-export-lib.mjs';
 
 const root = process.cwd();
 const ciMode = process.argv.includes('--ci');
@@ -47,6 +56,7 @@ function compareVersion(actual, required) {
 
 const packageJson = JSON.parse(read('package.json'));
 const openApi = JSON.parse(read('worker/openapi/openapi.json'));
+const builderOpenApi = buildBuilderSchema(openApi);
 const instructions = read('worker/openapi/GPT_INSTRUCTIONS.md');
 const actionSetup = read('worker/openapi/GPT_ACTION_SETUP.md');
 const wrangler = read('wrangler.toml');
@@ -73,11 +83,8 @@ check(
   'package.json npm engine must remain >=11.0.0',
 );
 
-const instructionLength = Array.from(instructions).length;
-check(
-  instructionLength <= 7_500,
-  `GPT_INSTRUCTIONS.md exceeds 7,500 characters (${instructionLength})`,
-);
+const instructionCheck = validateInstructions(instructions);
+for (const failure of instructionCheck.failures) check(false, failure);
 check(
   instructions.includes('getDecisionSnapshot'),
   'GPT_INSTRUCTIONS.md must use getDecisionSnapshot',
@@ -87,6 +94,9 @@ check(
   'GPT_INSTRUCTIONS.md must identify decision-context-v1',
 );
 
+const builderSchemaCheck = validateBuilderSchema(builderOpenApi);
+for (const failure of builderSchemaCheck.failures) check(false, failure);
+
 const setupOpenApiVersion = /OpenAPI \*\*([0-9.]+)\*\*/.exec(actionSetup)?.[1];
 check(
   setupOpenApiVersion === openApi.info?.version,
@@ -94,7 +104,19 @@ check(
 );
 check(
   actionSetup.includes('7,500'),
-  'GPT_ACTION_SETUP.md must document the 7,500-character instruction budget',
+  'GPT_ACTION_SETUP.md must document the 7,500-character internal instruction budget',
+);
+check(
+  actionSetup.includes('8,000'),
+  'GPT_ACTION_SETUP.md must document the observed 8,000-character Builder limit',
+);
+check(
+  actionSetup.includes('300'),
+  'GPT_ACTION_SETUP.md must document the observed 300-character operation-description limit',
+);
+check(
+  actionSetup.includes('copy-gpt-builder.ps1'),
+  'GPT_ACTION_SETUP.md must use the UTF-8-safe Builder clipboard helper',
 );
 check(
   actionSetup.includes('공식 live anchor'),
@@ -105,24 +127,8 @@ check(
   'GPT_ACTION_SETUP.md contains obsolete context-v2 wording',
 );
 
-const expectedOperations = [
-  'getDecisionSnapshot',
-  'getLatestSnapshot',
-  'getExternalContext',
-  'validateTradePlan',
-  'validatePositionAdjustment',
-  'getTradeLifecycle',
-  'recordDecision',
-];
-const actualOperations = Object.values(openApi.paths ?? {})
-  .flatMap((pathItem) => Object.values(pathItem ?? {}))
-  .filter(
-    (operation) =>
-      operation && typeof operation === 'object' && 'operationId' in operation,
-  )
-  .map((operation) => operation.operationId)
-  .filter((operationId) => typeof operationId === 'string');
-for (const operationId of expectedOperations) {
+const actualOperations = builderSchemaCheck.operationIds;
+for (const operationId of EXPECTED_OPERATION_IDS) {
   check(
     actualOperations.includes(operationId),
     `OpenAPI missing operationId ${operationId}`,
@@ -218,7 +224,12 @@ note(
   `D1 migrations: ${migrationFiles.length} files, latest ${migrationFiles.at(-1) ?? 'none'}`,
 );
 note(`OpenAPI: ${openApi.info?.version ?? 'missing'}`);
-note(`GPT instructions: ${instructionLength}/7500 characters`);
+note(
+  `GPT instructions: ${instructionCheck.length}/${INTERNAL_INSTRUCTION_BUDGET} internal (${BUILDER_INSTRUCTION_LIMIT} Builder limit)`,
+);
+note(
+  `GPT Builder schema: ${actualOperations.length} operations, descriptions <=${BUILDER_OPERATION_DESCRIPTION_LIMIT}`,
+);
 note(
   `Worker entrypoint: ${/main = "([^"]+)"/.exec(wrangler)?.[1] ?? 'missing'}`,
 );
