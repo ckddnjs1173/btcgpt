@@ -90,9 +90,7 @@ describe('RelayUploader snapshot settings', () => {
     expect(call).toBeDefined();
     const [input, init] = call!;
     const headers = new Headers(init?.headers);
-    expect(input).toBe(
-      'https://relay.example.workers.dev/v1/snapshot/latest',
-    );
+    expect(input).toBe('https://relay.example.workers.dev/v1/snapshot/latest');
     expect(init?.method).toBe('PUT');
     expect(headers.get('authorization')).toBe(`Bearer ${uploadKey}`);
     expect(headers.get('content-type')).toBe('application/json');
