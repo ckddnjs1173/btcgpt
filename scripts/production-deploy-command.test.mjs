@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
 
 import { resolveNpmInvocation } from './production-deploy-command.mjs';
@@ -44,4 +45,14 @@ test('uses npm from PATH on non-Windows fallback', () => {
   assert.equal(invocation.executable, 'npm');
   assert.deepEqual(invocation.prefixArgs, []);
   assert.equal(invocation.strategy, 'PATH_NPM');
+});
+
+test('production preflight reuses the Windows-safe npm invocation resolver', () => {
+  const preflight = fs.readFileSync(
+    new URL('./production-preflight.mjs', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(preflight, /resolveNpmInvocation\(\)/);
+  assert.doesNotMatch(preflight, /['"]npm\.cmd['"]/);
 });
