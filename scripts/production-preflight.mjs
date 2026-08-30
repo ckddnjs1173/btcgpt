@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { resolveNpmInvocation } from './production-deploy-command.mjs';
+
 const root = process.cwd();
 const ciMode = process.argv.includes('--ci');
 const failures = [];
@@ -53,7 +55,9 @@ check(
   compareVersion(process.version, '24.0.0') >= 0,
   `Node.js 24+ required; found ${process.version}`,
 );
-const npmVersion = command(process.platform === 'win32' ? 'npm.cmd' : 'npm', [
+const npmInvocation = resolveNpmInvocation();
+const npmVersion = command(npmInvocation.executable, [
+  ...npmInvocation.prefixArgs,
   '--version',
 ]);
 check(
