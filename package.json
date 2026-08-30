@@ -23,6 +23,7 @@
     "test:frozen-context-audit": "node --test scripts/frozen-context-audit-lib.test.mjs",
     "test:research-finalize": "node --test scripts/research-finalize-lib.test.mjs",
     "test:production-deploy": "node --test scripts/production-deploy-command.test.mjs",
+    "test:gpt-builder": "node --test scripts/gpt-builder-export-lib.test.mjs && node scripts/gpt-builder-export.mjs instructions --check",
     "e2e": "vitest run tests/e2e && playwright test",
     "e2e:electron": "playwright test",
     "test:security": "vitest run tests/security",
@@ -40,12 +41,13 @@
     "research:ablation:report": "node scripts/evidence-ablation-report.mjs",
     "research:context-audit": "node scripts/frozen-context-audit.mjs",
     "research:finalize": "node scripts/research-finalize.mjs",
+    "gpt:builder:check": "node scripts/gpt-builder-export.mjs instructions --check",
     "ops:preflight": "node scripts/production-preflight.mjs",
     "ops:deploy": "node scripts/production-deploy.mjs",
     "ops:postdeploy-smoke": "node scripts/production-postdeploy-smoke.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations && npm run test:lead-lag && npm run test:evidence-ablation && npm run test:evidence-ablation-report && npm run test:frozen-context-audit && npm run test:research-finalize && npm run test:production-deploy && node scripts/production-preflight.mjs --ci"
+    "check": "npm run lint && npm run typecheck && npm test && npm run test:sqlite && npm run test:migrations && npm run test:lead-lag && npm run test:evidence-ablation && npm run test:evidence-ablation-report && npm run test:frozen-context-audit && npm run test:research-finalize && npm run test:production-deploy && npm run test:gpt-builder && node scripts/production-preflight.mjs --ci"
   },
   "keywords": [
     "bitcoin",
@@ -91,7 +93,7 @@
     "electron": "43.2.0",
     "eslint": "10.0.2",
     "eslint-config-prettier": "10.1.8",
-    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-hooks": "6.1.0",
     "eslint-plugin-react-refresh": "0.5.3",
     "globals": "17.7.0",
     "jsdom": "29.1.1",
