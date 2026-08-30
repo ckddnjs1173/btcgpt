@@ -1,0 +1,21 @@
+name: GPT Builder Format Preview
+
+on:
+  push:
+    branches:
+      - feat/openapi-builder-description-limit
+
+jobs:
+  preview:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Print canonical Prettier diff
+        run: |
+          npm exec prettier -- --write scripts/gpt-builder-export-lib.mjs scripts/gpt-builder-export-lib.test.mjs
+          git diff -- scripts/gpt-builder-export-lib.mjs scripts/gpt-builder-export-lib.test.mjs
