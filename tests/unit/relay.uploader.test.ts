@@ -10,11 +10,29 @@ describe('RelayUploader snapshot settings', () => {
     vi.unstubAllGlobals();
   });
 
+  it('uses the Worker health endpoint for connection checks', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const uploader = new RelayUploader(new MarketCache(), {
+      baseUrl: 'https://relay.example.workers.dev',
+      uploadKey: 'x'.repeat(32),
+    });
+
+    await uploader.testConnection();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [input, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(input).toBe('https://relay.example.workers.dev/health');
+    expect(init.method).toBe('GET');
+  });
+
   it('publishes the current fee and slippage settings from its provider', async () => {
     let uploadedBody: string | null = null;
     vi.stubGlobal(
       'fetch',
-      vi.fn((_url: URL, init?: RequestInit) => {
+      vi.fn((_url: string | URL | Request, init?: RequestInit) => {
         uploadedBody = typeof init?.body === 'string' ? init.body : null;
         return Promise.resolve(new Response(null, { status: 204 }));
       }),
@@ -48,6 +66,31 @@ describe('RelayUploader snapshot settings', () => {
     } finally {
       uploader.stop();
     }
+  });
+
+  it('uploads snapshots with the Worker Bearer write contract', async () => {
+    const uploadKey = 'u'.repeat(32);
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const uploader = new RelayUploader(new MarketCache(), {
+      baseUrl: 'https://relay.example.workers.dev/',
+      uploadKey,
+    });
+
+    await uploader.uploadOnce();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [input, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = new Headers(init.headers);
+    expect(input).toBe(
+      'https://relay.example.workers.dev/v1/snapshot/latest',
+    );
+    expect(init.method).toBe('PUT');
+    expect(headers.get('authorization')).toBe(`Bearer ${uploadKey}`);
+    expect(headers.get('content-type')).toBe('application/json');
+    expect(headers.has('x-upload-key')).toBe(false);
   });
 
   it('captures relay round-trip and server receive timing', async () => {
