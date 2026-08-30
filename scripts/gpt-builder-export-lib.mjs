@@ -19,14 +19,14 @@ export function codePointLength(value) {
 function truncateCodePoints(value, limit) {
   if (codePointLength(value) <= limit) return value;
   if (limit <= 3) return Array.from(value).slice(0, limit).join('');
-  return `${Array.from(value).slice(0, limit - 3).join('')}...`;
+  return `${Array.from(value)
+    .slice(0, limit - 3)
+    .join('')}...`;
 }
 
 function isOperation(value) {
   return (
-    value &&
-    typeof value === 'object' &&
-    typeof value.operationId === 'string'
+    value && typeof value === 'object' && typeof value.operationId === 'string'
   );
 }
 
