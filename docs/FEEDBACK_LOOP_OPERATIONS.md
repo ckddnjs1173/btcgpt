@@ -163,24 +163,25 @@ This writes ignored local files:
 
 The report includes readiness, original GPT decision quality, executed-trade feedback, sizing research and optional experiment benchmarks. It reads existing research endpoints only and makes no paid OpenAI API call.
 
-## One-command production apply
+## Guarded production apply
 
-After a release is merged to `main`:
+After a release is merged to `main`, use the canonical guarded deploy wrapper rather than a standalone PowerShell deployment script.
+
+Review the read-only plan first:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\apply-production.ps1
+npm run ops:deploy
 ```
 
-The script:
+Only after the output is reviewed, apply remote changes explicitly:
 
-1. switches to and pulls `main`;
-2. validates the full local D1 migration chain;
-3. lists and applies pending remote D1 migrations;
-4. lists migrations again;
-5. performs Worker dry-run and deploy;
-6. optionally calls `/health` when `RELAY_URL` is set.
+```powershell
+npm run ops:deploy -- --apply --confirm=btc-futures-assistant-relay
+```
 
-The script does not edit Custom GPT Instructions or Actions.
+Apply mode runs the production preflight, remote D1 migration checks/application, strict Worker deployment, and authenticated post-deploy smoke according to `docs/PRODUCTION_DEPLOY_COMMAND.md` and `docs/PRODUCTION_READINESS.md`.
+
+The deployment wrapper does not edit Custom GPT Instructions or Actions and does not place or modify Binance orders.
 
 ## Safety boundaries
 
