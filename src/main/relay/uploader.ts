@@ -91,7 +91,7 @@ export class RelayUploader {
   }
 
   async testConnection(): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/v1/health`, {
+    const response = await fetch(`${this.baseUrl}/health`, {
       method: 'GET',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -122,8 +122,8 @@ export class RelayUploader {
       const response = await fetch(`${this.baseUrl}/v1/snapshot/latest`, {
         method: 'PUT',
         headers: {
+          authorization: `Bearer ${this.uploadKey}`,
           'content-type': 'application/json',
-          'x-upload-key': this.uploadKey,
         },
         body: compact.json,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
