@@ -85,14 +85,39 @@ Maker/Taker 수수료율을 우선 사용합니다.
 
 ### 비공개 GPT Action
 
-GPT Action에는 `worker/openapi/openapi.json`을 등록하고 인증을 API Key /
-Bearer로 설정합니다. 인증값에는 `ACTION_READ_KEY`만 사용합니다.
-`UPLOADER_WRITE_KEY`를 GPT에 입력하면 안 됩니다.
+GPT Builder에 원본 파일을 bare `Get-Content`로 직접 복사하지 않습니다. Windows
+PowerShell 5.1의 기본 텍스트 디코딩은 UTF-8-without-BOM 한글을 깨뜨릴 수 있습니다.
+먼저 현재 revision의 Builder 호환성을 검증합니다.
 
-GPT Instructions에는 `worker/openapi/GPT_INSTRUCTIONS.md`의 현재 버전을
-사용합니다. 현재시장 판단은 `getDecisionSnapshot`을 공식 입력으로 사용하고,
-진입 계획 검증은 실제 분석에 사용한 `snapshotId`를 `validateTradePlan`에 그대로 전달합니다.
+```powershell
+npm run gpt:builder:check
+```
+
+Instructions는 strict UTF-8 clipboard helper로 복사합니다.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\copy-gpt-builder.ps1 -Target instructions
+```
+
+GPT Builder의 Instructions 전체를 교체합니다. 첫 줄은
+`# BTC Futures Assistant — GPT Policy v3`이어야 합니다.
+
+Action schema도 같은 helper로 `worker/openapi/openapi.json`에서 생성한
+Builder-safe projection을 복사합니다.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\copy-gpt-builder.ps1 -Target schema
+```
+
+이 projection은 OpenAPI path, operationId, parameter, request/response schema,
+Bearer auth와 server URL을 바꾸지 않고 Builder UI 제한을 넘는 operation description만
+결정론적으로 축약합니다. 인증은 API Key / Bearer로 설정하고 `ACTION_READ_KEY`만
+사용합니다. `UPLOADER_WRITE_KEY`를 GPT에 입력하면 안 됩니다.
+
+현재시장 판단은 `getDecisionSnapshot`을 공식 입력으로 사용하고, 진입 계획 검증은
+실제 분석에 사용한 `snapshotId`를 `validateTradePlan`에 그대로 전달합니다.
 `getLatestSnapshot`은 상세 확인이나 fallback이 필요한 경우에만 사용합니다.
+자세한 설정 계약은 `worker/openapi/GPT_ACTION_SETUP.md`를 따릅니다.
 
 ## Worker 재배포
 
