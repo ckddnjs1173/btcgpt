@@ -130,12 +130,18 @@ function isProfitTakingLimit(input: {
 
 function observedProtection(input: {
   snapshot: unknown;
-  mode: string | null;
+  hasBinancePosition: boolean;
   positionSide: string | null;
   entryPrice: number | null;
   remainingQuantity: number | null;
 }): PositionManagementContext['actualProtection'] {
-  const { snapshot, mode, positionSide, entryPrice, remainingQuantity } = input;
+  const {
+    snapshot,
+    hasBinancePosition,
+    positionSide,
+    entryPrice,
+    remainingQuantity,
+  } = input;
   const rawOrders = at(snapshot, 'trading', 'liveManual', 'protectiveOrders');
   const orders = Array.isArray(rawOrders)
     ? rawOrders
@@ -200,7 +206,7 @@ function observedProtection(input: {
     .filter((value): value is number => value !== null);
 
   return {
-    source: mode === 'LIVE_MANUAL' ? 'BINANCE_READ_ONLY' : 'NOT_APPLICABLE',
+    source: hasBinancePosition ? 'BINANCE_READ_ONLY' : 'NOT_APPLICABLE',
     observedAt:
       observedAtValues.length > 0 ? Math.max(...observedAtValues) : null,
     stopLosses,
@@ -344,7 +350,7 @@ export async function buildPositionManagementContext(
   });
   const actualProtection = observedProtection({
     snapshot,
-    mode,
+    hasBinancePosition: livePosition !== null,
     positionSide: side,
     entryPrice,
     remainingQuantity,
