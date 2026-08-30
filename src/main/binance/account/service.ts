@@ -8,8 +8,23 @@ import { logger } from '../../logging/logger';
 import type { CredentialStore } from '../../security/credential-store';
 import { BinanceAccountClient } from './rest';
 
-const STREAM_URL = 'wss://fstream.binance.com/ws';
+const PRIVATE_STREAM_URL = 'wss://fstream.binance.com/private/ws';
 const STREAM_KEEPALIVE_MS = 50 * 60_000;
+export const ACCOUNT_STREAM_EVENTS = [
+  'ORDER_TRADE_UPDATE',
+  'ACCOUNT_UPDATE',
+  'ACCOUNT_CONFIG_UPDATE',
+  'ALGO_UPDATE',
+] as const;
+const ACCOUNT_REFRESH_EVENTS = new Set<string>(ACCOUNT_STREAM_EVENTS);
+
+export function buildUserDataStreamUrl(listenKey: string): string {
+  return `${PRIVATE_STREAM_URL}?listenKey=${encodeURIComponent(listenKey)}&events=${ACCOUNT_STREAM_EVENTS.join('/')}`;
+}
+
+export function shouldRefreshAccountForEvent(eventType: string): boolean {
+  return ACCOUNT_REFRESH_EVENTS.has(eventType);
+}
 
 function streamStatus(
   overrides: Partial<AccountStatus['stream']> = {},
@@ -210,7 +225,7 @@ export class AccountService {
         this.listenKeyActive = false;
         return;
       }
-      const socket = new NodeWebSocket(`${STREAM_URL}/${listenKey}`);
+      const socket = new NodeWebSocket(buildUserDataStreamUrl(listenKey));
       this.socket = socket;
       socket.on('open', () => {
         if (this.socket !== socket) return;
@@ -303,12 +318,7 @@ export class AccountService {
       if (event.e === 'ORDER_TRADE_UPDATE')
         next.lastOrderTradeUpdateAt = eventTime;
       this.status = { ...this.status, stream: next };
-      if (
-        event.e === 'ACCOUNT_UPDATE' ||
-        event.e === 'ORDER_TRADE_UPDATE' ||
-        event.e === 'ACCOUNT_CONFIG_UPDATE'
-      )
-        this.scheduleImmediateRefresh();
+      if (shouldRefreshAccountForEvent(event.e)) this.scheduleImmediateRefresh();
       if (event.e === 'listenKeyExpired') this.socket?.close();
     } catch {
       this.status = {
