@@ -17,6 +17,17 @@ type QualityRow = {
   qualityUpdatedAt: number | null;
 };
 
+type ObservedProtectiveOrder = {
+  side: string | null;
+  type: string | null;
+  price: number | null;
+  triggerPrice: number | null;
+  effectiveQuantity: number | null;
+  reduceOnly: boolean | null;
+  closePosition: boolean | null;
+  updatedAt: number | null;
+};
+
 export type PositionManagementContext = {
   version: typeof POSITION_MANAGEMENT_VERSION;
   status: 'FLAT' | 'ACTIVE' | 'BLOCKED';
@@ -44,6 +55,14 @@ export type PositionManagementContext = {
     hasFullTakeProfitCoverage: boolean | null;
     planMatchesPosition: boolean | null;
   };
+  actualProtection: {
+    source: 'BINANCE_READ_ONLY' | 'NOT_APPLICABLE';
+    observedAt: number | null;
+    stopLosses: ObservedProtectiveOrder[];
+    takeProfits: ObservedProtectiveOrder[];
+    trailingStops: ObservedProtectiveOrder[];
+    otherProtectiveOrders: ObservedProtectiveOrder[];
+  };
   tradeQuality: QualityRow | null;
   flags: string[];
   policy: string;
@@ -69,6 +88,11 @@ function number(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function positiveNumber(value: unknown): number | null {
+  const parsed = number(value);
+  return parsed !== null && parsed > 0 ? parsed : null;
+}
+
 function text(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
@@ -88,6 +112,102 @@ function numberArray(value: unknown): number[] {
 
 function sideSign(side: string | null): number | null {
   return side === 'LONG' ? 1 : side === 'SHORT' ? -1 : null;
+}
+
+function isProfitTakingLimit(input: {
+  positionSide: string | null;
+  orderSide: string | null;
+  price: number | null;
+  entryPrice: number | null;
+}): boolean {
+  const { positionSide, orderSide, price, entryPrice } = input;
+  if (price === null || entryPrice === null) return false;
+  return (
+    (positionSide === 'LONG' && orderSide === 'SELL' && price > entryPrice) ||
+    (positionSide === 'SHORT' && orderSide === 'BUY' && price < entryPrice)
+  );
+}
+
+function observedProtection(input: {
+  snapshot: unknown;
+  mode: string | null;
+  positionSide: string | null;
+  entryPrice: number | null;
+  remainingQuantity: number | null;
+}): PositionManagementContext['actualProtection'] {
+  const { snapshot, mode, positionSide, entryPrice, remainingQuantity } = input;
+  const rawOrders = at(snapshot, 'trading', 'liveManual', 'protectiveOrders');
+  const orders = Array.isArray(rawOrders)
+    ? rawOrders
+        .map(asRecord)
+        .filter((order): order is RecordLike => order !== null)
+    : [];
+  const stopLosses: ObservedProtectiveOrder[] = [];
+  const takeProfits: ObservedProtectiveOrder[] = [];
+  const trailingStops: ObservedProtectiveOrder[] = [];
+  const otherProtectiveOrders: ObservedProtectiveOrder[] = [];
+
+  for (const order of orders) {
+    const orderType = text(order.type);
+    const orderSide = text(order.side);
+    const closePosition = boolean(order.closePosition);
+    const quantity = positiveNumber(order.quantity);
+    const normalized: ObservedProtectiveOrder = {
+      side: orderSide,
+      type: orderType,
+      price: positiveNumber(order.price),
+      triggerPrice: positiveNumber(order.stopPrice),
+      effectiveQuantity:
+        closePosition === true &&
+        remainingQuantity !== null &&
+        remainingQuantity > 0
+          ? remainingQuantity
+          : quantity,
+      reduceOnly: boolean(order.reduceOnly),
+      closePosition,
+      updatedAt: number(order.updatedAt),
+    };
+
+    if (orderType === 'STOP' || orderType === 'STOP_MARKET') {
+      stopLosses.push(normalized);
+      continue;
+    }
+    if (orderType === 'TAKE_PROFIT' || orderType === 'TAKE_PROFIT_MARKET') {
+      takeProfits.push(normalized);
+      continue;
+    }
+    if (orderType === 'TRAILING_STOP_MARKET') {
+      trailingStops.push(normalized);
+      continue;
+    }
+    if (
+      orderType === 'LIMIT' &&
+      isProfitTakingLimit({
+        positionSide,
+        orderSide,
+        price: normalized.price,
+        entryPrice,
+      })
+    ) {
+      takeProfits.push(normalized);
+      continue;
+    }
+    otherProtectiveOrders.push(normalized);
+  }
+
+  const observedAtValues = orders
+    .map((order) => number(order.updatedAt))
+    .filter((value): value is number => value !== null);
+
+  return {
+    source: mode === 'LIVE_MANUAL' ? 'BINANCE_READ_ONLY' : 'NOT_APPLICABLE',
+    observedAt:
+      observedAtValues.length > 0 ? Math.max(...observedAtValues) : null,
+    stopLosses,
+    takeProfits,
+    trailingStops,
+    otherProtectiveOrders,
+  };
 }
 
 function riskMetrics(input: {
@@ -222,6 +342,13 @@ export async function buildPositionManagementContext(
     stopPrice,
     targets,
   });
+  const actualProtection = observedProtection({
+    snapshot,
+    mode,
+    positionSide: side,
+    entryPrice,
+    remainingQuantity,
+  });
 
   const stopLossCoverageRatio = number(
     at(
@@ -304,6 +431,7 @@ export async function buildPositionManagementContext(
       hasFullTakeProfitCoverage,
       planMatchesPosition,
     },
+    actualProtection,
     tradeQuality,
     flags,
     policy:
