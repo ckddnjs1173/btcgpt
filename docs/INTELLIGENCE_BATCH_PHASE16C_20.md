@@ -1,5 +1,7 @@
 # Intelligence Batch — Phase 16C through Phase 20 foundation
 
+> **Historical implementation record.** This file is not a current runtime, GPT setup, or deployment guide. Do not follow its legacy `getLatestSnapshot`, `context-v1`, instruction-append, or deployment steps. Current live setup is defined by `worker/openapi/GPT_ACTION_SETUP.md`, `worker/openapi/GPT_INSTRUCTIONS.md`, and `docs/PRODUCTION_READINESS.md`.
+
 ## Why this is one batch
 
 This batch intentionally groups several roadmap slices so deployment does not require repeated pull/migration/deploy cycles.
