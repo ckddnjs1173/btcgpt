@@ -318,7 +318,8 @@ export class AccountService {
       if (event.e === 'ORDER_TRADE_UPDATE')
         next.lastOrderTradeUpdateAt = eventTime;
       this.status = { ...this.status, stream: next };
-      if (shouldRefreshAccountForEvent(event.e)) this.scheduleImmediateRefresh();
+      if (shouldRefreshAccountForEvent(event.e))
+        this.scheduleImmediateRefresh();
       if (event.e === 'listenKeyExpired') this.socket?.close();
     } catch {
       this.status = {
