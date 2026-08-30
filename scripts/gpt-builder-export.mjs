@@ -54,10 +54,14 @@ if (process.exitCode) process.exit();
 
 if (checkOnly) {
   console.log('GPT Builder export check PASSED');
-  console.log(`- Instructions: ${instructionCheck.length}/7500 internal, 8000 Builder`);
+  console.log(
+    `- Instructions: ${instructionCheck.length}/7500 internal, 8000 Builder`,
+  );
   console.log(`- Operations: ${schemaCheck.operationIds.join(', ')}`);
   console.log('- Builder operation descriptions: <=300 characters');
 } else if (target !== 'instructions' && target !== 'schema') {
-  console.error('Usage: node scripts/gpt-builder-export.mjs <instructions|schema> [--output=<path>] [--check]');
+  console.error(
+    'Usage: node scripts/gpt-builder-export.mjs <instructions|schema> [--output=<path>] [--check]',
+  );
   process.exitCode = 1;
 }
