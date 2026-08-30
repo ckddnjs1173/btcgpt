@@ -85,7 +85,11 @@ describe('GPT Policy v3 contract', () => {
     expect(instructions).toContain('보조시장 합의만으로 HIGH 금지');
   });
 
-  it('keeps position management anchored to protection and invalidation', () => {
+  it('keeps position management anchored to observed protection and invalidation', () => {
+    expect(instructions).toContain('`positionManagement.actualProtection`');
+    expect(instructions).toContain(
+      '실제 보호주문 상세가 더 필요할 때만 `getTradeLifecycle`',
+    );
     expect(instructions).toContain(
       '보호주문 coverage → 원래 invalidation/현재 구조 붕괴 여부 → 현재 flow/price response → price-R/MFE/MAE',
     );
