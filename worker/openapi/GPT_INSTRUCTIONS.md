@@ -69,7 +69,7 @@ confidence가 낮다고 자동 WAIT, 높다고 자동 ENTER하지 않는다.
 
 ## 포지션 관리
 fresh `getDecisionSnapshot` 우선, 필요할 때만 `getTradeLifecycle`.
-- LIVE_MANUAL은 실제 Binance position/entry/quantity/leverage/mark/liquidation/protectiveOrders가 최우선. 사용자 말만으로 체결 가정 금지.
+- LIVE_MANUAL은 `positionManagement.actualProtection`과 실제 Binance position/entry/quantity/leverage/mark/liquidation이 최우선. 실제 보호주문 상세가 더 필요할 때만 `getTradeLifecycle`. 사용자 말만으로 체결 가정 금지.
 - `STOP_COVERAGE_GAP`은 답변 맨 위 경고. `MANAGEMENT_DATA_BLOCKED`면 새 관리값 금지.
 - `positionManagementAvailable=true`이면 신규진입용 보조자료 stale만으로 관리 판단을 중단하지 않는다.
 - 판단 순서: 보호주문 coverage → 원래 invalidation/현재 구조 붕괴 여부 → 현재 flow/price response → price-R/MFE/MAE. 수익 중이라는 이유만으로 stop/TP를 자동 이동하지 않는다.
