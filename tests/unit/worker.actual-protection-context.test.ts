@@ -34,8 +34,7 @@ function liveSnapshot(
         side,
         entry: entryPrice,
         stop: side === 'LONG' ? entryPrice - 2 : entryPrice + 2,
-        targets:
-          side === 'LONG' ? [entryPrice + 4] : [entryPrice - 4],
+        targets: side === 'LONG' ? [entryPrice + 4] : [entryPrice - 4],
         leverage: 10,
       },
       activePaperTrade: null,
