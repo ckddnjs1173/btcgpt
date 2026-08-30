@@ -96,16 +96,24 @@ GPT Instructions에는 `worker/openapi/GPT_INSTRUCTIONS.md`의 현재 버전을
 
 ## Worker 재배포
 
-D1과 두 Secret은 이미 생성되어 있습니다. Worker 코드 변경 후 기존
-Cloudflare 계정에서 다음 명령만 실행합니다.
+Cloudflare D1과 두 Secret이 해당 계정에 이미 구성되어 있는 경우에도 먼저
+현재 `main`의 read-only 배포 계획을 확인합니다. 실제 원격 상태는 Wrangler로 확인합니다.
 
 ```powershell
 cd C:\Code\btcgpt
 npm exec wrangler -- login
-npm exec wrangler -- whoami
-npm exec wrangler -- d1 migrations apply btc-futures-assistant --remote
-npm exec wrangler -- deploy --secrets-file secrets/cloudflare-production.json --strict
+npm run ops:deploy
 ```
+
+출력을 검토한 뒤에만 명시적으로 적용합니다.
+
+```powershell
+npm run ops:deploy -- --apply --confirm=btc-futures-assistant-relay
+```
+
+이 경로는 preflight, 원격 D1 migration 확인/적용, strict Worker deploy,
+post-deploy smoke를 순서대로 수행합니다. 자세한 절차와 롤백 경계는
+`docs/PRODUCTION_DEPLOY_COMMAND.md`와 `docs/PRODUCTION_READINESS.md`를 따릅니다.
 
 Secret 파일을 화면, 로그, 채팅 또는 Git에 노출하지 않습니다.
 
