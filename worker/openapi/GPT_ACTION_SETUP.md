@@ -8,7 +8,7 @@
 - Live Decision Context: `decision-context-v1`
 - Instruction budget: **7,500 characters maximum**
 
-Use one current Instructions document and one current Action schema only. Historical Phase append files are migration notes; do not append them to the live GPT configuration.
+Use one current Instructions document and one current Action schema only. Historical append content remains available in Git history; do not append legacy fragments to the live GPT configuration.
 
 ## Custom GPT instructions
 
@@ -66,8 +66,8 @@ When an approved GPT trigger becomes `TRIGGERED`:
 
 ## Position management runtime order
 
-1. Call a fresh `getDecisionSnapshot`.
-2. Use `getTradeLifecycle` only when approved-plan/lifecycle detail is needed.
+1. Call a fresh `getDecisionSnapshot` and prefer `positionManagement.actualProtection` plus the current Binance read-only position facts.
+2. Use `getTradeLifecycle` only when additional approved-plan/lifecycle or protective-order detail is needed.
 3. For exact `PARTIAL_EXIT`, `EXIT`, `MOVE_STOP`, or `CHANGE_TP` values, call `validatePositionAdjustment` with the same `snapshotId`.
 4. Call `recordDecision` exactly once before answering, using the current GPT policy version.
 
