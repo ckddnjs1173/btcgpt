@@ -34,7 +34,8 @@ npm run ops:preflight
 - HTTP Bearer `actionKey` authentication
 - production Worker server URL
 - `decision-context-v1` instruction anchor
-- 7,500-character canonical Instructions budget
+- 7,500-character internal Instructions budget and current 8,000-character Builder limit
+- deterministic Builder schema projection with operation descriptions at most 300 characters
 - existence of `secrets/cloudflare-production.json` without opening it
 
 ### Windows `npm ci` EPERM recovery
@@ -121,25 +122,41 @@ Auxiliary evidence may legitimately be `null` or degraded. That alone is not a s
 
 After a Worker revision changes any Action-visible contract, update both GPT artifacts from the same repository revision.
 
-### Action schema
+Do not use bare Windows PowerShell `Get-Content ... -Raw | Set-Clipboard` for the UTF-8 GPT files. Windows PowerShell 5.1 can decode UTF-8-without-BOM with a legacy code page and corrupt Korean text.
 
-Replace the Action schema with the complete contents of:
+First verify the Builder projection:
 
-```text
-worker/openapi/openapi.json
+```powershell
+npm run gpt:builder:check
 ```
-
-The current schema version is documented in `worker/openapi/GPT_ACTION_SETUP.md`. Configure API Key authentication using Bearer auth and `ACTION_READ_KEY`.
 
 ### Instructions
 
-Replace the entire GPT Instructions field with:
+Copy the exact canonical `worker/openapi/GPT_INSTRUCTIONS.md` text through the strict UTF-8 helper:
 
-```text
-worker/openapi/GPT_INSTRUCTIONS.md
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\copy-gpt-builder.ps1 -Target instructions
 ```
 
-Do not append historical Phase instruction fragments.
+Replace the entire GPT Instructions field. The first line must be:
+
+```text
+# BTC Futures Assistant — GPT Policy v3
+```
+
+Do not append historical Phase instruction fragments or `GPT_ACTION_SETUP.md`.
+
+### Action schema
+
+Copy the deterministic Builder-safe projection of `worker/openapi/openapi.json`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\copy-gpt-builder.ps1 -Target schema
+```
+
+`worker/openapi/openapi.json` remains the single source of truth. The projection only shortens operation descriptions that exceed the current Builder compatibility limit. It preserves paths, operation IDs, parameters, request bodies, responses, security, server URL, and `x-openai-isConsequential`.
+
+Configure API Key authentication using Bearer auth and `ACTION_READ_KEY`.
 
 ### Preview validation
 
@@ -221,7 +238,7 @@ A revision is operationally ready only when all applicable items are true:
 - strict Worker deployment succeeds
 - fresh desktop snapshots reach the Worker
 - `npm run ops:postdeploy-smoke` passes
-- Custom GPT Action schema and Instructions come from the same repository revision
+- Custom GPT Action schema and Instructions come from the same repository revision through the Builder-safe export path
 - GPT Preview can call `getDecisionSnapshot`
 - 30-minute soak passes before longer soak promotion
 - BTC critical freshness remains the only market-data class that can directly block new entry
