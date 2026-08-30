@@ -11,11 +11,9 @@ describe('RelayUploader snapshot settings', () => {
   });
 
   it('uses the Worker health endpoint for connection checks', async () => {
-    const fetchMock = vi.fn(
-      (_input: string | URL | Request, _init?: RequestInit) =>
-        Promise.resolve(
-          new Response(JSON.stringify({ ok: true }), { status: 200 }),
-        ),
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     const uploader = new RelayUploader(new MarketCache(), {
@@ -75,11 +73,9 @@ describe('RelayUploader snapshot settings', () => {
 
   it('uploads snapshots with the Worker Bearer write contract', async () => {
     const uploadKey = 'u'.repeat(32);
-    const fetchMock = vi.fn(
-      (_input: string | URL | Request, _init?: RequestInit) =>
-        Promise.resolve(
-          new Response(JSON.stringify({ ok: true }), { status: 200 }),
-        ),
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     const uploader = new RelayUploader(new MarketCache(), {
