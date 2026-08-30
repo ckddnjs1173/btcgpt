@@ -9,6 +9,7 @@ const ALLOWED_PATHS = new Set([
   '/fapi/v1/symbolConfig',
   '/fapi/v1/commissionRate',
   '/fapi/v1/openOrders',
+  '/fapi/v1/openAlgoOrders',
   '/fapi/v1/leverageBracket',
   '/fapi/v1/userTrades',
 ]);
@@ -63,6 +64,22 @@ const openOrderSchema = z.array(
     updateTime: z.number(),
   }),
 );
+const openAlgoOrderSchema = z.array(
+  z
+    .object({
+      symbol: z.literal('BTCUSDT'),
+      side: z.enum(['BUY', 'SELL']),
+      orderType: z.string(),
+      price: numericStringSchema.optional().default('0'),
+      triggerPrice: numericStringSchema,
+      quantity: numericStringSchema.optional().default('0'),
+      reduceOnly: z.boolean().optional().default(false),
+      closePosition: z.boolean().optional().default(false),
+      createTime: z.number().optional(),
+      updateTime: z.number().optional(),
+    })
+    .passthrough(),
+);
 const leverageBracketSchema = z.array(
   z.object({
     symbol: z.literal('BTCUSDT'),
@@ -114,6 +131,16 @@ export interface AccountPosition {
   leverage: number;
   marginMode: 'ISOLATED';
   updatedAt: number;
+}
+
+function isConditionalProtectiveType(type: string): boolean {
+  return [
+    'STOP',
+    'STOP_MARKET',
+    'TAKE_PROFIT',
+    'TAKE_PROFIT_MARKET',
+    'TRAILING_STOP_MARKET',
+  ].includes(type);
 }
 
 export class BinanceAccountClient {
@@ -252,10 +279,16 @@ export class BinanceAccountClient {
   }
 
   async fetchOpenOrders() {
-    const orders = openOrderSchema.parse(
-      await this.signedGet('/fapi/v1/openOrders', { symbol: 'BTCUSDT' }),
-    );
-    return orders
+    const [standardRaw, algoRaw] = await Promise.all([
+      this.signedGet('/fapi/v1/openOrders', { symbol: 'BTCUSDT' }),
+      this.signedGet('/fapi/v1/openAlgoOrders', {
+        algoType: 'CONDITIONAL',
+        symbol: 'BTCUSDT',
+      }),
+    ]);
+    const standardOrders = openOrderSchema.parse(standardRaw);
+    const algoOrders = openAlgoOrderSchema.parse(algoRaw);
+    const standard = standardOrders
       .filter((order) => order.symbol === 'BTCUSDT')
       .map((order) => ({
         side: order.side,
@@ -268,11 +301,26 @@ export class BinanceAccountClient {
         protective:
           order.reduceOnly ||
           order.closePosition ||
-          ['STOP', 'STOP_MARKET', 'TAKE_PROFIT', 'TAKE_PROFIT_MARKET'].includes(
-            order.type,
-          ),
+          isConditionalProtectiveType(order.type),
         updatedAt: order.updateTime,
       }));
+    const algo = algoOrders
+      .filter((order) => order.symbol === 'BTCUSDT')
+      .map((order) => ({
+        side: order.side,
+        type: order.orderType,
+        price: Number(order.price),
+        stopPrice: Number(order.triggerPrice),
+        quantity: Number(order.quantity),
+        reduceOnly: order.reduceOnly,
+        closePosition: order.closePosition,
+        protective:
+          order.reduceOnly ||
+          order.closePosition ||
+          isConditionalProtectiveType(order.orderType),
+        updatedAt: order.updateTime ?? order.createTime ?? Date.now(),
+      }));
+    return [...standard, ...algo];
   }
 
   async fetchLeverageBrackets() {
