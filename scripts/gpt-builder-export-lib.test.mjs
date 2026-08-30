@@ -19,10 +19,7 @@ const instructions = fs.readFileSync(
 const sourceOpenApi = JSON.parse(
   fs.readFileSync('worker/openapi/openapi.json', 'utf8'),
 );
-const clipboardHelper = fs.readFileSync(
-  'scripts/copy-gpt-builder.ps1',
-  'utf8',
-);
+const clipboardHelper = fs.readFileSync('scripts/copy-gpt-builder.ps1', 'utf8');
 
 test('canonical instructions are valid UTF-8 and fit Builder limits', () => {
   const result = validateInstructions(instructions);
@@ -32,78 +29,74 @@ test('canonical instructions are valid UTF-8 and fit Builder limits', () => {
 });
 
 test('Windows clipboard helper pins strict UTF-8 decoding', () => {
-  assert.ok(clipboardHelper.includes('[System.Text.UTF8Encoding]::new($false, $true)'));
+  assert.ok(
+    clipboardHelper.includes('[System.Text.UTF8Encoding]::new($false, $true)'),
+  );
   assert.ok(clipboardHelper.includes('[System.IO.File]::ReadAllText'));
   assert.equal(clipboardHelper.includes('Get-Content'), false);
 });
 
-test(
-  'Builder projection preserves operations, auth, server, and request/response contract',
-  () => {
-    const projected = buildBuilderSchema(sourceOpenApi);
-    const result = validateBuilderSchema(projected);
+test('Builder projection preserves operations, auth, server, and request/response contract', () => {
+  const projected = buildBuilderSchema(sourceOpenApi);
+  const result = validateBuilderSchema(projected);
 
-    assert.equal(result.ok, true, result.failures.join('\n'));
-    assert.deepEqual(
-      result.operationIds.sort(),
-      [...EXPECTED_OPERATION_IDS].sort(),
-    );
-    assert.deepEqual(projected.servers, sourceOpenApi.servers);
-    assert.deepEqual(
-      projected.components.securitySchemes,
-      sourceOpenApi.components.securitySchemes,
-    );
+  assert.equal(result.ok, true, result.failures.join('\n'));
+  assert.deepEqual(
+    result.operationIds.sort(),
+    [...EXPECTED_OPERATION_IDS].sort(),
+  );
+  assert.deepEqual(projected.servers, sourceOpenApi.servers);
+  assert.deepEqual(
+    projected.components.securitySchemes,
+    sourceOpenApi.components.securitySchemes,
+  );
 
-    for (const [pathName, pathItem] of Object.entries(sourceOpenApi.paths)) {
-      for (const [method, operation] of Object.entries(pathItem)) {
-        if (!operation || typeof operation !== 'object' || !operation.operationId)
-          continue;
-        const projectedOperation = projected.paths[pathName][method];
-        assert.equal(projectedOperation.operationId, operation.operationId);
-        assert.deepEqual(projectedOperation.parameters, operation.parameters);
-        assert.deepEqual(projectedOperation.requestBody, operation.requestBody);
-        assert.deepEqual(projectedOperation.responses, operation.responses);
-        assert.deepEqual(projectedOperation.security, operation.security);
-        assert.deepEqual(
-          projectedOperation['x-openai-isConsequential'],
-          operation['x-openai-isConsequential'],
-        );
-      }
-    }
-  },
-);
-
-test(
-  'Builder projection caps operation descriptions without mutating source schema',
-  () => {
-    const original = structuredClone(sourceOpenApi);
-    const projected = buildBuilderSchema(sourceOpenApi);
-
-    assert.deepEqual(sourceOpenApi, original);
-    for (const operation of listOperations(projected)) {
-      if (typeof operation.description !== 'string') continue;
-      assert.ok(
-        codePointLength(operation.description) <=
-          BUILDER_OPERATION_DESCRIPTION_LIMIT,
-        `${operation.operationId} description is too long`,
+  for (const [pathName, pathItem] of Object.entries(sourceOpenApi.paths)) {
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (!operation || typeof operation !== 'object' || !operation.operationId)
+        continue;
+      const projectedOperation = projected.paths[pathName][method];
+      assert.equal(projectedOperation.operationId, operation.operationId);
+      assert.deepEqual(projectedOperation.parameters, operation.parameters);
+      assert.deepEqual(projectedOperation.requestBody, operation.requestBody);
+      assert.deepEqual(projectedOperation.responses, operation.responses);
+      assert.deepEqual(projectedOperation.security, operation.security);
+      assert.deepEqual(
+        projectedOperation['x-openai-isConsequential'],
+        operation['x-openai-isConsequential'],
       );
     }
+  }
+});
 
-    const sourceDecision = listOperations(sourceOpenApi).find(
-      (operation) => operation.operationId === 'getDecisionSnapshot',
-    );
-    const projectedDecision = listOperations(projected).find(
-      (operation) => operation.operationId === 'getDecisionSnapshot',
-    );
-    assert.ok(sourceDecision);
-    assert.ok(projectedDecision);
+test('Builder projection caps operation descriptions without mutating source schema', () => {
+  const original = structuredClone(sourceOpenApi);
+  const projected = buildBuilderSchema(sourceOpenApi);
+
+  assert.deepEqual(sourceOpenApi, original);
+  for (const operation of listOperations(projected)) {
+    if (typeof operation.description !== 'string') continue;
     assert.ok(
-      codePointLength(sourceDecision.description) >
+      codePointLength(operation.description) <=
         BUILDER_OPERATION_DESCRIPTION_LIMIT,
+      `${operation.operationId} description is too long`,
     );
-    assert.equal(
-      codePointLength(projectedDecision.description),
+  }
+
+  const sourceDecision = listOperations(sourceOpenApi).find(
+    (operation) => operation.operationId === 'getDecisionSnapshot',
+  );
+  const projectedDecision = listOperations(projected).find(
+    (operation) => operation.operationId === 'getDecisionSnapshot',
+  );
+  assert.ok(sourceDecision);
+  assert.ok(projectedDecision);
+  assert.ok(
+    codePointLength(sourceDecision.description) >
       BUILDER_OPERATION_DESCRIPTION_LIMIT,
-    );
-  },
-);
+  );
+  assert.equal(
+    codePointLength(projectedDecision.description),
+    BUILDER_OPERATION_DESCRIPTION_LIMIT,
+  );
+});
