@@ -19,11 +19,22 @@ const instructions = fs.readFileSync(
 const sourceOpenApi = JSON.parse(
   fs.readFileSync('worker/openapi/openapi.json', 'utf8'),
 );
+const clipboardHelper = fs.readFileSync(
+  'scripts/copy-gpt-builder.ps1',
+  'utf8',
+);
 
 test('canonical instructions are valid UTF-8 and fit Builder limits', () => {
   const result = validateInstructions(instructions);
   assert.equal(result.ok, true, result.failures.join('\n'));
   assert.equal(instructions.includes('\uFFFD'), false);
+  assert.ok(instructions.includes('## 역할·불변 경계'));
+});
+
+test('Windows clipboard helper pins strict UTF-8 decoding', () => {
+  assert.ok(clipboardHelper.includes('[System.Text.UTF8Encoding]::new($false, $true)'));
+  assert.ok(clipboardHelper.includes('[System.IO.File]::ReadAllText'));
+  assert.equal(clipboardHelper.includes('Get-Content'), false);
 });
 
 test(
