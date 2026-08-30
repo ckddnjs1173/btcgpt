@@ -11,8 +11,11 @@ describe('RelayUploader snapshot settings', () => {
   });
 
   it('uses the Worker health endpoint for connection checks', async () => {
-    const fetchMock = vi.fn(() =>
-      Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    const fetchMock = vi.fn(
+      (_input: string | URL | Request, _init?: RequestInit) =>
+        Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), { status: 200 }),
+        ),
     );
     vi.stubGlobal('fetch', fetchMock);
     const uploader = new RelayUploader(new MarketCache(), {
@@ -23,9 +26,11 @@ describe('RelayUploader snapshot settings', () => {
     await uploader.testConnection();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [input, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const call = fetchMock.mock.calls[0];
+    expect(call).toBeDefined();
+    const [input, init] = call!;
     expect(input).toBe('https://relay.example.workers.dev/health');
-    expect(init.method).toBe('GET');
+    expect(init?.method).toBe('GET');
   });
 
   it('publishes the current fee and slippage settings from its provider', async () => {
@@ -70,8 +75,11 @@ describe('RelayUploader snapshot settings', () => {
 
   it('uploads snapshots with the Worker Bearer write contract', async () => {
     const uploadKey = 'u'.repeat(32);
-    const fetchMock = vi.fn(() =>
-      Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    const fetchMock = vi.fn(
+      (_input: string | URL | Request, _init?: RequestInit) =>
+        Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), { status: 200 }),
+        ),
     );
     vi.stubGlobal('fetch', fetchMock);
     const uploader = new RelayUploader(new MarketCache(), {
@@ -82,12 +90,14 @@ describe('RelayUploader snapshot settings', () => {
     await uploader.uploadOnce();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [input, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const headers = new Headers(init.headers);
+    const call = fetchMock.mock.calls[0];
+    expect(call).toBeDefined();
+    const [input, init] = call!;
+    const headers = new Headers(init?.headers);
     expect(input).toBe(
       'https://relay.example.workers.dev/v1/snapshot/latest',
     );
-    expect(init.method).toBe('PUT');
+    expect(init?.method).toBe('PUT');
     expect(headers.get('authorization')).toBe(`Bearer ${uploadKey}`);
     expect(headers.get('content-type')).toBe('application/json');
     expect(headers.has('x-upload-key')).toBe(false);
