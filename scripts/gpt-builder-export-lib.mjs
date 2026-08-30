@@ -79,7 +79,9 @@ export function validateBuilderSchema(openApi) {
   const operationIds = operations.map((operation) => operation.operationId);
 
   if (openApi.openapi !== '3.1.0') {
-    failures.push(`Builder schema must remain OpenAPI 3.1.0; found ${openApi.openapi}`);
+    failures.push(
+      `Builder schema must remain OpenAPI 3.1.0; found ${openApi.openapi}`,
+    );
   }
 
   for (const operationId of EXPECTED_OPERATION_IDS) {
@@ -90,7 +92,9 @@ export function validateBuilderSchema(openApi) {
 
   for (const operationId of operationIds) {
     if (!EXPECTED_OPERATION_IDS.includes(operationId)) {
-      failures.push(`Builder schema contains unexpected operationId ${operationId}`);
+      failures.push(
+        `Builder schema contains unexpected operationId ${operationId}`,
+      );
     }
   }
 
