@@ -2,27 +2,49 @@
 
 ## Canonical versions
 
-- OpenAPI **5.9.0**: `worker/openapi/openapi.json`
-- Instructions: `worker/openapi/GPT_INSTRUCTIONS.md`
+- OpenAPI **5.9.0** source: `worker/openapi/openapi.json`
+- Instructions source: `worker/openapi/GPT_INSTRUCTIONS.md`
 - GPT policy/telemetry instruction version: `gpt-policy-v3`
 - Live Decision Context: `decision-context-v1`
-- Instruction budget: **7,500 characters maximum**
+- Internal Instructions budget: **7,500 characters maximum**
+- Current GPT Builder UI limit observed in production setup: **8,000 characters maximum**
+- Current GPT Builder operation-description compatibility limit observed in production setup: **300 characters maximum**
 
 Use one current Instructions document and one current Action schema only. Historical append content remains available in Git history; do not append legacy fragments to the live GPT configuration.
 
-## Custom GPT instructions
+`worker/openapi/openapi.json` remains the single source of truth for the Action contract. The Builder clipboard helper creates a deterministic Builder-safe projection from that source by shortening only over-limit operation descriptions. It does not change paths, operation IDs, parameters, request bodies, responses, security, server URL, or `x-openai-isConsequential`.
 
-In the GPT editor, replace the entire Instructions field with the complete contents of:
+## Windows clipboard rule
 
-`worker/openapi/GPT_INSTRUCTIONS.md`
+Do **not** copy these UTF-8 files with bare Windows PowerShell `Get-Content ... -Raw | Set-Clipboard`. Windows PowerShell 5.1 can decode UTF-8-without-BOM using the active legacy code page, which corrupts Korean text and can inflate the apparent Builder character count.
 
-Do not merge old instruction appendices into it. The repository test and production preflight both enforce the 7,500-character budget.
+Use the repository helper instead. It reads generated output with explicit strict UTF-8 decoding before changing the clipboard.
 
-## Canonical Action schema
+### Copy Instructions
 
-Create or update a single GPT Action using the complete contents of:
+From the repository root:
 
-`worker/openapi/openapi.json`
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\copy-gpt-builder.ps1 -Target instructions
+```
+
+Replace the entire GPT Builder **Instructions** field with the clipboard contents. The copied text must begin with:
+
+`# BTC Futures Assistant — GPT Policy v3`
+
+Do not merge `GPT_ACTION_SETUP.md`, old appendices, or other documentation into the Instructions field.
+
+### Copy Action schema
+
+From the repository root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\copy-gpt-builder.ps1 -Target schema
+```
+
+Replace the entire GPT Builder **Action schema** field with the clipboard contents. Do not hand-edit a partial schema in the Builder.
+
+The generated schema is OpenAPI 3.1 JSON derived from `worker/openapi/openapi.json`. Builder compatibility normalization is limited to operation-description length; contract semantics remain unchanged and are regression-tested.
 
 공식 live anchor는 `getDecisionSnapshot`이다. `getLatestSnapshot` remains detail/debug fallback only.
 
@@ -36,7 +58,25 @@ Expected operation IDs:
 6. `getTradeLifecycle` — approved-plan / lifecycle detail
 7. `recordDecision` — analytics-only decision telemetry
 
-If any operation is missing, replace the Action schema with the current `worker/openapi/openapi.json`; do not hand-edit a partial schema in the GPT editor.
+If any operation is missing, rerun the Builder clipboard helper from the current `main`; do not repair the schema manually in the GPT editor.
+
+## Repository verification
+
+Before updating the Builder, run:
+
+```powershell
+npm run gpt:builder:check
+```
+
+This verifies:
+
+- canonical Instructions remain valid UTF-8 and within the 7,500 internal / 8,000 Builder budgets;
+- GPT Policy v3 identity is present;
+- all seven operation IDs remain present;
+- Builder operation descriptions are at most 300 characters after deterministic projection;
+- HTTP Bearer auth remains intact.
+
+The same compatibility checks run in `npm run check` and production preflight.
 
 ## Authentication
 
@@ -75,9 +115,10 @@ When an approved GPT trigger becomes `TRIGGERED`:
 
 After deploying a Worker revision that changes Action-visible contracts:
 
-1. replace the GPT Action schema with the current `worker/openapi/openapi.json`;
-2. replace the GPT Instructions with the current `worker/openapi/GPT_INSTRUCTIONS.md`;
-3. confirm Bearer authentication still uses `ACTION_READ_KEY`;
-4. use GPT Preview to test `getDecisionSnapshot` before relying on the GPT for live analysis.
+1. run `npm run gpt:builder:check`;
+2. copy the current Instructions with `copy-gpt-builder.ps1 -Target instructions`;
+3. copy the generated Builder-safe Action schema with `copy-gpt-builder.ps1 -Target schema`;
+4. confirm Bearer authentication still uses `ACTION_READ_KEY`;
+5. use GPT Preview to test `getDecisionSnapshot` before relying on the GPT for live analysis.
 
 The repository production runbook is `docs/PRODUCTION_READINESS.md`.
