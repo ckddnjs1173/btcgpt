@@ -63,14 +63,6 @@ function liveSnapshot(
 }
 
 describe('observed Binance protection in management context', () => {
-  it('exposes Algo Service SL/TP trigger prices and expands close-position quantity', async () => {
-    const context = await buildPositionManagementContext(
-      env,
-      liveSnapshot(100, 100, 101, [] as never) as never,
-    );
-    expect(context.status).toBe('ACTIVE');
-  });
-
   it('groups observed stop, take-profit and trailing orders without creating an action', async () => {
     const snapshot = liveSnapshot('LONG', 100, 101, [
       {
@@ -121,6 +113,7 @@ describe('observed Binance protection in management context', () => {
 
     const context = await buildPositionManagementContext(env, snapshot, 2_000);
 
+    expect(context.status).toBe('ACTIVE');
     expect(context.actualProtection.source).toBe('BINANCE_READ_ONLY');
     expect(context.actualProtection.observedAt).toBe(1_300);
     expect(context.actualProtection.stopLosses).toEqual([
