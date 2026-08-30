@@ -88,6 +88,12 @@ export function validateBuilderSchema(openApi) {
     }
   }
 
+  for (const operationId of operationIds) {
+    if (!EXPECTED_OPERATION_IDS.includes(operationId)) {
+      failures.push(`Builder schema contains unexpected operationId ${operationId}`);
+    }
+  }
+
   if (new Set(operationIds).size !== operationIds.length) {
     failures.push('Builder schema contains duplicate operationId values');
   }
